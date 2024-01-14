@@ -5461,11 +5461,19 @@ void AnimationTrackEditor::_scroll_input(const Ref<InputEvent> &p_event) {
 	Ref<InputEventMouseButton> mb = p_event;
 
 	if (mb.is_valid() && mb->get_button_index() == MouseButton::LEFT) {
+		Vector2 mb_pos = scroll->get_global_transform().xform(mb->get_position());
 		if (mb->is_pressed()) {
 			box_selecting = true;
-			box_selecting_from = scroll->get_global_transform().xform(mb->get_position());
+			box_selecting_from = mb_pos;
 			box_select_rect = Rect2();
 		} else if (box_selecting) {
+			bool is_on_track_edit = false;
+			for (int i = 0; i < track_edits.size(); i++) {
+				if (track_edits[i]->get_global_rect().has_point(mb_pos)) {
+					is_on_track_edit = true;
+					break;
+				}
+			}
 			if (box_selection->is_visible_in_tree()) {
 				// Only if moved.
 				for (int i = 0; i < track_edits.size(); i++) {
@@ -5477,7 +5485,7 @@ void AnimationTrackEditor::_scroll_input(const Ref<InputEvent> &p_event) {
 				if (_get_track_selected() == -1 && track_edits.size() > 0) { // Minimal hack to make shortcuts work.
 					track_edits[track_edits.size() - 1]->grab_focus();
 				}
-			} else {
+			} else if (!(is_on_track_edit && mb_pos.x < timeline->get_global_position().x + timeline->get_name_limit())) {
 				_clear_selection(true); // Clear it.
 			}
 

@@ -5343,6 +5343,9 @@ void AnimationTrackEditor::_add_method_key(const String &p_method) {
 }
 
 void AnimationTrackEditor::_key_selected(int p_key, bool p_single, int p_track) {
+	if (animation.is_null()) {
+		return;
+	}
 	ERR_FAIL_INDEX(p_track, animation->get_track_count());
 	ERR_FAIL_INDEX(p_key, animation->track_get_key_count(p_track));
 
@@ -5363,6 +5366,9 @@ void AnimationTrackEditor::_key_selected(int p_key, bool p_single, int p_track) 
 }
 
 void AnimationTrackEditor::_key_deselected(int p_key, int p_track) {
+	if (animation.is_null()) {
+		return;
+	}
 	ERR_FAIL_INDEX(p_track, animation->get_track_count());
 	ERR_FAIL_INDEX(p_key, animation->track_get_key_count(p_track));
 

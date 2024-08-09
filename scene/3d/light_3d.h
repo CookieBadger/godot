@@ -59,7 +59,9 @@ public:
 		PARAM_SHADOW_BLUR = RS::LIGHT_PARAM_SHADOW_BLUR,
 		PARAM_TRANSMITTANCE_BIAS = RS::LIGHT_PARAM_TRANSMITTANCE_BIAS,
 		PARAM_INTENSITY = RS::LIGHT_PARAM_INTENSITY,
-		PARAM_MAX = RS::LIGHT_PARAM_MAX
+		PARAM_MAX = RS::LIGHT_PARAM_MAX,
+		PARAM_CUSTOM_TEST_A = RS::LIGHT_PARAM_CUSTOM_TEST_A,
+		PARAM_CUSTOM_TEST_B = RS::LIGHT_PARAM_CUSTOM_TEST_B
 	};
 
 	enum BakeMode {
@@ -234,6 +236,18 @@ public:
 	PackedStringArray get_configuration_warnings() const override;
 
 	SpotLight3D();
+};
+
+class CustomLight3D : public Light3D {
+	GDCLASS(CustomLight3D, Light3D);
+
+protected:
+	static void _bind_methods();
+
+public:
+	PackedStringArray get_configuration_warnings() const override;
+
+	CustomLight3D();
 };
 
 #endif // LIGHT_3D_H

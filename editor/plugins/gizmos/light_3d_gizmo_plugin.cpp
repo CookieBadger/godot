@@ -47,6 +47,7 @@ Light3DGizmoPlugin::Light3DGizmoPlugin() {
 	create_icon_material("light_directional_icon", EditorNode::get_singleton()->get_editor_theme()->get_icon(SNAME("GizmoDirectionalLight"), EditorStringName(EditorIcons)));
 	create_icon_material("light_omni_icon", EditorNode::get_singleton()->get_editor_theme()->get_icon(SNAME("GizmoLight"), EditorStringName(EditorIcons)));
 	create_icon_material("light_spot_icon", EditorNode::get_singleton()->get_editor_theme()->get_icon(SNAME("GizmoSpotLight"), EditorStringName(EditorIcons)));
+	create_icon_material("light_custom_icon", EditorNode::get_singleton()->get_editor_theme()->get_icon(SNAME("GizmoCustomLight"), EditorStringName(EditorIcons)));
 
 	create_handle_material("handles");
 	create_handle_material("handles_billboard", true);
@@ -120,11 +121,37 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 
 				light->set_param(Light3D::PARAM_RANGE, r);
 			}
+		} else if (Object::cast_to<CustomLight3D>(light)) {
+			Plane lp = Plane(gt.basis.get_column(1), gt.origin);
+
+			Vector3 inters;
+			if (lp.intersects_ray(ray_from, ray_dir, &inters)) {
+				Vector3 inv = gi.xform(inters);
+
+				float a = inv.x;
+				if (a >= 0) {
+					light->set_param(Light3D::PARAM_CUSTOM_TEST_A, a*2);
+				}
+			}
 		}
 
 	} else if (p_id == 1) {
-		float a = _find_closest_angle_to_half_pi_arc(s[0], s[1], light->get_param(Light3D::PARAM_RANGE), gt);
-		light->set_param(Light3D::PARAM_SPOT_ANGLE, CLAMP(a, 0.01, 89.99));
+		if (Object::cast_to<SpotLight3D>(light)) {
+			float a = _find_closest_angle_to_half_pi_arc(s[0], s[1], light->get_param(Light3D::PARAM_RANGE), gt);
+			light->set_param(Light3D::PARAM_SPOT_ANGLE, CLAMP(a, 0.01, 89.99));
+		} else if (Object::cast_to<CustomLight3D>(light)) {
+			Plane cp = Plane(gt.basis.get_column(1), gt.origin);
+
+			Vector3 inters;
+			if (cp.intersects_ray(ray_from, ray_dir, &inters)) {
+				Vector3 inv = gi.xform(inters);
+
+				float b = inv.z;
+				if (b >= 0) {
+					light->set_param(Light3D::PARAM_CUSTOM_TEST_B, b * 2);
+				}
+			}
+		}
 	}
 }
 
@@ -286,6 +313,39 @@ void Light3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 		}
 
 		const Ref<Material> icon = get_material("light_spot_icon", p_gizmo);
+		p_gizmo->add_unscaled_billboard(icon, 0.05, color);
+	}
+
+	if (Object::cast_to<CustomLight3D>(light)) {
+		if (p_gizmo->is_selected()) {
+			const Ref<Material> material = get_material("lines_primary", p_gizmo);
+			Vector<Vector3> points;
+
+			CustomLight3D *cl = Object::cast_to<CustomLight3D>(light);
+			float a = cl->get_param(Light3D::PARAM_CUSTOM_TEST_A);
+			float b = cl->get_param(Light3D::PARAM_CUSTOM_TEST_B);
+
+			// Draw rectangle
+			points.push_back(Vector3(-a/2, 0, b/2));
+			points.push_back(Vector3(a/2, 0, b/2));
+			points.push_back(Vector3(a/2, 0, b/2));
+			points.push_back(Vector3(a/2, 0, -b/2));
+			points.push_back(Vector3(a/2, 0, -b/2));
+			points.push_back(Vector3(-a/2, 0, -b/2));
+			points.push_back(Vector3(-a/2, 0, -b/2));
+			points.push_back(Vector3(-a/2, 0, b/2));
+
+			p_gizmo->add_lines(points, material, false, color);
+
+			Vector<Vector3> handles = {
+				Vector3(a/2, 0, 0),
+				Vector3(0, 0, b/2)
+			};
+
+			p_gizmo->add_handles(handles, get_material("handles"));
+		}
+
+		const Ref<Material> icon = get_material("light_custom_icon", p_gizmo);
 		p_gizmo->add_unscaled_billboard(icon, 0.05, color);
 	}
 }

@@ -67,6 +67,8 @@ public:
 	virtual void omni_light_initialize(RID p_rid) override {}
 	virtual RID spot_light_allocate() override { return RID(); }
 	virtual void spot_light_initialize(RID p_rid) override {}
+	virtual RID custom_light_allocate() override { return RID(); }
+	virtual void custom_light_initialize(RID p_rid) override {}
 
 	virtual void light_free(RID p_rid) override {}
 

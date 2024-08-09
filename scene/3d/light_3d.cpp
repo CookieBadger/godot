@@ -38,7 +38,7 @@ void Light3D::set_param(Param p_param, real_t p_value) {
 
 	RS::get_singleton()->light_set_param(light, RS::LightParam(p_param), p_value);
 
-	if (p_param == PARAM_SPOT_ANGLE || p_param == PARAM_RANGE) {
+	if (p_param == PARAM_SPOT_ANGLE || p_param == PARAM_RANGE || p_param == PARAM_CUSTOM_TEST_A || p_param == PARAM_CUSTOM_TEST_B) {
 		update_gizmos();
 
 		if (p_param == PARAM_SPOT_ANGLE) {
@@ -440,6 +440,9 @@ Light3D::Light3D(RenderingServer::LightType p_type) {
 		case RS::LIGHT_SPOT:
 			light = RenderingServer::get_singleton()->spot_light_create();
 			break;
+		case RS::LIGHT_CUSTOM:
+			light = RenderingServer::get_singleton()->custom_light_create();
+			break;
 		default: {
 		};
 	}
@@ -474,6 +477,8 @@ Light3D::Light3D(RenderingServer::LightType p_type) {
 	set_param(PARAM_SHADOW_FADE_START, 1);
 	// For OmniLight3D and SpotLight3D, specified in Lumens.
 	set_param(PARAM_INTENSITY, 1000.0);
+	set_param(PARAM_CUSTOM_TEST_A, 1);
+	set_param(PARAM_CUSTOM_TEST_A, 1);
 	set_temperature(6500.0); // Nearly white.
 	set_disable_scale(true);
 }
@@ -658,4 +663,28 @@ SpotLight3D::SpotLight3D() :
 		Light3D(RenderingServer::LIGHT_SPOT) {
 	// Decrease the default shadow bias to better suit most scenes.
 	set_param(PARAM_SHADOW_BIAS, 0.03);
+}
+
+CustomLight3D::CustomLight3D() :
+		Light3D(RenderingServer::LIGHT_CUSTOM) {
+}
+
+void CustomLight3D::_bind_methods() {
+	ADD_GROUP("Custom", "custom_");
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_A);
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_B);
+}
+
+PackedStringArray CustomLight3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Light3D::get_configuration_warnings();
+
+	if (!has_shadow() && get_projector().is_valid()) {
+		warnings.push_back(RTR("Projector texture only works with shadows active."));
+	}
+
+	if (get_projector().is_valid() && OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
+		warnings.push_back(RTR("Projector textures are not supported when using the GL Compatibility backend yet. Support will be added in a future release."));
+	}
+
+	return warnings;
 }

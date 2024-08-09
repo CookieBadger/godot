@@ -464,6 +464,9 @@ public:
 	virtual RID spot_light_allocate() override;
 	virtual void spot_light_initialize(RID p_light) override;
 
+	virtual RID custom_light_allocate() override;
+	virtual void custom_light_initialize(RID p_light) override;
+
 	virtual void light_free(RID p_rid) override;
 
 	virtual void light_set_color(RID p_light, const Color &p_color) override;

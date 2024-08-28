@@ -164,6 +164,10 @@ AABB Light3D::get_aabb() const {
 
 		real_t size = Math::sin(cone_angle_rad) * cone_slant_height;
 		return AABB(Vector3(-size, -size, -cone_slant_height), Vector3(2 * size, 2 * size, cone_slant_height));
+	} else if (type == RenderingServer::LIGHT_CUSTOM) {
+		float a = param[PARAM_CUSTOM_TEST_A];
+		float b = param[PARAM_CUSTOM_TEST_B];
+		return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a / 2, 0, b / 2)); // TODO: maybe give a minimal height here?
 	}
 
 	return AABB();
@@ -478,7 +482,7 @@ Light3D::Light3D(RenderingServer::LightType p_type) {
 	// For OmniLight3D and SpotLight3D, specified in Lumens.
 	set_param(PARAM_INTENSITY, 1000.0);
 	set_param(PARAM_CUSTOM_TEST_A, 1);
-	set_param(PARAM_CUSTOM_TEST_A, 1);
+	set_param(PARAM_CUSTOM_TEST_B, 1);
 	set_temperature(6500.0); // Nearly white.
 	set_disable_scale(true);
 }

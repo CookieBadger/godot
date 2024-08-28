@@ -148,6 +148,8 @@ private:
 		float cos_spot_angle;
 		float specular_amount;
 		float shadow_opacity;
+		//float custom_test_a;
+		//float custom_test_b;
 
 		float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
@@ -174,12 +176,16 @@ private:
 	uint32_t max_lights;
 	uint32_t omni_light_count = 0;
 	uint32_t spot_light_count = 0;
+	uint32_t custom_light_count = 0;
 	LightData *omni_lights = nullptr;
 	LightData *spot_lights = nullptr;
+	LightData *custom_lights = nullptr;
 	LightInstanceDepthSort *omni_light_sort = nullptr;
 	LightInstanceDepthSort *spot_light_sort = nullptr;
+	LightInstanceDepthSort *custom_light_sort = nullptr;
 	RID omni_light_buffer;
 	RID spot_light_buffer;
+	RID custom_light_buffer;
 
 	/* DIRECTIONAL LIGHT DATA */
 
@@ -791,6 +797,7 @@ public:
 	void set_max_lights(const uint32_t p_max_lights);
 	RID get_omni_light_buffer() { return omni_light_buffer; }
 	RID get_spot_light_buffer() { return spot_light_buffer; }
+	RID get_custom_light_buffer() { return spot_light_buffer; }
 	RID get_directional_light_buffer() { return directional_light_buffer; }
 	uint32_t get_max_directional_lights() { return max_directional_lights; }
 	bool has_directional_shadows(const uint32_t p_directional_light_count) {

@@ -1241,6 +1241,7 @@ void RenderForwardClustered::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_
 		settings.voxel_gi_buffer = rbgi->get_voxel_gi_buffer();
 		settings.omni_light_buffer = RendererRD::LightStorage::get_singleton()->get_omni_light_buffer();
 		settings.spot_light_buffer = RendererRD::LightStorage::get_singleton()->get_spot_light_buffer();
+		// TODO: add area_light_buffer
 		settings.directional_shadow_depth = RendererRD::LightStorage::get_singleton()->directional_shadow_get_texture();
 		settings.directional_light_buffer = RendererRD::LightStorage::get_singleton()->get_directional_light_buffer();
 
@@ -1266,7 +1267,16 @@ void RenderForwardClustered::setup_added_reflection_probe(const Transform3D &p_t
 
 void RenderForwardClustered::setup_added_light(const RS::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture) {
 	if (current_cluster_builder != nullptr) {
-		current_cluster_builder->add_light(p_type == RS::LIGHT_SPOT ? ClusterBuilderRD::LIGHT_TYPE_SPOT : ClusterBuilderRD::LIGHT_TYPE_OMNI, p_transform, p_radius, p_spot_aperture);
+		ClusterBuilderRD::LightType type;
+		if (p_type == RS::LIGHT_SPOT) {
+			type = ClusterBuilderRD::LIGHT_TYPE_SPOT;
+		} else if (p_type == RS::LIGHT_OMNI) {
+			type = ClusterBuilderRD::LIGHT_TYPE_OMNI;
+		} else {
+			type = ClusterBuilderRD::LIGHT_TYPE_CUSTOM;
+		}
+
+		current_cluster_builder->add_light(type, p_transform, p_radius, p_spot_aperture);
 	}
 }
 
@@ -1402,7 +1412,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				p_render_data->directional_shadows.push_back(i);
 			} else if (light_storage->light_get_type(base) == RS::LIGHT_OMNI && light_storage->light_omni_get_shadow_mode(base) == RS::LIGHT_OMNI_SHADOW_CUBE) {
 				p_render_data->cube_shadows.push_back(i);
-			} else {
+			} else { // RS::LIGHT_CUSTOM or RS::LIGHT_SPOT
 				p_render_data->shadows.push_back(i);
 			}
 		}
@@ -2524,6 +2534,13 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
 
 			flip_y = true;
+		} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
+			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
+			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
+
+			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
+
+			flip_y = true;
 		}
 	}
 
@@ -2951,7 +2968,13 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.append_id(RendererRD::LightStorage::get_singleton()->get_spot_light_buffer());
 			uniforms.push_back(u);
 		}
-
+		{
+			RD::Uniform u;
+			u.binding = 16;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.append_id(RendererRD::LightStorage::get_singleton()->get_custom_light_buffer());
+			uniforms.push_back(u);
+		}
 		{
 			RD::Uniform u;
 			u.binding = 5;

@@ -873,11 +873,11 @@ vec4 fog_process(vec3 vertex) {
 }
 
 void cluster_get_item_range(uint p_offset, out uint item_min, out uint item_max, out uint item_from, out uint item_to) {
-	uint item_min_max = cluster_buffer.data[p_offset];
-	item_min = item_min_max & 0xFFFFu;
-	item_max = item_min_max >> 16;
+	uint item_min_max = cluster_buffer.data[p_offset]; // 32 bit uint which encodes both min and max value
+	item_min = item_min_max & 0xFFFFu; // first 16 bit
+	item_max = item_min_max >> 16; // second 16 bit
 
-	item_from = item_min >> 5;
+	item_from = item_min >> 5; // item_min / 32
 	item_to = (item_max == 0) ? 0 : ((item_max - 1) >> 5) + 1; //side effect of how it is stored, as item_max 0 means no elements
 }
 
@@ -1167,7 +1167,7 @@ void fragment_shader(in SceneData scene_data) {
 #else
 	uvec2 cluster_pos = uvec2(gl_FragCoord.xy) >> implementation_data.cluster_shift;
 #endif
-	uint cluster_offset = (implementation_data.cluster_width * cluster_pos.y + cluster_pos.x) * (implementation_data.max_cluster_element_count_div_32 + 32);
+	uint cluster_offset = (implementation_data.cluster_width * cluster_pos.y + cluster_pos.x) * (implementation_data.max_cluster_element_count_div_32 + 32); // why +32 and not *32?
 
 	uint cluster_z = uint(clamp((-vertex.z / scene_data.z_far) * 32.0, 0.0, 31.0));
 
@@ -1177,7 +1177,7 @@ void fragment_shader(in SceneData scene_data) {
 
 	{ // process decals
 
-		uint cluster_decal_offset = cluster_offset + implementation_data.cluster_type_size * 2;
+		uint cluster_decal_offset = cluster_offset + implementation_data.cluster_type_size * 4; // why is this only ever added and not multiplied?
 
 		uint item_min;
 		uint item_max;
@@ -1283,7 +1283,8 @@ void fragment_shader(in SceneData scene_data) {
 
 	//pack albedo until needed again, saves 2 VGPRs in the meantime
 
-#endif //not render depth
+#endif //!MODE_RENDER_DEPTH
+
 	/////////////////////// LIGHTING //////////////////////////////
 
 #ifdef NORMAL_USED
@@ -2213,6 +2214,78 @@ void fragment_shader(in SceneData scene_data) {
 				shadow = blur_shadow(shadow);
 
 				light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+						transmittance_color,
+						transmittance_depth,
+						transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim,
+						rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, normalize(normal_interp),
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+						tangent,
+						binormal, anisotropy,
+#endif
+						diffuse_light, specular_light);
+			}
+		}
+	}
+
+	{ // custom lights
+
+		uint cluster_custom_offset = cluster_offset + implementation_data.cluster_type_size * 2;
+
+		uint item_min;
+		uint item_max;
+		uint item_from;
+		uint item_to;
+
+		cluster_get_item_range(cluster_custom_offset + implementation_data.max_cluster_element_count_div_32 + cluster_z, item_min, item_max, item_from, item_to);
+
+#ifdef USE_SUBGROUPS
+		item_from = subgroupBroadcastFirst(subgroupMin(item_from));
+		item_to = subgroupBroadcastFirst(subgroupMax(item_to));
+#endif
+
+		for (uint i = item_from; i < item_to; i++) {
+			uint mask = cluster_buffer.data[cluster_custom_offset + i];
+			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+#ifdef USE_SUBGROUPS
+			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+#else
+			uint merged_mask = mask;
+#endif
+
+			while (merged_mask != 0) {
+				uint bit = findMSB(merged_mask);
+				merged_mask &= ~(1u << bit);
+#ifdef USE_SUBGROUPS
+				if (((1u << bit) & mask) == 0) { //do not process if not originally here
+					continue;
+				}
+#endif
+
+				uint light_index = 32 * i + bit;
+
+				if (!bool(custom_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+					continue; //not masked
+				}
+
+				if (custom_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+					continue; // Statically baked light and object uses lightmap, skip
+				}
+
+				float shadow = light_process_custom_shadow(light_index, vertex, normal);
+
+				shadow = blur_shadow(shadow);
+				light_process_custom(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

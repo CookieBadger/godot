@@ -1973,6 +1973,9 @@ void GI::SDFGI::pre_process_gi(const Transform3D &p_transform, RenderDataRD *p_r
 					// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
 					// We make this assumption to keep them easy to control.
 					lights[idx].energy *= 1.0 / Math_PI;
+				} else if (lights[idx].type == RS::LIGHT_CUSTOM) {
+					// TODO adjust this for what area lights actually need
+					lights[idx].energy *= 1.0 / Math_PI;
 				}
 			}
 
@@ -1985,7 +1988,7 @@ void GI::SDFGI::pre_process_gi(const Transform3D &p_transform, RenderDataRD *p_r
 			lights[idx].radius = RSG::light_storage->light_get_param(light, RS::LIGHT_PARAM_RANGE);
 			lights[idx].cos_spot_angle = Math::cos(Math::deg_to_rad(RSG::light_storage->light_get_param(light, RS::LIGHT_PARAM_SPOT_ANGLE)));
 			lights[idx].inv_spot_attenuation = 1.0f / RSG::light_storage->light_get_param(light, RS::LIGHT_PARAM_SPOT_ATTENUATION);
-
+			// TODO: we might have to introduce new variables to the lights UBO
 			idx++;
 		}
 
@@ -2435,6 +2438,9 @@ void GI::SDFGI::render_static_lights(RenderDataRD *p_render_data, Ref<RenderScen
 					} else if (lights[idx].type == RS::LIGHT_SPOT) {
 						// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
 						// We make this assumption to keep them easy to control.
+						lights[idx].energy *= 1.0 / Math_PI;
+					} else if (lights[idx].type == RS::LIGHT_CUSTOM) {
+						// TODO adjust this for what area lights actually need
 						lights[idx].energy *= 1.0 / Math_PI;
 					}
 				}
@@ -2901,6 +2907,9 @@ void GI::VoxelGIInstance::update(bool p_update_light_instances, const Vector<RID
 					} else if (l.type == RS::LIGHT_SPOT) {
 						// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
 						// We make this assumption to keep them easy to control.
+						l.energy *= 1.0 / Math_PI;
+					} else if (l.type == RS::LIGHT_CUSTOM) {
+						// TODO adjust this for what area lights actually need
 						l.energy *= 1.0 / Math_PI;
 					}
 				}

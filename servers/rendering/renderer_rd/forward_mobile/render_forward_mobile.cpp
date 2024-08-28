@@ -1263,6 +1263,13 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, i
 			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
 
 			flip_y = true;
+		} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
+			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
+			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
+
+			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
+
+			flip_y = true;
 		}
 	}
 
@@ -2308,6 +2315,7 @@ uint32_t RenderForwardMobile::geometry_instance_get_pair_mask() {
 void RenderForwardMobile::GeometryInstanceForwardMobile::pair_light_instances(const RID *p_light_instances, uint32_t p_light_instance_count) {
 	omni_light_count = 0;
 	spot_light_count = 0;
+	custom_light_count = 0;
 
 	for (uint32_t i = 0; i < p_light_instance_count; i++) {
 		RS::LightType type = RendererRD::LightStorage::get_singleton()->light_instance_get_type(p_light_instances[i]);
@@ -2322,6 +2330,12 @@ void RenderForwardMobile::GeometryInstanceForwardMobile::pair_light_instances(co
 				if (spot_light_count < (uint32_t)MAX_RDL_CULL) {
 					spot_lights[spot_light_count] = RendererRD::LightStorage::get_singleton()->light_instance_get_forward_id(p_light_instances[i]);
 					spot_light_count++;
+				}
+			} break;
+			case RS::LIGHT_CUSTOM: {
+				if (custom_light_count < (uint32_t)MAX_RDL_CULL) {
+					custom_lights[custom_light_count] = RendererRD::LightStorage::get_singleton()->light_instance_get_forward_id(p_light_instances[i]);
+					custom_light_count++;
 				}
 			} break;
 			default:

@@ -103,6 +103,11 @@ bool RenderingLightCuller::_prepare_light(const RendererSceneCull::Instance &p_i
 			// Could deal with a max directional shadow range here? NYI
 			// LIGHT_PARAM_SHADOW_MAX_DISTANCE
 			break;
+		case RS::LIGHT_CUSTOM:
+			lsource.type = LightSource::ST_CUSTOM;
+			lsource.custom_a = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_CUSTOM_TEST_A);
+			lsource.custom_b = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_CUSTOM_TEST_B);
+			break;
 	}
 
 	lsource.pos = p_instance.transform.origin;
@@ -324,6 +329,7 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 	switch (p_light_source.type) {
 		case LightSource::ST_SPOTLIGHT:
 		case LightSource::ST_OMNI:
+		case LightSource::ST_CUSTOM:
 			break;
 		case LightSource::ST_DIRECTIONAL:
 			return add_light_camera_planes_directional(r_cull_planes, p_light_source);
@@ -369,7 +375,7 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 				}
 			}
 		}
-	} else {
+	} else { // TODO: add case for Area Lights (for now uses SpotLights implementation)
 		// SPOTLIGHTs, more complex to cull.
 		Vector3 pos_end = p_light_source.pos + (p_light_source.dir * p_light_source.range);
 

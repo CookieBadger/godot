@@ -162,6 +162,10 @@ private:
 public:
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
+#ifdef DYNAMIC_CORE_SHADERS
+	virtual void RendererSceneRenderRD::reload_scene_shader() {}
+#endif
+
 	/* LIGHTING */
 
 	virtual void setup_added_reflection_probe(const Transform3D &p_transform, const Vector3 &p_half_size){};

@@ -94,6 +94,11 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 	/* Scene Shader */
 
 	SceneShaderForwardClustered scene_shader;
+#ifdef DYNAMIC_CORE_SHADERS
+	void RenderForwardClustered::reload_scene_shader() override {
+		scene_shader.reload_shader();
+	}
+#endif
 
 	/* Framebuffer */
 

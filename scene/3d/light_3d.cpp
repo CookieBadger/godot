@@ -165,9 +165,19 @@ AABB Light3D::get_aabb() const {
 		real_t size = Math::sin(cone_angle_rad) * cone_slant_height;
 		return AABB(Vector3(-size, -size, -cone_slant_height), Vector3(2 * size, 2 * size, cone_slant_height));
 	} else if (type == RenderingServer::LIGHT_CUSTOM) {
-		float a = param[PARAM_CUSTOM_TEST_A];
-		float b = param[PARAM_CUSTOM_TEST_B];
-		return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a / 2, 0, b / 2)); // TODO: maybe give a minimal height here?
+		real_t cone_slant_height = param[PARAM_RANGE];
+		real_t cone_angle_rad = Math::deg_to_rad(param[PARAM_SPOT_ANGLE]);
+
+		if (cone_angle_rad > Math_PI / 2.0) {
+			// Just return the AABB of an omni light if the spot angle is above 90 degrees.
+			return AABB(Vector3(-1, -1, -1) * cone_slant_height, Vector3(2, 2, 2) * cone_slant_height);
+		}
+
+		real_t size = Math::sin(cone_angle_rad) * cone_slant_height;
+		return AABB(Vector3(-size, -size, -cone_slant_height), Vector3(2 * size, 2 * size, cone_slant_height));
+		//float a = param[PARAM_CUSTOM_TEST_A]; // THIS CODE IS TO BE DUPLICATED IN LIGHT_STORAGE FOR EACH RENDERING DEVICE
+		//float b = param[PARAM_CUSTOM_TEST_B];
+		//return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a, 0, b)); // TODO: maybe give a minimal height here?
 	}
 
 	return AABB();
@@ -624,7 +634,7 @@ void OmniLight3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_shadow_mode"), &OmniLight3D::get_shadow_mode);
 
 	ADD_GROUP("Omni", "omni_");
-	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "omni_range", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp"), "set_param", "get_param", PARAM_RANGE);
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "omni_range", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_RANGE);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "omni_attenuation", PROPERTY_HINT_RANGE, "-10,10,0.001,or_greater,or_less"), "set_param", "get_param", PARAM_ATTENUATION);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "omni_shadow_mode", PROPERTY_HINT_ENUM, "Dual Paraboloid,Cube"), "set_shadow_mode", "get_shadow_mode");
 
@@ -675,6 +685,7 @@ CustomLight3D::CustomLight3D() :
 
 void CustomLight3D::_bind_methods() {
 	ADD_GROUP("Custom", "custom_");
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_range", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_RANGE);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_A);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_B);
 }

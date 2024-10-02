@@ -914,7 +914,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		vec4 v = vec4(vertex + normal_bias, 1.0);
 
 		vec4 splane = (custom_lights.data[idx].shadow_matrix * v);
-		splane.z += custom_lights.data[idx].shadow_bias / (light_length * 0.2);
+		splane.z += custom_lights.data[idx].shadow_bias / (light_length * custom_lights.data[idx].inv_radius);
 		splane /= splane.w;
 
 		float shadow;
@@ -922,7 +922,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			//soft shadow
 
 			//find blocker
-			float z_norm = dot(spot_dir, -light_rel_vec) * 0.2;
+			float z_norm = dot(spot_dir, -light_rel_vec) * custom_lights.data[idx].inv_radius;
 
 			vec2 shadow_uv = splane.xy * custom_lights.data[idx].atlas_rect.zw + custom_lights.data[idx].atlas_rect.xy;
 
@@ -1006,10 +1006,10 @@ void light_process_custom(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3
 	// TODO: replace this with actual Area Lights implementation
 	vec3 light_rel_vec = custom_lights.data[idx].position - vertex;
 	float light_length = length(light_rel_vec);
-	float spot_attenuation = get_omni_attenuation(light_length, 0.2, 1.0); // inv_radius=0.2, attenuation=1.0
+	float spot_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, 1.0); // attenuation=1.0
 	vec3 spot_dir = custom_lights.data[idx].direction;
 
-	highp float cone_angle = 0.7; // default cos(45)=0.707...
+	highp float cone_angle = 0.707106781; // default cos(45)
 	float scos = max(dot(-normalize(light_rel_vec), spot_dir), cone_angle);
 	float spot_rim = max(0.0001, (1.0 - scos) / (1.0 - cone_angle));
 
@@ -1036,7 +1036,7 @@ void light_process_custom(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3
 		float shadow_z = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), splane.xy, 0.0).r;
 
 		shadow_z = shadow_z * 2.0 - 1.0;
-		float z_far = 1.0 / 0.2; // inv_radius, default 1/5=0.2
+		float z_far = 1.0 / custom_lights.data[idx].inv_radius;
 		float z_near = 0.01;
 		shadow_z = 2.0 * z_near * z_far / (z_far + z_near - shadow_z * (z_far - z_near));
 
@@ -1176,6 +1176,7 @@ void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, 
 float blur_shadow(float shadow) {
 	return shadow;
 #if 0
+	// TODO: what is this???
 	//disabling for now, will investigate later
 	float interp_shadow = shadow;
 	if (gl_HelperInvocation) {

@@ -422,9 +422,12 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 			return AABB();
 		};
 		case RS::LIGHT_CUSTOM: {
-			float a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
-			float b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
-			return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a / 2, 0, b / 2));
+			float len = light->param[RS::LIGHT_PARAM_RANGE];
+			float size = Math::tan(Math::deg_to_rad(light->param[RS::LIGHT_PARAM_SPOT_ANGLE])) * len;
+			return AABB(Vector3(-size, -size, -len), Vector3(size * 2, size * 2, len));
+			//float a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A]; // TODO: set AABB with height, depending on RANGE
+			//float b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+			//return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a, 0, b));
 		};
 	}
 

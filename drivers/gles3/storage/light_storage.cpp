@@ -355,7 +355,7 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 		case RS::LIGHT_CUSTOM: {
 			float a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
 			float b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
-			return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a / 2, 0, b / 2));
+			return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a, 0, b));
 		};
 	}
 

@@ -1009,7 +1009,10 @@ void light_process_custom(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3
 	float spot_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, 1.0); // attenuation=1.0
 	vec3 spot_dir = custom_lights.data[idx].direction;
 
-	highp float cone_angle = 0.707106781; // default cos(45)
+
+	float cone_rad = max(min(custom_lights.data[idx].custom_test_a, custom_lights.data[idx].custom_test_b), 0.001) / 2.0;
+
+	highp float cone_angle = 1.0/sqrt(4*cone_rad*cone_rad+1.0); // = cos(atan(cone_rad/0.5)); // 0.5 is for angle to be at 45 degrees at default 1x1m size
 	float scos = max(dot(-normalize(light_rel_vec), spot_dir), cone_angle);
 	float spot_rim = max(0.0001, (1.0 - scos) / (1.0 - cone_angle));
 

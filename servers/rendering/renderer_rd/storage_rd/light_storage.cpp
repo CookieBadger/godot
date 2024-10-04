@@ -423,11 +423,14 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 		};
 		case RS::LIGHT_CUSTOM: {
 			float len = light->param[RS::LIGHT_PARAM_RANGE];
-			float size = Math::tan(Math::deg_to_rad(light->param[RS::LIGHT_PARAM_SPOT_ANGLE])) * len;
-			return AABB(Vector3(-size, -size, -len), Vector3(size * 2, size * 2, len));
-			//float a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A]; // TODO: set AABB with height, depending on RANGE
-			//float b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
-			//return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a, 0, b));
+
+			float cone_radius = MAX(MIN(light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A], light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B]), 0.001) / 2.0;
+
+			float cone_angle = Math::atan(cone_radius);
+
+			float size = Math::tan(cone_angle) * len;
+
+			return AABB(Vector3(-size, -size, -len), Vector3(size*2, size*2, len));
 		};
 	}
 
@@ -968,8 +971,8 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		//light_data.custom_test_a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
-		//light_data.custom_test_b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+		light_data.custom_test_a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
+		light_data.custom_test_b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
 
 		light_data.mask = light->cull_mask;
 

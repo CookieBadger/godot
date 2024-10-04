@@ -67,19 +67,35 @@ int Light3DGizmoPlugin::get_priority() const {
 
 String Light3DGizmoPlugin::get_handle_name(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary) const {
 	if (p_id == 0) {
-		return "Radius";
+		if (Object::cast_to<CustomLight3D>(p_gizmo->get_node_3d())) {
+			return "Custom Test A";
+		} else {
+			return "Radius";
+		}
 	} else {
-		return "Aperture";
+		if (Object::cast_to<CustomLight3D>(p_gizmo->get_node_3d())) {
+			return "Custom Test A";
+		} else {
+			return "Aperture";
+		}
 	}
 }
 
 Variant Light3DGizmoPlugin::get_handle_value(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary) const {
 	Light3D *light = Object::cast_to<Light3D>(p_gizmo->get_node_3d());
 	if (p_id == 0) {
-		return light->get_param(Light3D::PARAM_RANGE);
+		if (Object::cast_to<CustomLight3D>(light)) {
+			return light->get_param(Light3D::PARAM_CUSTOM_TEST_A);
+		} else {
+			return light->get_param(Light3D::PARAM_RANGE);
+		}
 	}
 	if (p_id == 1) {
-		return light->get_param(Light3D::PARAM_SPOT_ANGLE);
+		if (Object::cast_to<CustomLight3D>(light)) {
+			return light->get_param(Light3D::PARAM_CUSTOM_TEST_B);
+		} else {
+			return light->get_param(Light3D::PARAM_SPOT_ANGLE);
+		}
 	}
 
 	return Variant();
@@ -121,8 +137,8 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 
 				light->set_param(Light3D::PARAM_RANGE, r);
 			}
-		} else if (Object::cast_to<CustomLight3D>(light)) {
-			Plane lp = Plane(gt.basis.get_column(1), gt.origin);
+		} else if (Object::cast_to<CustomLight3D>(light)) { // TODO: doesn't quite work at certain angles (90 deg front angle, e.g.)
+			Plane lp = Plane(gt.basis.get_column(2), gt.origin);
 
 			Vector3 inters;
 			if (lp.intersects_ray(ray_from, ray_dir, &inters)) {
@@ -130,7 +146,7 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 
 				float a = inv.x;
 				if (a >= 0) {
-					light->set_param(Light3D::PARAM_CUSTOM_TEST_A, a*2);
+					light->set_param(Light3D::PARAM_CUSTOM_TEST_A, MAX(a * 2, 0.001));
 				}
 			}
 		}
@@ -140,15 +156,15 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 			float a = _find_closest_angle_to_half_pi_arc(s[0], s[1], light->get_param(Light3D::PARAM_RANGE), gt);
 			light->set_param(Light3D::PARAM_SPOT_ANGLE, CLAMP(a, 0.01, 89.99));
 		} else if (Object::cast_to<CustomLight3D>(light)) {
-			Plane cp = Plane(gt.basis.get_column(1), gt.origin);
+			Plane cp = Plane(gt.basis.get_column(2), gt.origin);
 
 			Vector3 inters;
 			if (cp.intersects_ray(ray_from, ray_dir, &inters)) {
 				Vector3 inv = gi.xform(inters);
 
-				float b = inv.z;
+				float b = inv.y;
 				if (b >= 0) {
-					light->set_param(Light3D::PARAM_CUSTOM_TEST_B, b * 2);
+					light->set_param(Light3D::PARAM_CUSTOM_TEST_B, MAX(b * 2, 0.001));
 				}
 			}
 		}
@@ -158,20 +174,37 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 void Light3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary, const Variant &p_restore, bool p_cancel) {
 	Light3D *light = Object::cast_to<Light3D>(p_gizmo->get_node_3d());
 	if (p_cancel) {
-		light->set_param(p_id == 0 ? Light3D::PARAM_RANGE : Light3D::PARAM_SPOT_ANGLE, p_restore);
-
+		if (Object::cast_to<CustomLight3D>(light)) {
+			light->set_param(p_id == 0 ? Light3D::PARAM_CUSTOM_TEST_A : Light3D::PARAM_CUSTOM_TEST_B, p_restore);
+		} else {
+			light->set_param(p_id == 0 ? Light3D::PARAM_RANGE : Light3D::PARAM_SPOT_ANGLE, p_restore);
+		}
 	} else if (p_id == 0) {
 		EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-		ur->create_action(TTR("Change Light Radius"));
-		ur->add_do_method(light, "set_param", Light3D::PARAM_RANGE, light->get_param(Light3D::PARAM_RANGE));
-		ur->add_undo_method(light, "set_param", Light3D::PARAM_RANGE, p_restore);
-		ur->commit_action();
+		if (Object::cast_to<CustomLight3D>(light)) {
+			ur->create_action(TTR("Change Custom Test A"));
+			ur->add_do_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_A, light->get_param(Light3D::PARAM_CUSTOM_TEST_A));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_A, p_restore);
+			ur->commit_action();
+		} else {
+			ur->create_action(TTR("Change Light Radius"));
+			ur->add_do_method(light, "set_param", Light3D::PARAM_RANGE, light->get_param(Light3D::PARAM_RANGE));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_RANGE, p_restore);
+			ur->commit_action();
+		}
 	} else if (p_id == 1) {
 		EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-		ur->create_action(TTR("Change Light Radius"));
-		ur->add_do_method(light, "set_param", Light3D::PARAM_SPOT_ANGLE, light->get_param(Light3D::PARAM_SPOT_ANGLE));
-		ur->add_undo_method(light, "set_param", Light3D::PARAM_SPOT_ANGLE, p_restore);
-		ur->commit_action();
+		if (Object::cast_to<CustomLight3D>(light)) {
+			ur->create_action(TTR("Change Custom Test B"));
+			ur->add_do_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_B, light->get_param(Light3D::PARAM_CUSTOM_TEST_B));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_B, p_restore);
+			ur->commit_action();
+		} else {
+			ur->create_action(TTR("Change Light Radius"));
+			ur->add_do_method(light, "set_param", Light3D::PARAM_SPOT_ANGLE, light->get_param(Light3D::PARAM_SPOT_ANGLE));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_SPOT_ANGLE, p_restore);
+			ur->commit_action();
+		}
 	}
 }
 
@@ -326,20 +359,20 @@ void Light3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 			float b = cl->get_param(Light3D::PARAM_CUSTOM_TEST_B);
 
 			// Draw rectangle
-			points.push_back(Vector3(-a/2, 0, b/2));
-			points.push_back(Vector3(a/2, 0, b/2));
-			points.push_back(Vector3(a/2, 0, b/2));
-			points.push_back(Vector3(a/2, 0, -b/2));
-			points.push_back(Vector3(a/2, 0, -b/2));
-			points.push_back(Vector3(-a/2, 0, -b/2));
-			points.push_back(Vector3(-a/2, 0, -b/2));
-			points.push_back(Vector3(-a/2, 0, b/2));
+			points.push_back(Vector3(-a/2, b/2, 0));
+			points.push_back(Vector3(a/2, b/2, 0));
+			points.push_back(Vector3(a/2, b/2, 0));
+			points.push_back(Vector3(a/2, -b/2, 0));
+			points.push_back(Vector3(a/2, -b/2, 0));
+			points.push_back(Vector3(-a/2, -b/2, 0));
+			points.push_back(Vector3(-a/2, -b/2, 0));
+			points.push_back(Vector3(-a/2, b/2, 0));
 
 			p_gizmo->add_lines(points, material, false, color);
 
 			Vector<Vector3> handles = {
 				Vector3(a/2, 0, 0),
-				Vector3(0, 0, b/2)
+				Vector3(0, b/2, 0)
 			};
 
 			p_gizmo->add_handles(handles, get_material("handles"));

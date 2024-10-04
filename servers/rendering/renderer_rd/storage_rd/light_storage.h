@@ -138,6 +138,7 @@ private:
 	struct LightData {
 		float position[3];
 		float inv_radius;
+
 		float direction[3]; // in omni, x and y are used for dual paraboloid offset
 		float size;
 
@@ -148,10 +149,12 @@ private:
 		float cos_spot_angle;
 		float specular_amount;
 		float shadow_opacity;
-		//float custom_test_a;
-		//float custom_test_b;
 
-		float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
+		float custom_test_a;
+		float custom_test_b;
+		// 8 bytes are missing to complete this block, so ensure alignment in the next block
+
+		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
 		float shadow_bias;
 		float shadow_normal_bias;

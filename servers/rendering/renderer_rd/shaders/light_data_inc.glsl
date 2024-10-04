@@ -16,8 +16,9 @@ struct LightData { //this structure needs to be as packed as possible
 	mediump float cone_angle;
 	mediump float specular_amount;
 	mediump float shadow_opacity;
-	//mediump float custom_test_a;
-	//mediump float custom_test_b;
+
+	mediump float custom_test_a;
+	mediump float custom_test_b;
 
 	highp vec4 atlas_rect; // rect in the shadow atlas
 	highp mat4 shadow_matrix;

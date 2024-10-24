@@ -107,6 +107,9 @@ bool RenderingLightCuller::_prepare_light(const RendererSceneCull::Instance &p_i
 			lsource.type = LightSource::ST_CUSTOM;
 			lsource.custom_a = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_CUSTOM_TEST_A);
 			lsource.custom_b = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_CUSTOM_TEST_B);
+			lsource.range = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_RANGE);
+			float cone_rad = MAX(MIN(lsource.custom_a, lsource.custom_b), 0.001) / 2.0;
+			lsource.angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
 			break;
 	}
 

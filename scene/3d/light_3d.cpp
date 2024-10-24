@@ -677,6 +677,8 @@ SpotLight3D::SpotLight3D() :
 
 CustomLight3D::CustomLight3D() :
 		Light3D(RenderingServer::LIGHT_CUSTOM) {
+	// Decrease the default shadow bias to better suit most scenes.
+	set_param(PARAM_SHADOW_BIAS, 0.03);
 }
 
 void CustomLight3D::_bind_methods() {

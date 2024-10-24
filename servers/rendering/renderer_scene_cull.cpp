@@ -2548,7 +2548,11 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			}
 
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
-			real_t angle = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_SPOT_ANGLE);
+			real_t custom_test_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_CUSTOM_TEST_A);
+			real_t custom_test_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_CUSTOM_TEST_B);
+			
+			real_t cone_rad = MAX(MIN(custom_test_a, custom_test_b), 0.001) / 2.0;
+			real_t angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
 
 			Projection cm;
 			cm.set_perspective(angle * 2.0, 1.0, 0.005f * radius, radius);

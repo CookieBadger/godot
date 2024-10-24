@@ -199,6 +199,8 @@ void LightStorage::light_set_param(RID p_light, RS::LightParam p_param, float p_
 	switch (p_param) {
 		case RS::LIGHT_PARAM_RANGE:
 		case RS::LIGHT_PARAM_SPOT_ANGLE:
+		case RS::LIGHT_PARAM_CUSTOM_TEST_A:
+		case RS::LIGHT_PARAM_CUSTOM_TEST_B:
 		case RS::LIGHT_PARAM_SHADOW_MAX_DISTANCE:
 		case RS::LIGHT_PARAM_SHADOW_SPLIT_1_OFFSET:
 		case RS::LIGHT_PARAM_SHADOW_SPLIT_2_OFFSET:
@@ -971,8 +973,15 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		light_data.custom_test_a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
-		light_data.custom_test_b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+		float custom_test_a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
+		float custom_test_b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+		light_data.custom_test_a = custom_test_a;
+		light_data.custom_test_b = custom_test_b;
+		if (type == RS::LIGHT_CUSTOM) {
+			float cone_rad = MAX(MIN(custom_test_a, custom_test_b), 0.001) / 2.0;
+			spot_angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
+		}
+
 
 		light_data.mask = light->cull_mask;
 

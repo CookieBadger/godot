@@ -41,6 +41,7 @@
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 #include "scene/gui/panel_container.h"
+#include <servers/rendering/renderer_rd/renderer_scene_render_rd.h>
 
 EditorRunBar *EditorRunBar::singleton = nullptr;
 
@@ -52,6 +53,9 @@ void EditorRunBar::_notification(int p_what) {
 
 		case NOTIFICATION_THEME_CHANGED: {
 			_update_play_buttons();
+#ifdef DYNAMIC_CORE_SHADERS
+			reload_shaders_button->set_icon(get_editor_theme_icon(SNAME("Reload")));
+#endif
 			pause_button->set_icon(get_editor_theme_icon(SNAME("Pause")));
 			stop_button->set_icon(get_editor_theme_icon(SNAME("Stop")));
 
@@ -138,6 +142,12 @@ void EditorRunBar::_play_custom_pressed() {
 		play_custom_scene(last_custom_scene);
 	}
 }
+
+#ifdef DYNAMIC_CORE_SHADERS
+void EditorRunBar::_reload_shaders_pressed() {
+	RendererSceneRenderRD::get_singleton()->reload_scene_shader();
+}
+#endif
 
 void EditorRunBar::_play_current_pressed() {
 	if (editor_run.get_status() == EditorRun::STATUS_STOP || current_mode != RunMode::RUN_CURRENT) {
@@ -450,4 +460,13 @@ EditorRunBar::EditorRunBar() {
 	quick_run = memnew(EditorQuickOpen);
 	add_child(quick_run);
 	quick_run->connect("quick_open", callable_mp(this, &EditorRunBar::_quick_run_selected));
+
+#ifdef DYNAMIC_CORE_SHADERS
+	reload_shaders_button = memnew(Button);
+	main_hbox->add_child(reload_shaders_button);
+	reload_shaders_button->set_theme_type_variation("RunBarButton");
+	reload_shaders_button->set_focus_mode(Control::FOCUS_NONE);
+	reload_shaders_button->set_tooltip_text(TTR("Reload core shaders."));
+	reload_shaders_button->connect(SceneStringName(pressed), callable_mp(this, &EditorRunBar::_reload_shaders_pressed));
+#endif
 }

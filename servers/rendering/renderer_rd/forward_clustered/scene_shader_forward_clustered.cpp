@@ -473,6 +473,16 @@ RendererRD::MaterialStorage::MaterialData *SceneShaderForwardClustered::_create_
 
 SceneShaderForwardClustered *SceneShaderForwardClustered::singleton = nullptr;
 
+#ifdef DYNAMIC_CORE_SHADERS
+void SceneShaderForwardClustered::reload_shader() {
+	//SceneForwardClusteredShaderRD newShader; // create a new shader object, which reads the updated code
+	//shader.copy_stages(newShader);
+	//RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+
+	// TODO: Actual update of the usage of the shader
+}
+#endif
+
 SceneShaderForwardClustered::SceneShaderForwardClustered() {
 	// there should be only one of these, contained within our RenderFM singleton.
 	singleton = this;

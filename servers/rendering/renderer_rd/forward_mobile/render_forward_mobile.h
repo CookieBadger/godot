@@ -480,6 +480,8 @@ protected:
 		RendererRD::ForwardID omni_lights[MAX_RDL_CULL];
 		uint32_t spot_light_count = 0;
 		RendererRD::ForwardID spot_lights[MAX_RDL_CULL];
+		uint32_t custom_light_count = 0;
+		RendererRD::ForwardID custom_lights[MAX_RDL_CULL];
 		uint32_t decals_count = 0;
 		RendererRD::ForwardID decals[MAX_RDL_CULL];
 

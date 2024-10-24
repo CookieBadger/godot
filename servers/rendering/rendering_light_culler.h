@@ -79,6 +79,7 @@ private:
 			ST_DIRECTIONAL,
 			ST_SPOTLIGHT,
 			ST_OMNI,
+			ST_CUSTOM
 		};
 
 		LightSource() {
@@ -94,6 +95,9 @@ private:
 
 		float angle; // For spotlight.
 		float range;
+
+		float custom_a; // For custom light.
+		float custom_b;
 	};
 
 	// Same order as godot.

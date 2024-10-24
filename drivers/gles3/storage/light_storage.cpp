@@ -113,6 +113,14 @@ void LightStorage::spot_light_initialize(RID p_rid) {
 	_light_initialize(p_rid, RS::LIGHT_SPOT);
 }
 
+RID LightStorage::custom_light_allocate() {
+	return light_owner.allocate_rid();
+}
+
+void LightStorage::custom_light_initialize(RID p_rid) {
+	_light_initialize(p_rid, RS::LIGHT_CUSTOM);
+}
+
 void LightStorage::light_free(RID p_rid) {
 	light_set_projector(p_rid, RID()); //clear projector
 
@@ -343,6 +351,11 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 		};
 		case RS::LIGHT_DIRECTIONAL: {
 			return AABB();
+		};
+		case RS::LIGHT_CUSTOM: {
+			float a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
+			float b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+			return AABB(Vector3(-a / 2, 0, -b / 2), Vector3(a, 0, b));
 		};
 	}
 

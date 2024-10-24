@@ -482,6 +482,7 @@ env["debug_symbols"] = methods.get_cmdline_bool("debug_symbols", env.dev_build)
 
 if env.editor_build:
     env.Append(CPPDEFINES=["TOOLS_ENABLED"])
+    env.Append(CPPDEFINES=["DYNAMIC_CORE_SHADERS"])
 
 if env.debug_features:
     # DEBUG_ENABLED enables debugging *features* and debug-only code, which is intended
@@ -562,6 +563,11 @@ env.Append(LINKFLAGS=env.get("linkflags", "").split())
 env.Append(ASFLAGS=env.get("asflags", "").split())
 env.Append(ARFLAGS=env.get("arflags", "").split())
 env.Append(RCFLAGS=env.get("rcflags", "").split())
+
+# Environment constants
+GODOT_SOURCE_DIR = os.path.abspath('.').replace('\\','/') # source root directory
+godot_source_dir_define = 'GODOT_SOURCE_ROOT=\"\\\"{}\"\\\"'.format(GODOT_SOURCE_DIR)
+env.Append(CPPDEFINES=[godot_source_dir_define])
 
 # Feature build profile
 env.disabled_classes = []

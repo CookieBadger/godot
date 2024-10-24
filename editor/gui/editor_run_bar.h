@@ -83,6 +83,11 @@ class EditorRunBar : public MarginContainer {
 	void _play_current_pressed();
 	void _play_custom_pressed();
 
+#ifdef DYNAMIC_CORE_SHADERS
+	Button *reload_shaders_button = nullptr;
+	void _reload_shaders_pressed();
+#endif
+
 	void _run_scene(const String &p_scene_path = "");
 	void _run_native(const Ref<EditorExportPreset> &p_preset);
 

@@ -151,6 +151,12 @@ private:
 protected:
 	ShaderRD();
 	void setup(const char *p_vertex_code, const char *p_fragment_code, const char *p_compute_code, const char *p_name);
+#ifdef DYNAMIC_CORE_SHADERS
+	virtual char const *rel_shader_path() const { return ""; };
+
+public:
+	static String shader_source_root;
+#endif
 
 public:
 	RID version_create();
@@ -206,6 +212,14 @@ public:
 	void initialize(const Vector<VariantDefine> &p_variant_defines, const String &p_general_defines = "");
 
 	virtual ~ShaderRD();
+
+#ifdef DYNAMIC_CORE_SHADERS
+	void copy_stages(const ShaderRD &other) {
+		for (int stage = 0; stage < STAGE_TYPE_MAX; stage++) {
+			stage_templates[stage] = other.stage_templates[stage];
+		}
+	}
+#endif
 };
 
 #endif // SHADER_RD_H

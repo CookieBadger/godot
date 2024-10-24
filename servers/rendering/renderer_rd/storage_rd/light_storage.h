@@ -138,6 +138,7 @@ private:
 	struct LightData {
 		float position[3];
 		float inv_radius;
+
 		float direction[3]; // in omni, x and y are used for dual paraboloid offset
 		float size;
 
@@ -149,7 +150,11 @@ private:
 		float specular_amount;
 		float shadow_opacity;
 
-		float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
+		float custom_test_a;
+		float custom_test_b;
+		// 8 bytes are missing to complete this block, so ensure alignment in the next block
+
+		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
 		float shadow_bias;
 		float shadow_normal_bias;
@@ -174,12 +179,16 @@ private:
 	uint32_t max_lights;
 	uint32_t omni_light_count = 0;
 	uint32_t spot_light_count = 0;
+	uint32_t custom_light_count = 0;
 	LightData *omni_lights = nullptr;
 	LightData *spot_lights = nullptr;
+	LightData *custom_lights = nullptr;
 	LightInstanceDepthSort *omni_light_sort = nullptr;
 	LightInstanceDepthSort *spot_light_sort = nullptr;
+	LightInstanceDepthSort *custom_light_sort = nullptr;
 	RID omni_light_buffer;
 	RID spot_light_buffer;
+	RID custom_light_buffer;
 
 	/* DIRECTIONAL LIGHT DATA */
 
@@ -463,6 +472,9 @@ public:
 
 	virtual RID spot_light_allocate() override;
 	virtual void spot_light_initialize(RID p_light) override;
+
+	virtual RID custom_light_allocate() override;
+	virtual void custom_light_initialize(RID p_light) override;
 
 	virtual void light_free(RID p_rid) override;
 
@@ -788,6 +800,7 @@ public:
 	void set_max_lights(const uint32_t p_max_lights);
 	RID get_omni_light_buffer() { return omni_light_buffer; }
 	RID get_spot_light_buffer() { return spot_light_buffer; }
+	RID get_custom_light_buffer() { return custom_light_buffer; }
 	RID get_directional_light_buffer() { return directional_light_buffer; }
 	uint32_t get_max_directional_lights() { return max_directional_lights; }
 	bool has_directional_shadows(const uint32_t p_directional_light_count) {

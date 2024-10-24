@@ -468,7 +468,8 @@ public:
 	enum LightType {
 		LIGHT_DIRECTIONAL,
 		LIGHT_OMNI,
-		LIGHT_SPOT
+		LIGHT_SPOT,
+		LIGHT_CUSTOM
 	};
 
 	enum LightParam {
@@ -493,12 +494,15 @@ public:
 		LIGHT_PARAM_SHADOW_BLUR,
 		LIGHT_PARAM_TRANSMITTANCE_BIAS,
 		LIGHT_PARAM_INTENSITY,
+		LIGHT_PARAM_CUSTOM_TEST_A,
+		LIGHT_PARAM_CUSTOM_TEST_B,
 		LIGHT_PARAM_MAX
 	};
 
 	virtual RID directional_light_create() = 0;
 	virtual RID omni_light_create() = 0;
 	virtual RID spot_light_create() = 0;
+	virtual RID custom_light_create() = 0;
 
 	virtual void light_set_color(RID p_light, const Color &p_color) = 0;
 	virtual void light_set_param(RID p_light, LightParam p_param, float p_value) = 0;
@@ -1028,6 +1032,7 @@ public:
 		VIEWPORT_DEBUG_DRAW_DISABLE_LOD,
 		VIEWPORT_DEBUG_DRAW_CLUSTER_OMNI_LIGHTS,
 		VIEWPORT_DEBUG_DRAW_CLUSTER_SPOT_LIGHTS,
+		VIEWPORT_DEBUG_DRAW_CLUSTER_CUSTOM_LIGHTS,
 		VIEWPORT_DEBUG_DRAW_CLUSTER_DECALS,
 		VIEWPORT_DEBUG_DRAW_CLUSTER_REFLECTION_PROBES,
 		VIEWPORT_DEBUG_DRAW_OCCLUDERS,

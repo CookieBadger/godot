@@ -2285,7 +2285,9 @@ void fragment_shader(in SceneData scene_data) {
 				float shadow = light_process_custom_shadow(light_index, vertex, normal);
 
 				shadow = blur_shadow(shadow);
-				light_process_custom(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				
+				//light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				light_process_area_montecarlo(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

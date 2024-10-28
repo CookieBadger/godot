@@ -145,15 +145,16 @@ private:
 		float color[3];
 		float attenuation;
 
+		float area_side_a[3];
 		float inv_spot_attenuation;
+
+		float area_side_b[3];
 		float cos_spot_angle;
+
 		float specular_amount;
 		float shadow_opacity;
 
-		float custom_test_a;
-		float custom_test_b;
 		// 8 bytes are missing to complete this block, so ensure alignment in the next block
-
 		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
 		float shadow_bias;

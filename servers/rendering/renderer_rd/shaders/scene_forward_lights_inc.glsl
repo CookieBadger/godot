@@ -44,7 +44,7 @@ uint hash1(uint value) {// TODO: check if this can be named "hash" (function nam
 	return (word >> 22u) ^ word;
 }
 uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed" (function name exists elsewhere)
-	return hash1(uint(seed.x*1000) ^ hash1(uint(seed.y*1000) ^ hash1(uint(seed.z*1000))));
+	return hash1(int(seed.x*1000) ^ hash1(int(seed.y*1000) ^ hash1(int(seed.z*1000))));
 }
 // generates a random value in range [0.0, 1.0)
 float randomize1(uint value) { // TODO: check if this can be named "randomize" (function name exists elsewhere)

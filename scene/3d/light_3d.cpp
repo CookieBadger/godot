@@ -684,6 +684,7 @@ CustomLight3D::CustomLight3D() :
 void CustomLight3D::_bind_methods() {
 	ADD_GROUP("Custom", "custom_");
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_range", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_RANGE);
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_attenuation", PROPERTY_HINT_RANGE, "-10,10,0.001,or_greater,or_less"), "set_param", "get_param", PARAM_ATTENUATION);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_A);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_B);
 }

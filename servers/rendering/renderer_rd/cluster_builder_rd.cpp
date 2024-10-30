@@ -478,16 +478,9 @@ void ClusterBuilderRD::bake_cluster() {
 						}
 					} break;
 					case ELEMENT_TYPE_CUSTOM_LIGHT: {
-						// If the spot angle is above a certain threshold, use a sphere instead of a cone for building the clusters
-						// since the cone gets too flat/large (spot angle close to 90 degrees) or
-						// can't even cover the affected area of the light (spot angle above 90 degrees).
-						if (render_elements[i].has_wide_spot_angle) {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
-						} else {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->cone_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->cone_index_array);
-						}
+						// TODO: draw as a hemisphere if light is onesided (default)
+						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
 					} break;
 					case ELEMENT_TYPE_DECAL:
 					case ELEMENT_TYPE_REFLECTION_PROBE: {

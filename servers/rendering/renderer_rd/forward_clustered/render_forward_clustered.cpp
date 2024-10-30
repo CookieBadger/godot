@@ -1268,7 +1268,7 @@ void RenderForwardClustered::setup_added_reflection_probe(const Transform3D &p_t
 	}
 }
 
-void RenderForwardClustered::setup_added_light(const RS::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture) {
+void RenderForwardClustered::setup_added_light(const RS::LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, float p_area_diagonal) {
 	if (current_cluster_builder != nullptr) {
 		ClusterBuilderRD::LightType type;
 		if (p_type == RS::LIGHT_SPOT) {
@@ -1279,7 +1279,7 @@ void RenderForwardClustered::setup_added_light(const RS::LightType p_type, const
 			type = ClusterBuilderRD::LIGHT_TYPE_CUSTOM;
 		}
 
-		current_cluster_builder->add_light(type, p_transform, p_radius, p_spot_aperture);
+		current_cluster_builder->add_light(type, p_transform, p_radius, p_spot_aperture, p_area_diagonal);
 	}
 }
 

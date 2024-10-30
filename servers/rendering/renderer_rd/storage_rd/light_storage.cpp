@@ -959,7 +959,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 		Vector3 pos = inverse_transform.xform(light_transform.origin);
 		if (type == RS::LIGHT_CUSTOM) {
-			pos = inverse_transform.xform(light_transform.origin - light_transform.basis.rows[0] * custom_test_a / 2.0 - light_transform.basis.rows[1] * custom_test_b / 2.0);
+			pos = inverse_transform.xform(light_transform.xform(Vector3(-custom_test_a / 2.0, -custom_test_b / 2.0, 0.0)));
 		}
 
 		light_data.position[0] = pos.x;
@@ -979,15 +979,18 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		Vector3 area_side_a = inverse_transform.xform(light_transform.basis.rows[0]) * custom_test_a;
-		Vector3 area_side_b = inverse_transform.xform(light_transform.basis.rows[1]) * custom_test_b;
+		Vector3 area_side_a = inverse_transform.basis.xform(light_transform.basis.rows[0]) * custom_test_a;
+		Vector3 area_side_b = inverse_transform.basis.xform(light_transform.basis.rows[1]) * custom_test_b;
+		float area_diagonal = sqrt(area_side_a.length_squared() + area_side_b.length_squared());
 
 		if (type == RS::LIGHT_CUSTOM) {
 			float cone_rad = MAX(MIN(custom_test_a, custom_test_b), 0.001) / 2.0;
 			spot_angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
+
 			light_data.area_side_a[0] = area_side_a.x;
 			light_data.area_side_a[1] = area_side_a.y;
 			light_data.area_side_a[2] = area_side_a.z;
+
 			light_data.area_side_b[0] = area_side_b.x;
 			light_data.area_side_b[1] = area_side_b.y;
 			light_data.area_side_b[2] = area_side_b.z;
@@ -1140,7 +1143,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		light_instance->cull_mask = light->cull_mask;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle);
+		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, area_diagonal);
 
 		r_positional_light_count++;
 	}

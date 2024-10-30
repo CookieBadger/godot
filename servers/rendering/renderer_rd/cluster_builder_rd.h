@@ -229,7 +229,7 @@ public:
 
 	void begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y);
 
-	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture) {
+	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, float p_area_diagonal) {
 		if (p_type == LIGHT_TYPE_OMNI && cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] == max_elements_by_type) {
 			return; // Max number elements reached.
 		}
@@ -297,12 +297,12 @@ public:
 				e.touches_near = min_d < z_near;
 			} else {
 				Plane base_plane(-xform.basis.get_column(Vector3::AXIS_Z), xform.origin);
-				float dist = base_plane.distance_to(Vector3());
+				float dist = base_plane.distance_to(Vector3()); // = -d = -(xform.origin*-xform.basis.z) = xform.origin * xform.basis.z
 				if (dist >= 0 && dist < radius) {
 					// Contains camera inside light, check angle.
 					float angle = Math::rad_to_deg(Math::acos((-xform.origin.normalized()).dot(-xform.basis.get_column(Vector3::AXIS_Z))));
 					e.touches_near = angle < p_spot_aperture * 1.05; //overfit aperture a little due to cone overfit
-				} else {
+				} else { // base_plane is behind 
 					e.touches_near = false;
 				}
 			}
@@ -331,57 +331,31 @@ public:
 
 			cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT]++;
 		} else /*LIGHT_TYPE_CUSTOM*/ {
-			radius *= shared->cone_overfit; // Overfit icosphere
+			
+			radius += p_area_diagonal;
 
-			real_t len = Math::tan(Math::deg_to_rad(p_spot_aperture)) * radius;
 			// Approximate, probably better to use a cone support function.
-			float max_d = -1e20;
-			float min_d = 1e20;
-#define CONE_MINMAX(m_x, m_y)                                             \
-	{                                                                     \
-		float d = -xform.xform(Vector3(len * m_x, len * m_y, -radius)).z; \
-		min_d = MIN(d, min_d);                                            \
-		max_d = MAX(d, max_d);                                            \
-	}
 
-			CONE_MINMAX(1, 1);
-			CONE_MINMAX(-1, 1);
-			CONE_MINMAX(-1, -1);
-			CONE_MINMAX(1, -1);
-
+			float depth = -xform.origin.z;
 			if (camera_orthogonal) {
-				e.touches_near = min_d < z_near;
+				e.touches_near = (depth - radius) < z_near;
 			} else {
-				Plane base_plane(-xform.basis.get_column(Vector3::AXIS_Z), xform.origin);
-				float dist = base_plane.distance_to(Vector3());
-				if (dist >= 0 && dist < radius) {
-					// Contains camera inside light, check angle.
-					float angle = Math::rad_to_deg(Math::acos((-xform.origin.normalized()).dot(-xform.basis.get_column(Vector3::AXIS_Z))));
-					e.touches_near = angle < p_spot_aperture * 1.05; //overfit aperture a little due to cone overfit
-				} else {
-					e.touches_near = false;
-				}
+				// Contains camera inside light.
+				float radius2 = radius * shared->sphere_overfit; // Overfit again for outer size (camera may be outside actual sphere but behind an icosphere vertex)
+				e.touches_near = xform.origin.length_squared() < radius2 * radius2;
 			}
 
-			e.touches_far = max_d > z_far;
+			e.touches_far = (depth + radius) > z_far;
 
 			// If the spot angle is above the threshold, use a sphere instead of a cone for building the clusters
 			// since the cone gets too flat/large (spot angle close to 90 degrees) or
 			// can't even cover the affected area of the light (spot angle above 90 degrees).
-			if (p_spot_aperture > WIDE_SPOT_ANGLE_THRESHOLD_DEG) {
-				e.scale[0] = radius;
-				e.scale[1] = radius;
-				e.scale[2] = radius;
-				e.has_wide_spot_angle = true;
-			} else {
-				e.scale[0] = len * shared->cone_overfit;
-				e.scale[1] = len * shared->cone_overfit;
-				e.scale[2] = radius;
-				e.has_wide_spot_angle = false;
-			}
+			e.scale[0] = radius;
+			e.scale[1] = radius;
+			e.scale[2] = radius;
 
 			e.type = ELEMENT_TYPE_CUSTOM_LIGHT;
-			e.original_index = cluster_count_by_type[ELEMENT_TYPE_CUSTOM_LIGHT]; // Use omni light since they share index.
+			e.original_index = cluster_count_by_type[ELEMENT_TYPE_CUSTOM_LIGHT];
 
 			RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
 

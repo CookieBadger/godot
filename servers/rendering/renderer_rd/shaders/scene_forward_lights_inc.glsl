@@ -44,7 +44,21 @@ uint hash1(uint value) {// TODO: check if this can be named "hash" (function nam
 	return (word >> 22u) ^ word;
 }
 uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed" (function name exists elsewhere)
-	return hash1(int(seed.x*1000) ^ hash1(int(seed.y*1000) ^ hash1(int(seed.z*1000))));
+	seed*=1e4;
+	uint x = uint(abs(seed.x));
+	if (seed.x < 0.0) {
+		x = hash1(x);
+	}
+	uint y = uint(abs(seed.y));
+	if (seed.y < 0.0) {
+		y = hash1(y);
+	}
+	uint z = uint(abs(seed.z));
+	if (seed.z < 0.0) {
+		z = hash1(z);
+	}
+	
+	return hash1(uint(x ^ hash1(y) ^ hash1(z)));
 }
 // generates a random value in range [0.0, 1.0)
 float randomize1(uint value) { // TODO: check if this can be named "randomize" (function name exists elsewhere)
@@ -95,7 +109,7 @@ struct SphericalQuad {
 	float S; // solid angle of ’Q’'
 };
 
-SphericalQuad init_spherical_quad(vec3 s,vec3 ex,vec3 ey,vec3 o) {
+SphericalQuad init_spherical_quad(vec3 s, vec3 ex, vec3 ey, vec3 o) {
 	float exl = length(ex);
 	float eyl = length(ey);
 	// compute local reference system ’R’
@@ -1127,38 +1141,19 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 #endif
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
-	
-	uint sample_nr = 16;
-	vec3 diffuse_sum = diffuse_light;
-	vec3 specular_sum = specular_light;
+
+	uint sample_nr = 64;
+	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
+	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
 	float alpha_sum = alpha;
+	float length_sum = 0.0;
 
-#ifdef LIGHT_TRANSMITTANCE_USED
-	float transmittance_z = transmittance_depth;
-	transmittance_color.a *= light_attenuation;
-	{
-		vec4 splane = (custom_lights.data[idx].shadow_matrix * vec4(vertex - normalize(normal_interp) * custom_lights.data[idx].transmittance_bias, 1.0));
-		splane /= splane.w;
-		splane.xy = splane.xy * custom_lights.data[idx].atlas_rect.zw + custom_lights.data[idx].atlas_rect.xy;
+	vec3 color = custom_lights.data[idx].color;
 
-		float shadow_z = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), splane.xy, 0.0).r;
-
-		shadow_z = shadow_z * 2.0 - 1.0;
-		float z_far = 1.0 / custom_lights.data[idx].inv_radius;
-		float z_near = 0.01;
-		shadow_z = 2.0 * z_near * z_far / (z_far + z_near - shadow_z * (z_far - z_near));
-
-		//distance to light plane
-		//float z = dot(spot_dir, -light_rel_vec);
-		//transmittance_z = z - shadow_z;
-		transmittance_z = 0.0; // ????
-	}
-#endif //LIGHT_TRANSMITTANCE_USED
-	
 	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_b, vertex);
 
 	float inv_S = 1/squad.S;
- 
+
 	vec3 p00 = custom_lights.data[idx].position;
 	vec3 p10 = custom_lights.data[idx].position + custom_lights.data[idx].area_side_a;
 	vec3 p01 = custom_lights.data[idx].position + custom_lights.data[idx].area_side_b;
@@ -1176,10 +1171,9 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 			max(0.01, abs(dot(v11, normal))));
 	
 	for (uint i = 0; i < sample_nr; i++) {
-		float u = randomize1(hash1(random_seed1(vertex)+i));
-		float v = randomize1(hash1(hash1(random_seed1(vertex))+i));
-
 		float pdf = inv_S;
+		float u = randomize1(random_seed1(vertex)+i);
+		float v = randomize1(hash1(random_seed1(vertex)+i));
 
 		vec2 uv = sample_bilinear(u, v, w);
 		u = uv[0];
@@ -1190,49 +1184,29 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 		vec3 light_rel_vec = sampled_position - vertex;
 		
 		float light_length = length(light_rel_vec);
-		
-		float light_attenuation = 1; // default value. what to use here?
-		vec3 color = custom_lights.data[idx].color;
+		length_sum += light_length;
+
+		float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
 		float specular_amount = custom_lights.data[idx].specular_amount;
 
 		float size_A = 0.0; // not sure about this one
 
 
-		if (sc_use_light_projector && custom_lights.data[idx].projector_rect != vec4(0.0)) {
-			vec4 splane = (custom_lights.data[idx].shadow_matrix * vec4(vertex, 1.0));
-			splane /= splane.w;
 
-			vec2 proj_uv = splane.xy * custom_lights.data[idx].projector_rect.zw;
-
-			if (sc_projector_use_mipmaps) {
-				//ensure we have proper mipmaps
-				vec4 splane_ddx = (custom_lights.data[idx].shadow_matrix * vec4(vertex + vertex_ddx, 1.0));
-				splane_ddx /= splane_ddx.w;
-				vec2 proj_uv_ddx = splane_ddx.xy * custom_lights.data[idx].projector_rect.zw - proj_uv;
-
-				vec4 splane_ddy = (custom_lights.data[idx].shadow_matrix * vec4(vertex + vertex_ddy, 1.0));
-				splane_ddy /= splane_ddy.w;
-				vec2 proj_uv_ddy = splane_ddy.xy * custom_lights.data[idx].projector_rect.zw - proj_uv;
-
-				vec4 proj = textureGrad(sampler2D(decal_atlas_srgb, light_projector_sampler), proj_uv + custom_lights.data[idx].projector_rect.xy, proj_uv_ddx, proj_uv_ddy);
-				color *= proj.rgb * proj.a;
-			} else {
-				vec4 proj = textureLod(sampler2D(decal_atlas_srgb, light_projector_sampler), proj_uv + custom_lights.data[idx].projector_rect.xy, 0.0);
-				color *= proj.rgb * proj.a;
-			}
-		}
 		light_attenuation *= shadow;
+		vec3 diffuse_contribution = vec3(0.0, 0.0, 0.0);
+		vec3 specular_contribution = vec3(0.0, 0.0, 0.0);
 
 		light_compute(normal, normalize(light_rel_vec), eye_vec, size_A, color, false, light_attenuation, f0, orms, custom_lights.data[idx].specular_amount, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 				backlight,
 #endif
-#ifdef LIGHT_TRANSMITTANCE_USED
-				transmittance_color,
-				transmittance_depth,
-				transmittance_boost,
-				transmittance_z,
-#endif
+// #ifdef LIGHT_TRANSMITTANCE_USED
+// 				transmittance_color,
+// 				transmittance_depth,
+// 				transmittance_boost,
+// 				transmittance_z,
+// #endif
 #ifdef LIGHT_RIM_USED
 				rim * spot_attenuation, rim_tint,
 #endif
@@ -1242,18 +1216,19 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 #ifdef LIGHT_ANISOTROPY_USED
 				binormal, tangent, anisotropy,
 #endif
-				diffuse_light, specular_light);
+				diffuse_contribution, specular_contribution);
 
-		diffuse_sum += diffuse_light / pdf;
-		specular_sum += specular_light / pdf;
+		diffuse_sum += diffuse_contribution / pdf;
+		specular_sum += specular_contribution / pdf;
 		alpha_sum += alpha / pdf; 
 	}
 
 	float inv_sample_nr = 1.0 / sample_nr;
-	diffuse_light = inv_sample_nr * diffuse_sum;
-	specular_light = inv_sample_nr * specular_sum;
+	diffuse_light += inv_sample_nr * diffuse_sum;
+	specular_light += inv_sample_nr * specular_sum;
 	alpha = inv_sample_nr * alpha_sum; // TODO: check if alpha shouldnt be multiplied or smth
 }
+
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {
 	vec3 box_extents = reflections.data[ref_index].box_extents;

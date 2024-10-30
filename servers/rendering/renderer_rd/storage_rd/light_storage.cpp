@@ -199,8 +199,8 @@ void LightStorage::light_set_param(RID p_light, RS::LightParam p_param, float p_
 	switch (p_param) {
 		case RS::LIGHT_PARAM_RANGE:
 		case RS::LIGHT_PARAM_SPOT_ANGLE:
-		case RS::LIGHT_PARAM_CUSTOM_TEST_A:
-		case RS::LIGHT_PARAM_CUSTOM_TEST_B:
+		case RS::LIGHT_PARAM_AREA_SIDE_A:
+		case RS::LIGHT_PARAM_AREA_SIDE_B:
 		case RS::LIGHT_PARAM_SHADOW_MAX_DISTANCE:
 		case RS::LIGHT_PARAM_SHADOW_SPLIT_1_OFFSET:
 		case RS::LIGHT_PARAM_SHADOW_SPLIT_2_OFFSET:
@@ -426,7 +426,7 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 		case RS::LIGHT_CUSTOM: {
 			float len = light->param[RS::LIGHT_PARAM_RANGE];
 
-			float cone_radius = MAX(MIN(light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A], light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B]), 0.001) / 2.0;
+			float cone_radius = MAX(MIN(light->param[RS::LIGHT_PARAM_AREA_SIDE_A], light->param[RS::LIGHT_PARAM_AREA_SIDE_B]), 0.001) / 2.0;
 
 			float cone_angle = Math::atan(cone_radius);
 
@@ -954,12 +954,12 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		float radius = MAX(0.001, light->param[RS::LIGHT_PARAM_RANGE]);
 		light_data.inv_radius = 1.0 / radius;
 
-		float custom_test_a = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_A];
-		float custom_test_b = light->param[RS::LIGHT_PARAM_CUSTOM_TEST_B];
+		float area_side_a = light->param[RS::LIGHT_PARAM_AREA_SIDE_A];
+		float area_side_b = light->param[RS::LIGHT_PARAM_AREA_SIDE_B];
 
 		Vector3 pos = inverse_transform.xform(light_transform.origin);
 		if (type == RS::LIGHT_CUSTOM) {
-			pos = inverse_transform.xform(light_transform.xform(Vector3(-custom_test_a / 2.0, -custom_test_b / 2.0, 0.0)));
+			pos = inverse_transform.xform(light_transform.xform(Vector3(-area_side_a / 2.0, -area_side_b / 2.0, 0.0)));
 		}
 
 		light_data.position[0] = pos.x;
@@ -978,22 +978,23 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 		light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
+		light_data.area_stochastic_samples = light->param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		Vector3 area_side_a = inverse_transform.basis.xform(light_transform.basis.rows[0]) * custom_test_a;
-		Vector3 area_side_b = inverse_transform.basis.xform(light_transform.basis.rows[1]) * custom_test_b;
-		float area_diagonal = sqrt(area_side_a.length_squared() + area_side_b.length_squared());
+		Vector3 area_vec_a = inverse_transform.basis.xform(light_transform.basis.rows[0]) * area_side_a;
+		Vector3 area_vec_b = inverse_transform.basis.xform(light_transform.basis.rows[1]) * area_side_b;
+		float area_diagonal = sqrt(area_vec_a.length_squared() + area_vec_b.length_squared());
 
 		if (type == RS::LIGHT_CUSTOM) {
-			float cone_rad = MAX(MIN(custom_test_a, custom_test_b), 0.001) / 2.0;
+			float cone_rad = MAX(MIN(area_side_a, area_side_b), 0.001) / 2.0;
 			spot_angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
 
-			light_data.area_side_a[0] = area_side_a.x;
-			light_data.area_side_a[1] = area_side_a.y;
-			light_data.area_side_a[2] = area_side_a.z;
+			light_data.area_side_a[0] = area_vec_a.x;
+			light_data.area_side_a[1] = area_vec_a.y;
+			light_data.area_side_a[2] = area_vec_a.z;
 
-			light_data.area_side_b[0] = area_side_b.x;
-			light_data.area_side_b[1] = area_side_b.y;
-			light_data.area_side_b[2] = area_side_b.z;
+			light_data.area_side_b[0] = area_vec_b.x;
+			light_data.area_side_b[1] = area_vec_b.y;
+			light_data.area_side_b[2] = area_vec_b.z;
 		}
 
 

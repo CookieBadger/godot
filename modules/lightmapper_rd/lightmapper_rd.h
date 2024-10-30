@@ -77,8 +77,8 @@ class LightmapperRD : public Lightmapper {
 		float attenuation = 0.0;
 		float cos_spot_angle = 0.0;
 		float inv_spot_attenuation = 0.0;
-		float custom_test_a = 0.0;
-		float custom_test_b = 0.0;
+		float p_area_side_a = 0.0;
+		float p_area_side_b = 0.0;
 		float indirect_energy = 0.0;
 		float shadow_blur = 0.0;
 		uint32_t static_bake = 0;
@@ -285,7 +285,7 @@ public:
 	virtual void add_directional_light(bool p_static, const Vector3 &p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_angular_distance, float p_shadow_blur) override;
 	virtual void add_omni_light(bool p_static, const Vector3 &p_position, const Color &p_color, float p_energy, float p_indirect_energy, float p_range, float p_attenuation, float p_size, float p_shadow_blur) override;
 	virtual void add_spot_light(bool p_static, const Vector3 &p_position, const Vector3 p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_range, float p_attenuation, float p_spot_angle, float p_spot_attenuation, float p_size, float p_shadow_blur) override;
-	virtual void add_custom_light(bool p_static, const Vector3 &p_position, const Vector3 p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_custom_test_a, float p_custom_test_b, float p_size, float p_shadow_blur) override;
+	virtual void add_custom_light(bool p_static, const Vector3 &p_position, const Vector3 p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_area_side_a, float p_area_side_b, float p_size, float p_shadow_blur) override;
 	virtual void add_probe(const Vector3 &p_position) override;
 	virtual BakeError bake(BakeQuality p_quality, bool p_use_denoiser, float p_denoiser_strength, int p_denoiser_range, int p_bounces, float p_bounce_indirect_energy, float p_bias, int p_max_texture_size, bool p_bake_sh, bool p_texture_for_bounces, GenerateProbes p_generate_probes, const Ref<Image> &p_environment_panorama, const Basis &p_environment_transform, BakeStepFunc p_step_function = nullptr, void *p_bake_userdata = nullptr, float p_exposure_normalization = 1.0) override;
 

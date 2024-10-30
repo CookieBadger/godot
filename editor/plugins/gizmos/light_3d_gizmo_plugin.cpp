@@ -85,14 +85,14 @@ Variant Light3DGizmoPlugin::get_handle_value(const EditorNode3DGizmo *p_gizmo, i
 	Light3D *light = Object::cast_to<Light3D>(p_gizmo->get_node_3d());
 	if (p_id == 0) {
 		if (Object::cast_to<CustomLight3D>(light)) {
-			return light->get_param(Light3D::PARAM_CUSTOM_TEST_A);
+			return light->get_param(Light3D::PARAM_AREA_SIDE_A);
 		} else {
 			return light->get_param(Light3D::PARAM_RANGE);
 		}
 	}
 	if (p_id == 1) {
 		if (Object::cast_to<CustomLight3D>(light)) {
-			return light->get_param(Light3D::PARAM_CUSTOM_TEST_B);
+			return light->get_param(Light3D::PARAM_AREA_SIDE_B);
 		} else {
 			return light->get_param(Light3D::PARAM_SPOT_ANGLE);
 		}
@@ -146,7 +146,7 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 
 				float a = inv.x;
 				if (a >= 0) {
-					light->set_param(Light3D::PARAM_CUSTOM_TEST_A, MAX(a * 2, 0.001));
+					light->set_param(Light3D::PARAM_AREA_SIDE_A, MAX(a * 2, 0.001));
 				}
 			}
 		}
@@ -164,7 +164,7 @@ void Light3DGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, 
 
 				float b = inv.y;
 				if (b >= 0) {
-					light->set_param(Light3D::PARAM_CUSTOM_TEST_B, MAX(b * 2, 0.001));
+					light->set_param(Light3D::PARAM_AREA_SIDE_B, MAX(b * 2, 0.001));
 				}
 			}
 		}
@@ -175,7 +175,7 @@ void Light3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_i
 	Light3D *light = Object::cast_to<Light3D>(p_gizmo->get_node_3d());
 	if (p_cancel) {
 		if (Object::cast_to<CustomLight3D>(light)) {
-			light->set_param(p_id == 0 ? Light3D::PARAM_CUSTOM_TEST_A : Light3D::PARAM_CUSTOM_TEST_B, p_restore);
+			light->set_param(p_id == 0 ? Light3D::PARAM_AREA_SIDE_A : Light3D::PARAM_AREA_SIDE_B, p_restore);
 		} else {
 			light->set_param(p_id == 0 ? Light3D::PARAM_RANGE : Light3D::PARAM_SPOT_ANGLE, p_restore);
 		}
@@ -183,8 +183,8 @@ void Light3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_i
 		EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
 		if (Object::cast_to<CustomLight3D>(light)) {
 			ur->create_action(TTR("Change Custom Test A"));
-			ur->add_do_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_A, light->get_param(Light3D::PARAM_CUSTOM_TEST_A));
-			ur->add_undo_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_A, p_restore);
+			ur->add_do_method(light, "set_param", Light3D::PARAM_AREA_SIDE_A, light->get_param(Light3D::PARAM_AREA_SIDE_A));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_AREA_SIDE_A, p_restore);
 			ur->commit_action();
 		} else {
 			ur->create_action(TTR("Change Light Radius"));
@@ -196,8 +196,8 @@ void Light3DGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_i
 		EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
 		if (Object::cast_to<CustomLight3D>(light)) {
 			ur->create_action(TTR("Change Custom Test B"));
-			ur->add_do_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_B, light->get_param(Light3D::PARAM_CUSTOM_TEST_B));
-			ur->add_undo_method(light, "set_param", Light3D::PARAM_CUSTOM_TEST_B, p_restore);
+			ur->add_do_method(light, "set_param", Light3D::PARAM_AREA_SIDE_B, light->get_param(Light3D::PARAM_AREA_SIDE_B));
+			ur->add_undo_method(light, "set_param", Light3D::PARAM_AREA_SIDE_B, p_restore);
 			ur->commit_action();
 		} else {
 			ur->create_action(TTR("Change Light Radius"));
@@ -355,8 +355,8 @@ void Light3DGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 			Vector<Vector3> points;
 
 			CustomLight3D *cl = Object::cast_to<CustomLight3D>(light);
-			float a = cl->get_param(Light3D::PARAM_CUSTOM_TEST_A);
-			float b = cl->get_param(Light3D::PARAM_CUSTOM_TEST_B);
+			float a = cl->get_param(Light3D::PARAM_AREA_SIDE_A);
+			float b = cl->get_param(Light3D::PARAM_AREA_SIDE_B);
 
 			// Draw rectangle
 			points.push_back(Vector3(-a/2, b/2, 0));

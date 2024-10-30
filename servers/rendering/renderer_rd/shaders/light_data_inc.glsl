@@ -20,6 +20,7 @@ struct LightData { //this structure needs to be as packed as possible
 
 	mediump float specular_amount;
 	mediump float shadow_opacity;
+	uint area_stochastic_samples;
 
 	highp vec4 atlas_rect; // rect in the shadow atlas
 	highp mat4 shadow_matrix;

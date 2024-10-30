@@ -119,7 +119,7 @@ void LightmapperRD::add_spot_light(bool p_static, const Vector3 &p_position, con
 	lights.push_back(l);
 }
 
-void LightmapperRD::add_custom_light(bool p_static, const Vector3 &p_position, const Vector3 p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_custom_test_a, float p_custom_test_b, float p_size, float p_shadow_blur) {
+void LightmapperRD::add_custom_light(bool p_static, const Vector3 &p_position, const Vector3 p_direction, const Color &p_color, float p_energy, float p_indirect_energy, float p_area_side_a, float p_area_side_b, float p_size, float p_shadow_blur) {
 	Light l;
 	l.type = LIGHT_TYPE_SPOT;
 	l.position[0] = p_position.x;
@@ -134,8 +134,8 @@ void LightmapperRD::add_custom_light(bool p_static, const Vector3 &p_position, c
 	l.energy = p_energy;
 	l.indirect_energy = p_indirect_energy;
 	l.static_bake = p_static;
-	l.custom_test_a = p_custom_test_a;
-	l.custom_test_b = p_custom_test_b;
+	l.p_area_side_a = p_area_side_a;
+	l.p_area_side_b = p_area_side_b;
 	l.size = p_size;
 	l.shadow_blur = p_shadow_blur;
 	lights.push_back(l);

@@ -38,7 +38,7 @@ void Light3D::set_param(Param p_param, real_t p_value) {
 
 	RS::get_singleton()->light_set_param(light, RS::LightParam(p_param), p_value);
 
-	if (p_param == PARAM_SPOT_ANGLE || p_param == PARAM_RANGE || p_param == PARAM_CUSTOM_TEST_A || p_param == PARAM_CUSTOM_TEST_B) {
+	if (p_param == PARAM_SPOT_ANGLE || p_param == PARAM_RANGE || p_param == PARAM_AREA_SIDE_A || p_param == PARAM_AREA_SIDE_B) {
 		update_gizmos();
 
 		if (p_param == PARAM_SPOT_ANGLE) {
@@ -167,7 +167,7 @@ AABB Light3D::get_aabb() const {
 	} else if (type == RenderingServer::LIGHT_CUSTOM) {
 		float len = param[PARAM_RANGE];
 
-		float cone_radius = MAX(MIN(param[PARAM_CUSTOM_TEST_A], param[PARAM_CUSTOM_TEST_B]), 0.001) / 2.0;
+		float cone_radius = MAX(MIN(param[PARAM_AREA_SIDE_A], param[PARAM_AREA_SIDE_B]), 0.001) / 2.0;
 
 		float cone_angle = Math::atan(cone_radius);
 
@@ -487,8 +487,8 @@ Light3D::Light3D(RenderingServer::LightType p_type) {
 	set_param(PARAM_SHADOW_FADE_START, 1);
 	// For OmniLight3D and SpotLight3D, specified in Lumens.
 	set_param(PARAM_INTENSITY, 1000.0);
-	set_param(PARAM_CUSTOM_TEST_A, 1);
-	set_param(PARAM_CUSTOM_TEST_B, 1);
+	set_param(PARAM_AREA_SIDE_A, 1);
+	set_param(PARAM_AREA_SIDE_B, 1);
 	set_temperature(6500.0); // Nearly white.
 	set_disable_scale(true);
 }
@@ -685,8 +685,9 @@ void CustomLight3D::_bind_methods() {
 	ADD_GROUP("Custom", "custom_");
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_range", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_RANGE);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_attenuation", PROPERTY_HINT_RANGE, "-10,10,0.001,or_greater,or_less"), "set_param", "get_param", PARAM_ATTENUATION);
-	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_A);
-	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "custom_test_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_CUSTOM_TEST_B);
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "area_side_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_AREA_SIDE_A);
+	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "area_side_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_AREA_SIDE_B);
+	ADD_PROPERTYI(PropertyInfo(Variant::INT, "area_stochastic_samples", PROPERTY_HINT_RANGE, "1,128"), "set_param", "get_param", PARAM_AREA_STOCHASTIC_SAMPLES);
 }
 
 PackedStringArray CustomLight3D::get_configuration_warnings() const {

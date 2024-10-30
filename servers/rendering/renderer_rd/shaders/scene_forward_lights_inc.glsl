@@ -1142,7 +1142,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
 
-	uint sample_nr = 64;
+	uint sample_nr = max(custom_lights.data[idx].area_stochastic_samples, 1);
 	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
 	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
 	float alpha_sum = alpha;

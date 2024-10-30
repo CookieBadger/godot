@@ -153,7 +153,7 @@ private:
 
 		float specular_amount;
 		float shadow_opacity;
-
+		uint32_t area_stochastic_samples;
 		// 8 bytes are missing to complete this block, so ensure alignment in the next block
 		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];

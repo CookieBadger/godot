@@ -980,8 +980,8 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 		light_data.area_stochastic_samples = light->param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES];
 		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		Vector3 area_vec_a = inverse_transform.basis.xform(light_transform.basis.rows[0]) * area_side_a;
-		Vector3 area_vec_b = inverse_transform.basis.xform(light_transform.basis.rows[1]) * area_side_b;
+		Vector3 area_vec_a = inverse_transform.basis.xform(light_transform.basis.get_column(0)) * area_side_a;
+		Vector3 area_vec_b = inverse_transform.basis.xform(light_transform.basis.get_column(1)) * area_side_b;
 		float area_diagonal = sqrt(area_vec_a.length_squared() + area_vec_b.length_squared());
 
 		if (type == RS::LIGHT_CUSTOM) {

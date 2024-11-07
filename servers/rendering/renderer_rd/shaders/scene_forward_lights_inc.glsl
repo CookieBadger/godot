@@ -44,7 +44,7 @@ uint hash1(uint value) {// TODO: check if this can be named "hash" (function nam
 	return (word >> 22u) ^ word;
 }
 uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed" (function name exists elsewhere)
-	seed*=1e4;
+	seed*=1e3;
 	uint x = uint(abs(seed.x));
 	if (seed.x < 0.0) {
 		x = hash1(x);
@@ -1121,7 +1121,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	return 1.0;
 }
 
-void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 		vec3 backlight,
 #endif
@@ -1142,6 +1142,14 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
 
+	float EPSILON = 1e-4f;
+	vec3 area_side_a = custom_lights.data[idx].area_side_a;
+	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	
+	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
+		return;
+	}
+
 	uint sample_nr = max(custom_lights.data[idx].area_stochastic_samples, 1);
 	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
 	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
@@ -1149,20 +1157,27 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 	float length_sum = 0.0;
 
 	vec3 color = custom_lights.data[idx].color;
+	vec3 sampling_vertex = vertex;
+	vec3 vert_to_light = sampling_vertex-custom_lights.data[idx].position;
+	if (dot(vert_to_light, vert_to_light) < EPSILON) {
+		sampling_vertex += vec3(0.01, 0.01, 0.01); // small offset
+	}
 
-	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_b, vertex);
-
+	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
+	if (squad.S == 0) { // area is 0
+		return;
+	} 
 	float inv_S = 1/squad.S;
 
 	vec3 p00 = custom_lights.data[idx].position;
-	vec3 p10 = custom_lights.data[idx].position + custom_lights.data[idx].area_side_a;
-	vec3 p01 = custom_lights.data[idx].position + custom_lights.data[idx].area_side_b;
-	vec3 p11 = custom_lights.data[idx].position + custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b;
+	vec3 p10 = custom_lights.data[idx].position + area_side_a;
+	vec3 p01 = custom_lights.data[idx].position + area_side_b;
+	vec3 p11 = custom_lights.data[idx].position + area_side_a + area_side_b;
 
-	vec3 v00 = normalize(p00 - vertex);
-	vec3 v10 = normalize(p10 - vertex);
-	vec3 v01 = normalize(p01 - vertex);
-	vec3 v11 = normalize(p11 - vertex);
+	vec3 v00 = normalize(p00 - sampling_vertex);
+	vec3 v10 = normalize(p10 - sampling_vertex);
+	vec3 v01 = normalize(p01 - sampling_vertex);
+	vec3 v11 = normalize(p11 - sampling_vertex);
 
 	// Compute  weights for rectangle seen from reference point
 	vec4 w = vec4(max(0.01, abs(dot(v00, normal))),
@@ -1172,8 +1187,8 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 	
 	for (uint i = 0; i < sample_nr; i++) {
 		float pdf = inv_S;
-		float u = randomize1(random_seed1(vertex)+i);
-		float v = randomize1(hash1(random_seed1(vertex)+i));
+		float u = randomize1(random_seed1(vertex_world)+i);
+		float v = randomize1(hash1(random_seed1(vertex_world)+i));
 
 		vec2 uv = sample_bilinear(u, v, w);
 		u = uv[0];
@@ -1181,7 +1196,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 		pdf *= bilinear_PDF(u, v, w);
 		
 		vec3 sampled_position = sample_squad(squad, u, v); 
-		vec3 light_rel_vec = sampled_position - vertex;
+		vec3 light_rel_vec = sampled_position - sampling_vertex;
 		
 		float light_length = length(light_rel_vec);
 		length_sum += light_length;
@@ -1218,9 +1233,11 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 eye_vec, vec3 nor
 #endif
 				diffuse_contribution, specular_contribution);
 
-		diffuse_sum += diffuse_contribution / pdf;
-		specular_sum += specular_contribution / pdf;
-		alpha_sum += alpha / pdf; 
+		if ( pdf > 0) {
+			diffuse_sum += diffuse_contribution / pdf;
+			specular_sum += specular_contribution / pdf;
+			alpha_sum += alpha / pdf; 
+		}
 	}
 
 	float inv_sample_nr = 1.0 / sample_nr;

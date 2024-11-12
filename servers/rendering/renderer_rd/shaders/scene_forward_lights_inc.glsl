@@ -38,13 +38,13 @@ vec3 F0(float metallic, float specular, vec3 albedo) {
 	// see https://google.github.io/filament/Filament.md.html
 	return mix(vec3(dielectric), albedo, vec3(metallic));
 }
-uint hash1(uint value) {// TODO: check if this can be named "hash" (function name exists elsewhere)
+uint hash1(uint value) { // TODO: check if this can be named "hash" (function name exists elsewhere)
 	uint state = value * 747796405u + 2891336453u;
 	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
 	return (word >> 22u) ^ word;
 }
 uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed" (function name exists elsewhere)
-	seed*=1e3;
+	seed *= 1e3;
 	uint x = uint(abs(seed.x));
 	if (seed.x < 0.0) {
 		x = hash1(x);
@@ -57,7 +57,7 @@ uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed"
 	if (seed.z < 0.0) {
 		z = hash1(z);
 	}
-	
+
 	return hash1(uint(x ^ hash1(y) ^ hash1(z)));
 }
 // generates a random value in range [0.0, 1.0)
@@ -75,7 +75,7 @@ float sample_linear(float u, float a, float b) {
 		return 0;
 	}
 	float x = u * (a + b) / (a + sqrt(lerp(u, a, b)));
-	
+
 	const float ONE_MINUS_EPSILON = 1.0 - 1e-6f;
 	return min(x, ONE_MINUS_EPSILON);
 }
@@ -91,13 +91,13 @@ float bilinear_PDF(float u, float v, vec4 w) {
 }
 
 vec2 sample_bilinear(float u, float v, vec4 w) {
-    // Sample  for bilinear marginal distribution
-    float y = sample_linear(v, w[0] + w[1], w[2] + w[3]);
+	// Sample  for bilinear marginal distribution
+	float y = sample_linear(v, w[0] + w[1], w[2] + w[3]);
 
-    // Sample  for bilinear conditional distribution
-    float x = sample_linear(u, lerp(y, w[0], w[2]), lerp(y, w[1], w[3]));
+	// Sample  for bilinear conditional distribution
+	float x = sample_linear(u, lerp(y, w[0], w[2]), lerp(y, w[1], w[3]));
 
-    return vec2(x, y);
+	return vec2(x, y);
 }
 
 struct SphericalQuad {
@@ -132,25 +132,25 @@ SphericalQuad init_spherical_quad(vec3 s, vec3 ex, vec3 ey, vec3 o) {
 	float y0sq = y0 * y0;
 	float y1sq = y1 * y1;
 	// create vectors to four vertices
-	vec3 v00 = {x0, y0, z0};
-	vec3 v01 = {x0, y1, z0};
-	vec3 v10 = {x1, y0, z0};
-	vec3 v11 = {x1, y1, z0};
+	vec3 v00 = { x0, y0, z0 };
+	vec3 v01 = { x0, y1, z0 };
+	vec3 v10 = { x1, y0, z0 };
+	vec3 v11 = { x1, y1, z0 };
 	// compute normals to edges
 	vec3 n0 = normalize(cross(v00, v10));
 	vec3 n1 = normalize(cross(v10, v11));
 	vec3 n2 = normalize(cross(v11, v01));
 	vec3 n3 = normalize(cross(v01, v00));
 	// compute internal angles (gamma_i)
-	float g0 = acos(-dot(n0,n1));
-	float g1 = acos(-dot(n1,n2));
-	float g2 = acos(-dot(n2,n3));
-	float g3 = acos(-dot(n3,n0));
+	float g0 = acos(-dot(n0, n1));
+	float g1 = acos(-dot(n1, n2));
+	float g2 = acos(-dot(n2, n3));
+	float g3 = acos(-dot(n3, n0));
 	// compute predefined constants
 	float b0 = n0.z;
 	float b1 = n2.z;
 	float b0sq = b0 * b0;
-	float k = 2*M_PI - g2 - g3;
+	float k = 2 * M_PI - g2 - g3;
 	// compute solid angle from internal angles (sum of internal angles - 2*PI)
 	float S = g0 + g1 - k;
 
@@ -161,20 +161,20 @@ vec3 sample_squad(SphericalQuad squad, float u, float v) {
 	// 1. compute ’cu’
 	float au = u * squad.S + squad.k;
 	float fu = (cos(au) * squad.b0 - squad.b1) / sin(au);
-	float cu = 1/sqrt(fu*fu + squad.b0sq) * (fu>0 ? +1 : -1);
+	float cu = 1 / sqrt(fu * fu + squad.b0sq) * (fu > 0 ? +1 : -1);
 	cu = clamp(cu, -1, 1); // avoid NaNs
 	// 2. compute ’xu’
-	float xu = -(cu * squad.z0) / sqrt(1 - cu*cu);
+	float xu = -(cu * squad.z0) / sqrt(1 - cu * cu);
 	xu = clamp(xu, squad.x0, squad.x1); // avoid Infs
 	// 3. compute ’yv’
-	float d = sqrt(xu*xu + squad.z0sq);
-	float h0 = squad.y0 / sqrt(d*d + squad.y0sq);
-	float h1 = squad.y1 / sqrt(d*d + squad.y1sq);
-	float hv = h0 + v * (h1-h0), hv2 = hv*hv;
+	float d = sqrt(xu * xu + squad.z0sq);
+	float h0 = squad.y0 / sqrt(d * d + squad.y0sq);
+	float h1 = squad.y1 / sqrt(d * d + squad.y1sq);
+	float hv = h0 + v * (h1 - h0), hv2 = hv * hv;
 	const float ONE_MINUS_EPSILON = 1.0 - 1e-6f;
-	float yv = (hv2 < ONE_MINUS_EPSILON) ? (hv*d)/sqrt(1-hv2) : squad.y1;
+	float yv = (hv2 < ONE_MINUS_EPSILON) ? (hv * d) / sqrt(1 - hv2) : squad.y1;
 	// 4. transform (xu,yv,z0) to world coords
-	return (squad.o + xu*squad.x + yv*squad.y + squad.z0*squad.z);
+	return (squad.o + xu * squad.x + yv * squad.y + squad.z0 * squad.z);
 }
 
 void light_compute(vec3 N, vec3 L, vec3 V, float A, vec3 light_color, bool is_directional, float attenuation, vec3 f0, uint orms, float specular_amount, vec3 albedo, inout float alpha,
@@ -1145,7 +1145,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	float EPSILON = 1e-4f;
 	vec3 area_side_a = custom_lights.data[idx].area_side_a;
 	vec3 area_side_b = custom_lights.data[idx].area_side_b;
-	
+
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
@@ -1153,12 +1153,12 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	uint sample_nr = max(custom_lights.data[idx].area_stochastic_samples, 1);
 	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
 	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
-	float alpha_sum = alpha;
+	float alpha_sum = 0.0;
 	float length_sum = 0.0;
 
 	vec3 color = custom_lights.data[idx].color;
 	vec3 sampling_vertex = vertex;
-	vec3 vert_to_light = sampling_vertex-custom_lights.data[idx].position;
+	vec3 vert_to_light = sampling_vertex - custom_lights.data[idx].position;
 	if (dot(vert_to_light, vert_to_light) < EPSILON) {
 		sampling_vertex += vec3(0.01, 0.01, 0.01); // small offset
 	}
@@ -1166,8 +1166,8 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
 	if (squad.S == 0) { // area is 0
 		return;
-	} 
-	float inv_S = 1/squad.S;
+	}
+	float inv_S = 1 / squad.S;
 
 	vec3 p00 = custom_lights.data[idx].position;
 	vec3 p10 = custom_lights.data[idx].position + area_side_a;
@@ -1184,20 +1184,20 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 			max(0.01, abs(dot(v10, normal))), // TODO: double check order of weights here
 			max(0.01, abs(dot(v01, normal))),
 			max(0.01, abs(dot(v11, normal))));
-	
+
 	for (uint i = 0; i < sample_nr; i++) {
 		float pdf = inv_S;
-		float u = randomize1(random_seed1(vertex_world)+i);
-		float v = randomize1(hash1(random_seed1(vertex_world)+i));
+		float u = randomize1(random_seed1(vertex_world) + i);
+		float v = randomize1(hash1(random_seed1(vertex_world) + i));
 
 		vec2 uv = sample_bilinear(u, v, w);
 		u = uv[0];
 		v = uv[1];
 		pdf *= bilinear_PDF(u, v, w);
-		
-		vec3 sampled_position = sample_squad(squad, u, v); 
+
+		vec3 sampled_position = sample_squad(squad, u, v);
 		vec3 light_rel_vec = sampled_position - sampling_vertex;
-		
+
 		float light_length = length(light_rel_vec);
 		length_sum += light_length;
 
@@ -1205,8 +1205,6 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		float specular_amount = custom_lights.data[idx].specular_amount;
 
 		float size_A = 0.0; // not sure about this one
-
-
 
 		light_attenuation *= shadow;
 		vec3 diffuse_contribution = vec3(0.0, 0.0, 0.0);
@@ -1216,14 +1214,14 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #ifdef LIGHT_BACKLIGHT_USED
 				backlight,
 #endif
-// #ifdef LIGHT_TRANSMITTANCE_USED
-// 				transmittance_color,
-// 				transmittance_depth,
-// 				transmittance_boost,
-// 				transmittance_z,
-// #endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+				transmittance_color,
+				transmittance_depth,
+				transmittance_boost,
+				transmittance_z,
+#endif
 #ifdef LIGHT_RIM_USED
-				rim * spot_attenuation, rim_tint,
+				rim * light_attenuation, rim_tint,
 #endif
 #ifdef LIGHT_CLEARCOAT_USED
 				clearcoat, clearcoat_roughness, vertex_normal,
@@ -1233,10 +1231,12 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #endif
 				diffuse_contribution, specular_contribution);
 
-		if ( pdf > 0) {
+		if (pdf > 0) {
 			diffuse_sum += diffuse_contribution / pdf;
 			specular_sum += specular_contribution / pdf;
-			alpha_sum += alpha / pdf; 
+			alpha_sum += alpha;
+		} else {
+			sample_nr = max(sample_nr - 1, 1);
 		}
 	}
 
@@ -1245,7 +1245,6 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	specular_light += inv_sample_nr * specular_sum;
 	alpha = inv_sample_nr * alpha_sum; // TODO: check if alpha shouldnt be multiplied or smth
 }
-
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {
 	vec3 box_extents = reflections.data[ref_index].box_extents;

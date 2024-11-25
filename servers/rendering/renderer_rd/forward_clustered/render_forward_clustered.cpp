@@ -1415,7 +1415,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				p_render_data->directional_shadows.push_back(i);
 			} else if (light_storage->light_get_type(base) == RS::LIGHT_OMNI && light_storage->light_omni_get_shadow_mode(base) == RS::LIGHT_OMNI_SHADOW_CUBE) {
 				p_render_data->cube_shadows.push_back(i);
-			} else { // RS::LIGHT_CUSTOM or RS::LIGHT_SPOT
+			} else { // RS::LIGHT_OMNI with Dual Paraboloid mode or RS::LIGHT_CUSTOM or RS::LIGHT_SPOT
 				p_render_data->shadows.push_back(i);
 			}
 		}
@@ -2470,6 +2470,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 		RSG::light_storage->shadow_atlas_update(p_shadow_atlas);
 
+		// key is a packed storage of the quadrant and the index within the quadrant
 		uint32_t key = light_storage->shadow_atlas_get_light_instance_key(p_shadow_atlas, p_light);
 
 		uint32_t quadrant = (key >> RendererRD::LightStorage::QUADRANT_SHIFT) & 0x3;
@@ -2538,8 +2539,29 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 			flip_y = true;
 		} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
-			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
+			float quadrant_limit_x = atlas_rect.position.x >= quadrant_size ? shadow_atlas_size : quadrant_size;
+			atlas_rect.position.x += p_pass * atlas_rect.size.x;
+			if (atlas_rect.position.x >= quadrant_limit_x) { // can replace if with while
+				atlas_rect.position.x -= quadrant_size;
+				atlas_rect.position.y += atlas_rect.size.y;
+			}
+			//TODO: try:
+			using_dual_paraboloid = true;
+			float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
+			float area_side_b = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_B);
+
 			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
+			Basis light_basis = light_transform.basis;
+
+			Vector<Vector3> samples;
+			samples.resize(4);
+			samples.write[0] = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0); // this transforms the basis also ...
+			samples.write[1] = light_basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
+			samples.write[2] = light_basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
+			samples.write[3] = light_basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
+
+			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
+			//light_transform = light_transform.translated(samples[p_pass]); // TODO: why's this not work
 
 			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
 

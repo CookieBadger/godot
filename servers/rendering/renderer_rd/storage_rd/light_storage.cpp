@@ -432,7 +432,7 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 
 			float size = Math::tan(cone_angle) * len;
 
-			return AABB(Vector3(-size, -size, -len), Vector3(size*2, size*2, len));
+			return AABB(Vector3(-size, -size, -len), Vector3(size * 2, size * 2, len));
 		};
 	}
 
@@ -888,7 +888,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		}
 		LightData &light_data = *light_data_ptr;
 
-		if (using_forward_ids) {
+		if (using_forward_ids) { // TODO: investigate "forward id"
 			forward_id_storage->map_forward_id(type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, light_instance->forward_id, index, light_instance->last_pass);
 		}
 
@@ -996,7 +996,6 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.area_side_b[1] = area_vec_b.y;
 			light_data.area_side_b[2] = area_vec_b.z;
 		}
-
 
 		light_data.mask = light->cull_mask;
 
@@ -1115,27 +1114,24 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 				light_data.shadow_bias *= light_data.soft_shadow_scale;
 			} else if (type == RS::LIGHT_CUSTOM) {
-				// copied
-				Transform3D modelview = (inverse_transform * light_transform).inverse();
-				Projection bias;
-				bias.set_light_bias();
+				// copied.
+				Transform3D proj = (inverse_transform * light_transform).inverse();
 
-				Projection correction;
-				correction.set_depth_correction(false, true, false);
-				Projection cm = correction * light_instance->shadow_transform[0].camera;
-				Projection shadow_mtx = bias * cm * modelview;
-				RendererRD::MaterialStorage::store_camera(shadow_mtx, light_data.shadow_matrix);
+				RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
 
 				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
 					// Only enable PCSS-like soft shadows if blurring is enabled.
 					// Otherwise, performance would decrease with no visual difference.
-					float half_np = cm.get_z_near() * Math::tan(Math::deg_to_rad(spot_angle));
-					light_data.soft_shadow_size = (size * 0.5 / radius) / (half_np / cm.get_z_near()) * rect.size.width;
+					light_data.soft_shadow_size = size;
 				} else {
 					light_data.soft_shadow_size = 0.0;
 					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
 				}
-				light_data.shadow_bias *= light_data.soft_shadow_scale;
+
+				ShadowAtlas *shadow_atlas = shadow_atlas_owner.get_or_null(p_shadow_atlas);
+
+				light_data.direction[0] = shadow_atlas->size;
+				light_data.direction[1] = shadow_atlas->size;
 			}
 		} else {
 			light_data.shadow_opacity = 0.0;
@@ -2314,6 +2310,65 @@ bool LightStorage::_shadow_atlas_find_shadow(ShadowAtlas *shadow_atlas, int *p_i
 	return false;
 }
 
+bool LightStorage::_shadow_atlas_find_area_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow) {
+	for (int i = p_quadrant_count - 1; i >= 0; i--) {
+		int qidx = p_in_quadrants[i];
+
+		if (shadow_atlas->quadrants[qidx].subdivision == (uint32_t)p_current_subdiv) {
+			return false;
+		}
+
+		//look for an empty space
+		int sc = shadow_atlas->quadrants[qidx].shadows.size();
+		const ShadowAtlas::Quadrant::Shadow *sarr = shadow_atlas->quadrants[qidx].shadows.ptr();
+
+		int found_idx = -1;
+		uint64_t min_pass = 0; // sum of currently selected spots, try to get the least recently used 4
+
+		for (int j = 0; j < sc - 3; j++) {
+			uint64_t pass = 0;
+
+			for (int k = 0; k < 4; k++) {
+				if (sarr[j + k].owner.is_valid()) {
+					LightInstance *sli = light_instance_owner.get_or_null(sarr[j + k].owner);
+					ERR_CONTINUE(!sli);
+
+					if (sli->last_scene_pass == RendererSceneRenderRD::get_singleton()->get_scene_pass()) {
+						continue;
+					}
+
+					//was just allocated, don't kill it so soon, wait a bit..
+					if (p_tick - sarr[j + k].alloc_tick < shadow_atlas_realloc_tolerance_msec) {
+						continue;
+					}
+					pass += sli->last_scene_pass;
+				}
+			}
+
+			if (found_idx == -1 || pass < min_pass) {
+				found_idx = j;
+				min_pass = pass;
+
+				// we found two empty spots, no need to check the rest
+				if (pass == 0) {
+					break;
+				}
+			}
+		}
+
+		if (found_idx == -1) {
+			continue; //nothing found
+		}
+
+		r_quadrant = qidx;
+		r_shadow = found_idx;
+
+		return true;
+	}
+
+	return false;
+}
+
 bool LightStorage::_shadow_atlas_find_omni_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow) {
 	for (int i = p_quadrant_count - 1; i >= 0; i--) {
 		int qidx = p_in_quadrants[i];
@@ -2413,9 +2468,9 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 			continue; //unused
 		}
 
-		int max_fit = quad_size / sd;
+		int max_fit = quad_size / sd; // size of a shadow in this quadrant
 
-		if (best_size != -1 && max_fit > best_size) {
+		if (best_size != -1 && max_fit > best_size) { // TODO: understand why break here
 			break; //too large
 		}
 
@@ -2457,12 +2512,15 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 	}
 
 	bool is_omni = li->light_type == RS::LIGHT_OMNI;
+	bool is_area = li->light_type == RS::LIGHT_CUSTOM;
 	bool found_shadow = false;
 	int new_quadrant = -1;
 	int new_shadow = -1;
 
 	if (is_omni) {
 		found_shadow = _shadow_atlas_find_omni_shadows(shadow_atlas, valid_quadrants, valid_quadrant_count, old_subdivision, tick, new_quadrant, new_shadow);
+	} else if (is_area) {
+		found_shadow = _shadow_atlas_find_area_shadows(shadow_atlas, valid_quadrants, valid_quadrant_count, old_subdivision, tick, new_quadrant, new_shadow);
 	} else {
 		found_shadow = _shadow_atlas_find_shadow(shadow_atlas, valid_quadrants, valid_quadrant_count, old_subdivision, tick, new_quadrant, new_shadow);
 	}
@@ -2475,6 +2533,13 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 			if (old_key & OMNI_LIGHT_FLAG) {
 				shadow_atlas->quadrants[old_quadrant].shadows.write[old_shadow + 1].version = 0;
 				shadow_atlas->quadrants[old_quadrant].shadows.write[old_shadow + 1].owner = RID();
+			}
+
+			if (is_area) { // TODO: temporary solution
+				for (int i = 1; i < 4; i++) {
+					shadow_atlas->quadrants[old_quadrant].shadows.write[old_shadow + i].version = 0;
+					shadow_atlas->quadrants[old_quadrant].shadows.write[old_shadow + i].owner = RID();
+				}
 			}
 		}
 
@@ -2498,6 +2563,18 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 			extra_sh->owner = p_light_instance;
 			extra_sh->alloc_tick = tick;
 			extra_sh->version = p_light_version;
+		}
+		if (is_area) {
+			// no flag for now...
+			for (int i = 1; i < 4; i++) {
+				int new_area_shadow = new_shadow + i;
+				ShadowAtlas::Quadrant::Shadow *extra_sh = &shadow_atlas->quadrants[new_quadrant].shadows.write[new_area_shadow];
+				_shadow_atlas_invalidate_shadow(extra_sh, p_atlas, shadow_atlas, new_quadrant, new_area_shadow);
+
+				extra_sh->owner = p_light_instance;
+				extra_sh->alloc_tick = tick;
+				extra_sh->version = p_light_version;
+			}
 		}
 
 		li->shadow_atlases.insert(p_atlas);

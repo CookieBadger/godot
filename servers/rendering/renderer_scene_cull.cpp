@@ -2541,26 +2541,42 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 		} break;
 		case RS::LIGHT_CUSTOM: {
 			// TODO: Replace with actual Area Light implementation
+			// 1. render shadows same as a point light does (single paraboloid)
 			RENDER_TIMESTAMP("Cull CustomLight3D Shadow");
 
-			if (max_shadows_used + 1 > MAX_UPDATE_SHADOWS) {
+			int sample_count = 4; // how many light samples do we want to take? for now, one at each corner
+
+			if (max_shadows_used + sample_count > MAX_UPDATE_SHADOWS) {
 				return true;
 			}
 
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
-			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A);
-			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B);
-			
-			real_t cone_rad = MAX(MIN(area_side_a, area_side_b), 0.001) / 2.0;
-			real_t angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
+			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A) / 2.0;
+			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B) / 2.0;
 
-			Projection cm;
-			cm.set_perspective(angle * 2.0, 1.0, 0.005f * radius, radius);
+			Vector<Vector3> samples;
+			samples.resize(4);
+			samples.write[0] = light_transform.basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0);
+			samples.write[1] = light_transform.basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
+			samples.write[2] = light_transform.basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
+			samples.write[3] = light_transform.basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
 
-			Vector<Plane> planes = cm.get_projection_planes(light_transform);
+			//real_t cone_rad = MAX(MIN(area_side_a, area_side_b), 0.001) / 2.0;
+			//real_t angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
+
+			real_t z = -1; // TODO: verify that this is indeed the correct direction
+			Vector<Plane> planes;
+			planes.resize(6);
+			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius));
+			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius));
+			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius));
+			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius));
+			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius));
+			planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
 
 			instance_shadow_cull_result.clear();
 
+			// get a mesh from these planes (results in a frustum-like trapezoidal prism, looking into the z direction, that a hemisphere the size of the light radius fits in)
 			Vector<Vector3> points = Geometry3D::compute_convex_mesh_points(&planes[0], planes.size());
 
 			struct CullConvex {
@@ -2575,35 +2591,40 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			CullConvex cull_convex;
 			cull_convex.result = &instance_shadow_cull_result;
 
+			// cull all the visual instances in the scenario based on the convex geometry, in this case the light frustum
 			p_scenario->indexers[Scenario::INDEXER_GEOMETRY].convex_query(planes.ptr(), planes.size(), points.ptr(), points.size(), cull_convex);
-
-			RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
 			if (!light->is_shadow_update_full()) {
 				light_culler->cull_regular_light(instance_shadow_cull_result);
 			}
 
-			for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
-				Instance *instance = instance_shadow_cull_result[j];
-				if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
-					continue;
-				} else {
-					if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
-						animated_material_found = true;
-					}
+			for (int i = 0; i < sample_count; i++) {
+				RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
-					if (instance->mesh_instance.is_valid()) {
-						RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
+				for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
+					Instance *instance = instance_shadow_cull_result[j];
+					if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
+						continue;
+					} else {
+						if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
+							animated_material_found = true;
+						}
+
+						if (instance->mesh_instance.is_valid()) {
+							RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
+						}
 					}
+					shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 				}
-				shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
+
+				RSG::mesh_storage->update_mesh_instances();
+
+				// add sample position offset to light transform // TODO: what does this offset actually affect?
+				//RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform.translated(samples[i]), radius, 0, i, 0);
+				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius, 0, i, 0);
+				shadow_data.light = light->instance;
+				shadow_data.pass = i;
 			}
-
-			RSG::mesh_storage->update_mesh_instances();
-
-			RSG::light_storage->light_instance_set_shadow_transform(light->instance, cm, light_transform, radius, 0, 0, 0);
-			shadow_data.light = light->instance;
-			shadow_data.pass = 0;
 		} break;
 	}
 
@@ -3369,16 +3390,11 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 					case RS::LIGHT_CUSTOM: {
 						// TODO: REPLACE THIS WITH ACTUAL AREA LIGHT COVERAGE
 						float radius = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_RANGE);
-						float angle = 45;
 
-						float w = radius * Math::sin(Math::deg_to_rad(angle));
-						float d = radius * Math::cos(Math::deg_to_rad(angle));
-
-						Vector3 base = ins->transform.origin - ins->transform.basis.get_column(2).normalized() * d;
-
+						//get two points parallel to near plane
 						Vector3 points[2] = {
-							base,
-							base + cam_xf.basis.get_column(0) * w
+							ins->transform.origin,
+							ins->transform.origin + cam_xf.basis.get_column(0) * radius
 						};
 
 						if (!p_camera_data->is_orthogonal) {

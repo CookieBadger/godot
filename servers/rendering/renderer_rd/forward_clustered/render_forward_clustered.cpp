@@ -2561,7 +2561,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			samples.write[3] = light_basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
 
 			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
-			//light_transform = light_transform.translated(samples[p_pass]); // TODO: why's this not work
+			light_transform = light_transform.translated(samples[p_pass]);
 
 			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
 

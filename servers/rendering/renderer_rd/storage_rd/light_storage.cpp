@@ -1114,10 +1114,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 				light_data.shadow_bias *= light_data.soft_shadow_scale;
 			} else if (type == RS::LIGHT_CUSTOM) {
-				// copied.
-				Transform3D proj = (inverse_transform * light_transform).inverse();
-
-				RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
+				RendererRD::MaterialStorage::store_transform(light_transform.inverse(), light_data.shadow_matrix);
 
 				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
 					// Only enable PCSS-like soft shadows if blurring is enabled.
@@ -1129,9 +1126,6 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 
 				ShadowAtlas *shadow_atlas = shadow_atlas_owner.get_or_null(p_shadow_atlas);
-
-				light_data.direction[0] = shadow_atlas->size;
-				light_data.direction[1] = shadow_atlas->size;
 			}
 		} else {
 			light_data.shadow_opacity = 0.0;

@@ -1047,17 +1047,16 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
-		base_uv_rect.xy += texel_size;
-		base_uv_rect.zw -= texel_size * 2.0;
+		//base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
+		//base_uv_rect.zw -= texel_size * 2.0;
 
 		// AreaLights use direction.xy to store atlas size
-		float quadrant_width = omni_lights.data[idx].direction.x / 2.0;
+		float quadrant_width = 0.5;
 
-		float quadrant_limit_x = quadrant_width;
-		if (custom_lights.data[idx].atlas_rect.x > quadrant_limit_x) {
-			quadrant_limit_x = quadrant_width * 2;
+		float quadrant_limit_x = 0.5;
+		if (custom_lights.data[idx].atlas_rect.x >= quadrant_limit_x) {
+			quadrant_limit_x = 1.0;
 		}
-
 		// TODO: does shadow matrix assume light origin at center or at corner?
 		// vec3 offset[4] = vec3[4](
 		// 	 (custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b) / 2.0,
@@ -1065,11 +1064,13 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		// 	 (custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0,
 		// 	(-custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0
 		// );
+		float len_a = length(custom_lights.data[idx].area_side_a);
+		float len_b = length(custom_lights.data[idx].area_side_b);
 		vec3 offset[4] = vec3[4](
-				vec3(1, 1, 0),
-				vec3(-1, 1, 0),
-				vec3(1, -1, 0),
-				vec3(-1, -1, 0));
+				vec3(len_a, len_b, 0) / 2.0,
+				vec3(-len_a, len_b, 0) / 2.0,
+				vec3(len_a, -len_b, 0) / 2.0,
+				vec3(-len_a, -len_b, 0) / 2.0);
 		// if it assumes corner:
 		//vec3 offset[4] = vec3[4](
 		//	vec3(0,0,0),
@@ -1082,9 +1083,16 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		for (uint i = 0; i < area_soft_shadow_samples; i++) {
 			// TODO: verify correctness of this
 			mat4 offset_shadow_matrix = custom_lights.data[idx].shadow_matrix;
-			offset_shadow_matrix[3] -= vec4(0.0, 0.0, 0.0, 0.0);
+			//offset_shadow_matrix[3] -= vec4(0.0, 0.0, 0.0, 0.0);
+			// S = (V*L)^-1
+			// So = (V*(O*L)) = V*O*V-1*S
 			//offset_shadow_matrix[3] -= vec4((custom_lights.data[idx].shadow_matrix*vec4(offset[i],1.0)).xyz, 0.0);
-			//offset_shadow_matrix[3] -= vec4(offset[i], 0.0);
+			//offset_shadow_matrix[3] += scene_data_block.data.view_matrix * vec4(mat3(scene_data_block.data.inv_view_matrix) * offset[i], 1.0);
+			mat4 offset_matrix = mat4(1.0, 0.0, 0.0, 0.0, // 1. column
+					0.0, 1.0, 0.0, 0.0, // 2. column
+					0.0, 0.0, 1.0, 0.0, // 3. column
+					-offset[i].x, -offset[i].y, -offset[i].z, 1.0); // 4. column
+			offset_shadow_matrix = custom_lights.data[idx].shadow_matrix * offset_matrix * scene_data_block.data.inv_view_matrix;
 
 			vec3 local_vert = (offset_shadow_matrix * vec4(vertex, 1.0)).xyz;
 			// this should be the same as using the offset
@@ -1105,13 +1113,12 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
 			vec4 uv_rect = base_uv_rect;
-			vec2 sample_atlas_offset = i * custom_lights.data[idx].atlas_rect.zw;
+			vec2 sample_atlas_offset = i * vec2(custom_lights.data[idx].atlas_rect.z, 0.0);
 			if (uv_rect.x + sample_atlas_offset.x >= quadrant_limit_x) { // can replace if with while
 				sample_atlas_offset += vec2(-quadrant_width, custom_lights.data[idx].atlas_rect.w);
 			}
 			// depending on the current area light sample point, select the right region on the atlas
-			//uv_rect.xy += sample_atlas_offset;
-
+			uv_rect.xy += sample_atlas_offset;
 			// TODO: use sample_omni_pcf_shadow for soft sampling
 			pos = pos * 0.5 + 0.5;
 			pos = uv_rect.xy + pos * uv_rect.zw;

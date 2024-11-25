@@ -672,9 +672,9 @@ float light_process_omni_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 			shadow_sample.z = 1.0 + abs(shadow_sample.z);
 			vec2 pos = shadow_sample.xy / shadow_sample.z;
-			float depth = shadow_len - omni_lights.data[idx].shadow_bias;
-			depth *= omni_lights.data[idx].inv_radius;
-			depth = 1.0 - depth;
+			float depth = shadow_len - omni_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
+			depth *= omni_lights.data[idx].inv_radius; // depth = how many light radii away from light (more than 1 = no light)
+			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 			shadow = mix(1.0, sample_omni_pcf_shadow(shadow_atlas, omni_lights.data[idx].soft_shadow_scale / shadow_sample.z, pos, uv_rect, flip_offset, depth), omni_lights.data[idx].shadow_opacity);
 		}
 
@@ -1038,82 +1038,89 @@ void light_process_spot(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 v
 }
 
 float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
-	// TODO: replace this with actual Area Lights implementation
 #ifndef SHADOWS_DISABLED
 	if (custom_lights.data[idx].shadow_opacity > 0.001) {
-		vec3 light_rel_vec = custom_lights.data[idx].position - vertex;
-		float light_length = length(light_rel_vec);
-		vec3 spot_dir = custom_lights.data[idx].direction;
+		// there is a shadowmap
 
-		vec3 shadow_dir = light_rel_vec / light_length;
-		vec3 normal_bias = normal * light_length * custom_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(normal, shadow_dir)));
+		// TODO: this should probably be turned into a uniform with the FASSALSS implementation
+		uint area_soft_shadow_samples = 4;
 
-		//there is a shadowmap
-		vec4 v = vec4(vertex + normal_bias, 1.0);
+		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
+		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
+		base_uv_rect.xy += texel_size;
+		base_uv_rect.zw -= texel_size * 2.0;
 
-		vec4 splane = (custom_lights.data[idx].shadow_matrix * v);
-		splane.z += custom_lights.data[idx].shadow_bias / (light_length * custom_lights.data[idx].inv_radius);
-		splane /= splane.w;
+		// AreaLights use direction.xy to store atlas size
+		float quadrant_width = omni_lights.data[idx].direction.x / 2.0;
 
-		float shadow;
-		if (sc_use_light_soft_shadows && custom_lights.data[idx].soft_shadow_size > 0.0) {
-			//soft shadow
-
-			//find blocker
-			float z_norm = dot(spot_dir, -light_rel_vec) * custom_lights.data[idx].inv_radius;
-
-			vec2 shadow_uv = splane.xy * custom_lights.data[idx].atlas_rect.zw + custom_lights.data[idx].atlas_rect.xy;
-
-			float blocker_count = 0.0;
-			float blocker_average = 0.0;
-
-			mat2 disk_rotation;
-			{
-				float r = quick_hash(gl_FragCoord.xy) * 2.0 * M_PI;
-				float sr = sin(r);
-				float cr = cos(r);
-				disk_rotation = mat2(vec2(cr, -sr), vec2(sr, cr));
-			}
-
-			float uv_size = custom_lights.data[idx].soft_shadow_size * z_norm * custom_lights.data[idx].soft_shadow_scale;
-			vec2 clamp_max = custom_lights.data[idx].atlas_rect.xy + custom_lights.data[idx].atlas_rect.zw;
-			for (uint i = 0; i < sc_penumbra_shadow_samples; i++) {
-				vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i].xy) * uv_size;
-				suv = clamp(suv, custom_lights.data[idx].atlas_rect.xy, clamp_max);
-				float d = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
-				if (d > splane.z) {
-					blocker_average += d;
-					blocker_count += 1.0;
-				}
-			}
-
-			if (blocker_count > 0.0) {
-				//blockers found, do soft shadow
-				blocker_average /= blocker_count;
-				float penumbra = (-z_norm + blocker_average) / (1.0 - blocker_average);
-				uv_size *= penumbra;
-
-				shadow = 0.0;
-				for (uint i = 0; i < sc_penumbra_shadow_samples; i++) {
-					vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i].xy) * uv_size;
-					suv = clamp(suv, custom_lights.data[idx].atlas_rect.xy, clamp_max);
-					shadow += textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(suv, splane.z, 1.0));
-				}
-
-				shadow /= float(sc_penumbra_shadow_samples);
-				shadow = mix(1.0, shadow, custom_lights.data[idx].shadow_opacity);
-
-			} else {
-				//no blockers found, so no shadow
-				shadow = 1.0;
-			}
-		} else {
-			//hard shadow
-			vec3 shadow_uv = vec3(splane.xy * custom_lights.data[idx].atlas_rect.zw + custom_lights.data[idx].atlas_rect.xy, splane.z);
-			shadow = mix(1.0, sample_pcf_shadow(shadow_atlas, custom_lights.data[idx].soft_shadow_scale * scene_data_block.data.shadow_atlas_pixel_size, shadow_uv), custom_lights.data[idx].shadow_opacity);
+		float quadrant_limit_x = quadrant_width;
+		if (custom_lights.data[idx].atlas_rect.x > quadrant_limit_x) {
+			quadrant_limit_x = quadrant_width * 2;
 		}
 
-		return shadow;
+		// TODO: does shadow matrix assume light origin at center or at corner?
+		// vec3 offset[4] = vec3[4](
+		// 	 (custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b) / 2.0,
+		// 	(-custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b) / 2.0,
+		// 	 (custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0,
+		// 	(-custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0
+		// );
+		vec3 offset[4] = vec3[4](
+				vec3(1, 1, 0),
+				vec3(-1, 1, 0),
+				vec3(1, -1, 0),
+				vec3(-1, -1, 0));
+		// if it assumes corner:
+		//vec3 offset[4] = vec3[4](
+		//	vec3(0,0,0),
+		//	custom_lights.data[idx].area_side_a,
+		//	custom_lights.data[idx].area_side_b,
+		//	custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b
+		//);
+
+		float avg = 0.0;
+		for (uint i = 0; i < area_soft_shadow_samples; i++) {
+			// TODO: verify correctness of this
+			mat4 offset_shadow_matrix = custom_lights.data[idx].shadow_matrix;
+			offset_shadow_matrix[3] -= vec4(0.0, 0.0, 0.0, 0.0);
+			//offset_shadow_matrix[3] -= vec4((custom_lights.data[idx].shadow_matrix*vec4(offset[i],1.0)).xyz, 0.0);
+			//offset_shadow_matrix[3] -= vec4(offset[i], 0.0);
+
+			vec3 local_vert = (offset_shadow_matrix * vec4(vertex, 1.0)).xyz;
+			// this should be the same as using the offset
+			//vec3 local_vert = (custom_lights.data[idx].shadow_matrix * vec4(vertex, 1.0)).xyz - mat3(custom_lights.data[idx].shadow_matrix)*offset[i];
+
+			float shadow_len = length(local_vert); //need to remember shadow len from here
+			vec3 shadow_dir = normalize(local_vert);
+
+			vec3 local_normal = normalize(mat3(custom_lights.data[idx].shadow_matrix) * normal);
+			vec3 normal_bias = local_normal * custom_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
+
+			vec3 shadow_sample = normalize(shadow_dir + normal_bias);
+
+			shadow_sample.z = 1.0 + abs(shadow_sample.z);
+			vec2 pos = shadow_sample.xy / shadow_sample.z;
+			float depth = shadow_len - custom_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
+			depth *= custom_lights.data[idx].inv_radius; // depth = how many light radii away from light (more than 1 = no light)
+			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
+
+			vec4 uv_rect = base_uv_rect;
+			vec2 sample_atlas_offset = i * custom_lights.data[idx].atlas_rect.zw;
+			if (uv_rect.x + sample_atlas_offset.x >= quadrant_limit_x) { // can replace if with while
+				sample_atlas_offset += vec2(-quadrant_width, custom_lights.data[idx].atlas_rect.w);
+			}
+			// depending on the current area light sample point, select the right region on the atlas
+			//uv_rect.xy += sample_atlas_offset;
+
+			// TODO: use sample_omni_pcf_shadow for soft sampling
+			pos = pos * 0.5 + 0.5;
+			pos = uv_rect.xy + pos * uv_rect.zw;
+			avg += textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
+		}
+
+		float avg_shadow = avg * (1.0 / float(area_soft_shadow_samples));
+
+		return mix(1.0, avg_shadow, custom_lights.data[idx].shadow_opacity);
 	}
 
 #endif // SHADOWS_DISABLED
@@ -1159,6 +1166,11 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	vec3 color = custom_lights.data[idx].color;
 	vec3 sampling_vertex = vertex;
 	vec3 vert_to_light = sampling_vertex - custom_lights.data[idx].position;
+
+	if (dot(cross(area_side_a, area_side_b), -vert_to_light) <= 0) {
+		return; // vertex is behind light
+	}
+
 	if (dot(vert_to_light, vert_to_light) < EPSILON) {
 		sampling_vertex += vec3(0.01, 0.01, 0.01); // small offset
 	}
@@ -1205,6 +1217,11 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		float specular_amount = custom_lights.data[idx].specular_amount;
 
 		float size_A = 0.0; // not sure about this one
+
+// TODO: Fix this block
+#ifdef LIGHT_TRANSMITTANCE_USED
+		// TODO: neither SpotLight nor OmniLight implementation gives useful results here.
+#endif //LIGHT_TRANSMITTANCE_USED
 
 		light_attenuation *= shadow;
 		vec3 diffuse_contribution = vec3(0.0, 0.0, 0.0);

@@ -167,13 +167,10 @@ AABB Light3D::get_aabb() const {
 	} else if (type == RenderingServer::LIGHT_CUSTOM) {
 		float len = param[PARAM_RANGE];
 
-		float cone_radius = MAX(MIN(param[PARAM_AREA_SIDE_A], param[PARAM_AREA_SIDE_B]), 0.001) / 2.0;
+		float size_a = param[PARAM_AREA_SIDE_A] / 2.0 + len;
+		float size_b = param[PARAM_AREA_SIDE_B] / 2.0 + len;
 
-		float cone_angle = Math::atan(cone_radius);
-
-		float size = Math::tan(cone_angle) * len;
-
-		return AABB(Vector3(-size, -size, -len), Vector3(size * 2, size * 2, len));
+		return AABB(-Vector3(size_a, size_b, len), Vector3(size_a * 2, size_b * 2, len));
 	}
 
 	return AABB();

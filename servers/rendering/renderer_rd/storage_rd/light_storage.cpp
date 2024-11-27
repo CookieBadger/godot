@@ -426,13 +426,10 @@ AABB LightStorage::light_get_aabb(RID p_light) const {
 		case RS::LIGHT_CUSTOM: {
 			float len = light->param[RS::LIGHT_PARAM_RANGE];
 
-			float cone_radius = MAX(MIN(light->param[RS::LIGHT_PARAM_AREA_SIDE_A], light->param[RS::LIGHT_PARAM_AREA_SIDE_B]), 0.001) / 2.0;
+			float size_a = light->param[RS::LIGHT_PARAM_AREA_SIDE_A] / 2.0 + len;
+			float size_b = light->param[RS::LIGHT_PARAM_AREA_SIDE_B] / 2.0 + len;
 
-			float cone_angle = Math::atan(cone_radius);
-
-			float size = Math::tan(cone_angle) * len;
-
-			return AABB(Vector3(-size, -size, -len), Vector3(size * 2, size * 2, len));
+			return AABB(-Vector3(size_a, size_b, len), Vector3(size_a * 2, size_b * 2, len));
 		};
 	}
 
@@ -815,6 +812,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 
 				Transform3D light_transform = light_instance->transform;
+				// TODO: adjust to get the closest point to the camera
 				const real_t distance = p_camera_transform.origin.distance_to(light_transform.origin);
 
 				if (light->distance_fade) {

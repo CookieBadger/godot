@@ -2549,6 +2549,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			using_dual_paraboloid = true;
 			float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
 			float area_side_b = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_B);
+			float diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
 
 			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 			Basis light_basis = light_transform.basis;
@@ -2562,6 +2563,8 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
 			light_transform = light_transform.translated(samples[p_pass]);
+
+			zfar = light_storage->light_get_param(base, RS::LIGHT_PARAM_RANGE) + diagonal;
 
 			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
 

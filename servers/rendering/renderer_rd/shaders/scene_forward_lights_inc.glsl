@@ -1050,49 +1050,36 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		//base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
 		//base_uv_rect.zw -= texel_size * 2.0;
 
-		// AreaLights use direction.xy to store atlas size
 		float quadrant_width = 0.5;
 
 		float quadrant_limit_x = 0.5;
 		if (custom_lights.data[idx].atlas_rect.x >= quadrant_limit_x) {
 			quadrant_limit_x = 1.0;
 		}
-		// TODO: does shadow matrix assume light origin at center or at corner?
-		// vec3 offset[4] = vec3[4](
-		// 	 (custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b) / 2.0,
-		// 	(-custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b) / 2.0,
-		// 	 (custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0,
-		// 	(-custom_lights.data[idx].area_side_a - custom_lights.data[idx].area_side_b) / 2.0
-		// );
+
 		float len_a = length(custom_lights.data[idx].area_side_a);
 		float len_b = length(custom_lights.data[idx].area_side_b);
+		float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
+		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_a;
+		vec3 world_side_b = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_b;
+		vec3 x_dir = normalize(world_side_a);
+		vec3 y_dir = normalize(world_side_b);
+		vec3 z_dir = normalize(cross(x_dir, y_dir));
+		mat3 light_basis = mat3(x_dir, y_dir, z_dir);
 		vec3 offset[4] = vec3[4](
-				vec3(len_a, len_b, 0) / 2.0,
-				vec3(-len_a, len_b, 0) / 2.0,
-				vec3(len_a, -len_b, 0) / 2.0,
-				vec3(-len_a, -len_b, 0) / 2.0);
-		// if it assumes corner:
-		//vec3 offset[4] = vec3[4](
-		//	vec3(0,0,0),
-		//	custom_lights.data[idx].area_side_a,
-		//	custom_lights.data[idx].area_side_b,
-		//	custom_lights.data[idx].area_side_a + custom_lights.data[idx].area_side_b
-		//);
+				light_basis * (vec3(len_a, len_b, 0) / 2.0),
+				light_basis * vec3(-len_a, len_b, 0) / 2.0,
+				light_basis * vec3(len_a, -len_b, 0) / 2.0,
+				light_basis * vec3(-len_a, -len_b, 0) / 2.0);
+		float inv_depth_range = 1.0 / (1.0 / custom_lights.data[idx].inv_radius + len_diagonal);
 
 		float avg = 0.0;
 		for (uint i = 0; i < area_soft_shadow_samples; i++) {
-			// TODO: verify correctness of this
-			mat4 offset_shadow_matrix = custom_lights.data[idx].shadow_matrix;
-			//offset_shadow_matrix[3] -= vec4(0.0, 0.0, 0.0, 0.0);
-			// S = (V*L)^-1
-			// So = (V*(O*L)) = V*O*V-1*S
-			//offset_shadow_matrix[3] -= vec4((custom_lights.data[idx].shadow_matrix*vec4(offset[i],1.0)).xyz, 0.0);
-			//offset_shadow_matrix[3] += scene_data_block.data.view_matrix * vec4(mat3(scene_data_block.data.inv_view_matrix) * offset[i], 1.0);
 			mat4 offset_matrix = mat4(1.0, 0.0, 0.0, 0.0, // 1. column
 					0.0, 1.0, 0.0, 0.0, // 2. column
 					0.0, 0.0, 1.0, 0.0, // 3. column
 					-offset[i].x, -offset[i].y, -offset[i].z, 1.0); // 4. column
-			offset_shadow_matrix = custom_lights.data[idx].shadow_matrix * offset_matrix * scene_data_block.data.inv_view_matrix;
+			mat4 offset_shadow_matrix = custom_lights.data[idx].shadow_matrix * offset_matrix * scene_data_block.data.inv_view_matrix;
 
 			vec3 local_vert = (offset_shadow_matrix * vec4(vertex, 1.0)).xyz;
 			// this should be the same as using the offset
@@ -1109,7 +1096,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			shadow_sample.z = 1.0 + abs(shadow_sample.z);
 			vec2 pos = shadow_sample.xy / shadow_sample.z;
 			float depth = shadow_len - custom_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
-			depth *= custom_lights.data[idx].inv_radius; // depth = how many light radii away from light (more than 1 = no light)
+			//depth *= custom_lights.data[idx].inv_radius;
+			depth *= inv_depth_range; // max depth = radius + diagonal
 			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
 			vec4 uv_rect = base_uv_rect;
@@ -1267,7 +1255,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	float inv_sample_nr = 1.0 / sample_nr;
 	diffuse_light += inv_sample_nr * diffuse_sum;
 	specular_light += inv_sample_nr * specular_sum;
-	alpha = inv_sample_nr * alpha_sum; // TODO: check if alpha shouldnt be multiplied or smth
+	alpha = inv_sample_nr * alpha_sum;
 }
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {

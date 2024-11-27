@@ -2551,27 +2551,18 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			}
 
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
-			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A) / 2.0;
-			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B) / 2.0;
-
-			Vector<Vector3> samples;
-			samples.resize(4);
-			samples.write[0] = light_transform.basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0);
-			samples.write[1] = light_transform.basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
-			samples.write[2] = light_transform.basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
-			samples.write[3] = light_transform.basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
-
-			//real_t cone_rad = MAX(MIN(area_side_a, area_side_b), 0.001) / 2.0;
-			//real_t angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
+			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A);
+			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B);
+			real_t diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
 
 			real_t z = -1; // TODO: verify that this is indeed the correct direction
 			Vector<Plane> planes;
-			planes.resize(6);
-			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius));
-			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius));
-			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius));
-			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius));
-			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius));
+			planes.resize(6); // TODO: optimize this
+			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + diagonal));
+			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + diagonal));
+			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + diagonal));
+			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + diagonal));
+			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + diagonal));
 			planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
 
 			instance_shadow_cull_result.clear();
@@ -2598,6 +2589,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 				light_culler->cull_regular_light(instance_shadow_cull_result);
 			}
 
+			// TODO: re-evaluate if culling could just be done once
 			for (int i = 0; i < sample_count; i++) {
 				RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
@@ -2620,7 +2612,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 				RSG::mesh_storage->update_mesh_instances();
 
 				// add sample position offset to light transform // TODO: what does this offset actually affect?
-				//RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform.translated(samples[i]), radius, 0, i, 0);
+				//RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform.translated(samples[i]), radius + diagonal, 0, i, 0);
 				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius, 0, i, 0);
 				shadow_data.light = light->instance;
 				shadow_data.pass = i;

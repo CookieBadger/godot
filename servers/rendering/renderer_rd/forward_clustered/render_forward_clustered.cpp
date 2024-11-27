@@ -2545,7 +2545,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 				atlas_rect.position.x -= quadrant_size;
 				atlas_rect.position.y += atlas_rect.size.y;
 			}
-			//TODO: try:
+
 			using_dual_paraboloid = true;
 			float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
 			float area_side_b = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_B);
@@ -2556,7 +2556,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 			Vector<Vector3> samples;
 			samples.resize(4);
-			samples.write[0] = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0); // this transforms the basis also ...
+			samples.write[0] = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0);
 			samples.write[1] = light_basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
 			samples.write[2] = light_basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
 			samples.write[3] = light_basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);

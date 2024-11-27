@@ -1047,43 +1047,34 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
+		// This offset is required if we decide to do soft sampling (sample kernel around actual point)
 		//base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
 		//base_uv_rect.zw -= texel_size * 2.0;
 
 		float quadrant_width = 0.5;
+		float quadrant_limit_x = custom_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
 
-		float quadrant_limit_x = 0.5;
-		if (custom_lights.data[idx].atlas_rect.x >= quadrant_limit_x) {
-			quadrant_limit_x = 1.0;
-		}
-
-		float len_a = length(custom_lights.data[idx].area_side_a);
-		float len_b = length(custom_lights.data[idx].area_side_b);
 		float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
 		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_a;
 		vec3 world_side_b = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_b;
-		vec3 x_dir = normalize(world_side_a);
-		vec3 y_dir = normalize(world_side_b);
-		vec3 z_dir = normalize(cross(x_dir, y_dir));
-		mat3 light_basis = mat3(x_dir, y_dir, z_dir);
-		vec3 offset[4] = vec3[4](
-				light_basis * (vec3(len_a, len_b, 0) / 2.0),
-				light_basis * vec3(-len_a, len_b, 0) / 2.0,
-				light_basis * vec3(len_a, -len_b, 0) / 2.0,
-				light_basis * vec3(-len_a, -len_b, 0) / 2.0);
+
+		// Array of offset vectors to the corner points in World space
+		vec3 samples[4] = vec3[4](
+				(world_side_a + world_side_b) / 2.0,
+				(-world_side_a + world_side_b) / 2.0,
+				(world_side_a - world_side_b) / 2.0,
+				(-world_side_a - world_side_b) / 2.0);
 		float inv_depth_range = 1.0 / (1.0 / custom_lights.data[idx].inv_radius + len_diagonal);
 
 		float avg = 0.0;
 		for (uint i = 0; i < area_soft_shadow_samples; i++) {
-			mat4 offset_matrix = mat4(1.0, 0.0, 0.0, 0.0, // 1. column
-					0.0, 1.0, 0.0, 0.0, // 2. column
-					0.0, 0.0, 1.0, 0.0, // 3. column
-					-offset[i].x, -offset[i].y, -offset[i].z, 1.0); // 4. column
-			mat4 offset_shadow_matrix = custom_lights.data[idx].shadow_matrix * offset_matrix * scene_data_block.data.inv_view_matrix;
+			// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
+			// for area lights, shadow_matrix stores the inverse transform
+			mat4 sample_mat = scene_data_block.data.inv_view_matrix;
+			sample_mat[3] -= vec4(samples[i].x, samples[i].y, samples[i].z, 0.0);
+			mat4 shadow_sample_matrix = custom_lights.data[idx].shadow_matrix * sample_mat;
 
-			vec3 local_vert = (offset_shadow_matrix * vec4(vertex, 1.0)).xyz;
-			// this should be the same as using the offset
-			//vec3 local_vert = (custom_lights.data[idx].shadow_matrix * vec4(vertex, 1.0)).xyz - mat3(custom_lights.data[idx].shadow_matrix)*offset[i];
+			vec3 local_vert = (shadow_sample_matrix * vec4(vertex, 1.0)).xyz;
 
 			float shadow_len = length(local_vert); //need to remember shadow len from here
 			vec3 shadow_dir = normalize(local_vert);
@@ -1096,7 +1087,6 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			shadow_sample.z = 1.0 + abs(shadow_sample.z);
 			vec2 pos = shadow_sample.xy / shadow_sample.z;
 			float depth = shadow_len - custom_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
-			//depth *= custom_lights.data[idx].inv_radius;
 			depth *= inv_depth_range; // max depth = radius + diagonal
 			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
@@ -1107,7 +1097,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			}
 			// depending on the current area light sample point, select the right region on the atlas
 			uv_rect.xy += sample_atlas_offset;
-			// TODO: use sample_omni_pcf_shadow for soft sampling
+			// TODO (discuss): use sample_omni_pcf_shadow for soft sampling
 			pos = pos * 0.5 + 0.5;
 			pos = uv_rect.xy + pos * uv_rect.zw;
 			avg += textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));

@@ -788,6 +788,7 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RS::ViewportDebugDraw p_
 		// Modes that draws information over part of the viewport needs camera effects because we see partially the normal draw mode.
 		case RS::VIEWPORT_DEBUG_DRAW_SHADOW_ATLAS:
 		case RS::VIEWPORT_DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS:
+		case RS::VIEWPORT_DEBUG_DRAW_AREA_SHADOW_ATLAS:
 		case RS::VIEWPORT_DEBUG_DRAW_DECAL_ATLAS:
 		case RS::VIEWPORT_DEBUG_DRAW_MOTION_VECTORS:
 		// Modes that draws a buffer over viewport needs camera effects because if the buffer is not available it will be equivalent to normal draw mode.
@@ -826,6 +827,20 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 	RID render_target = rb->get_render_target();
 
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_SHADOW_ATLAS) {
+		if (p_render_data->shadow_atlas.is_valid()) {
+			RID shadow_atlas_texture = RendererRD::LightStorage::get_singleton()->shadow_atlas_get_texture(p_render_data->shadow_atlas);
+
+			if (shadow_atlas_texture.is_null()) {
+				shadow_atlas_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+			}
+
+			Size2 rtsize = texture_storage->render_target_get_size(render_target);
+			copy_effects->copy_to_fb_rect(shadow_atlas_texture, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2i(Vector2(), rtsize / 2), false, true);
+		}
+	}
+
+	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_AREA_SHADOW_ATLAS) {
+		// TODO: implement area shadow atlas debug mode
 		if (p_render_data->shadow_atlas.is_valid()) {
 			RID shadow_atlas_texture = RendererRD::LightStorage::get_singleton()->shadow_atlas_get_texture(p_render_data->shadow_atlas);
 

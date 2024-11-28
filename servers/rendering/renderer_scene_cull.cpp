@@ -2611,8 +2611,6 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 				RSG::mesh_storage->update_mesh_instances();
 
-				// add sample position offset to light transform // TODO: what does this offset actually affect?
-				//RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform.translated(samples[i]), radius + diagonal, 0, i, 0);
 				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius, 0, i, 0);
 				shadow_data.light = light->instance;
 				shadow_data.pass = i;

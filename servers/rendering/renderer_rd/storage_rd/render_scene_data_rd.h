@@ -78,6 +78,7 @@ public:
 	float emissive_exposure_normalization = 0.0;
 
 	Size2 shadow_atlas_pixel_size;
+	Size2 area_shadow_atlas_pixel_size;
 	Size2 directional_shadow_pixel_size;
 
 	float time;
@@ -131,6 +132,8 @@ private:
 
 		float shadow_atlas_pixel_size[2];
 		float directional_shadow_pixel_size[2];
+
+		float area_shadow_atlas_pixel_size[4];
 
 		uint32_t directional_light_count;
 		float dual_paraboloid_side;

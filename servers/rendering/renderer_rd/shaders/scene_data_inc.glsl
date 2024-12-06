@@ -38,6 +38,9 @@ struct SceneData {
 	highp vec2 shadow_atlas_pixel_size;
 	highp vec2 directional_shadow_pixel_size;
 
+	// using vec4 for alignment. z and w are wasted.
+	highp vec4 area_shadow_atlas_pixel_size;
+
 	uint directional_light_count;
 	mediump float dual_paraboloid_side;
 	highp float z_far;

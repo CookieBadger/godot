@@ -1325,6 +1325,50 @@ Viewport::PositionalShadowAtlasQuadrantSubdiv Viewport::get_positional_shadow_at
 	return positional_shadow_atlas_quadrant_subdiv[p_quadrant];
 }
 
+void Viewport::set_area_shadow_atlas_size(int p_size) {
+	ERR_MAIN_THREAD_GUARD;
+	area_shadow_atlas_size = p_size;
+	RS::get_singleton()->viewport_set_area_shadow_atlas_size(viewport, p_size, area_shadow_atlas_16_bits);
+}
+
+int Viewport::get_area_shadow_atlas_size() const {
+	ERR_READ_THREAD_GUARD_V(0);
+	return area_shadow_atlas_size;
+}
+
+void Viewport::set_area_shadow_atlas_16_bits(bool p_16_bits) {
+	ERR_MAIN_THREAD_GUARD;
+	if (area_shadow_atlas_16_bits == p_16_bits) {
+		return;
+	}
+
+	area_shadow_atlas_16_bits = p_16_bits;
+	RS::get_singleton()->viewport_set_area_shadow_atlas_size(viewport, area_shadow_atlas_size, area_shadow_atlas_16_bits);
+}
+
+bool Viewport::get_area_shadow_atlas_16_bits() const {
+	ERR_READ_THREAD_GUARD_V(false);
+	return positional_shadow_atlas_16_bits;
+}
+
+void Viewport::set_area_shadow_atlas_subdiv(AreaShadowAtlasSubdiv p_subdiv) {
+	ERR_MAIN_THREAD_GUARD;
+
+	if (area_shadow_atlas_subdiv == p_subdiv) {
+		return;
+	}
+
+	area_shadow_atlas_subdiv = p_subdiv;
+	static const int subdiv[AREA_SHADOW_ATLAS_SUBDIV_MAX] = { 0, 4, 16, 64, 256, 1024 };
+
+	RS::get_singleton()->viewport_set_area_shadow_atlas_subdivision(viewport, subdiv[p_subdiv]);
+}
+
+Viewport::AreaShadowAtlasSubdiv Viewport::get_area_shadow_atlas_subdiv() const {
+	ERR_READ_THREAD_GUARD_V(AREA_SHADOW_ATLAS_SUBDIV_DISABLED);
+	return area_shadow_atlas_subdiv;
+}
+
 Ref<InputEvent> Viewport::_make_input_local(const Ref<InputEvent> &ev) {
 	if (ev.is_null()) {
 		return ev; // No transformation defined for null event

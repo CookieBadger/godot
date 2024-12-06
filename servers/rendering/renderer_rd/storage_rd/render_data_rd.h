@@ -64,6 +64,7 @@ public:
 	RID camera_attributes;
 	RID compositor;
 	RID shadow_atlas;
+	RID area_shadow_atlas;
 	RID occluder_debug_tex;
 	RID reflection_atlas;
 	RID reflection_probe;

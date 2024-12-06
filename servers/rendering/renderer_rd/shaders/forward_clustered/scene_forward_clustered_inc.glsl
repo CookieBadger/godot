@@ -79,7 +79,7 @@ layout(set = 0, binding = 4, std430) restrict readonly buffer SpotLights {
 }
 spot_lights;
 
-layout(set = 0, binding = 16, std430) restrict readonly buffer CustomLights {
+layout(set = 0, binding = 16, std430) restrict readonly buffer CustomLights { // TODO: verify if you should put this at the end, or reorder everything
 	LightData data[];
 }
 custom_lights;
@@ -244,6 +244,8 @@ layout(set = 1, binding = 4) uniform textureCubeArray reflection_atlas;
 layout(set = 1, binding = 5) uniform texture2D shadow_atlas;
 
 layout(set = 1, binding = 6) uniform texture2D directional_shadow_atlas;
+
+layout(set = 1, binding = 35) uniform texture2D area_shadow_atlas; // TODO: verify if you should put this at the end, or reorder everything
 
 layout(set = 1, binding = 7) uniform texture2DArray lightmap_textures[MAX_LIGHTMAP_TEXTURES];
 

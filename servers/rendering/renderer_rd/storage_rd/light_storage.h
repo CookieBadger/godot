@@ -413,14 +413,40 @@ private:
 		HashMap<RID, uint32_t> shadow_owners;
 	};
 
+	struct AreaShadowAtlas {
+		struct Shadow {
+			RID owner;
+
+			uint64_t version = 0;
+			//uint64_t fog_version = 0; // used for fog
+			uint64_t alloc_tick = 0;
+
+			Shadow() {}
+		};
+		uint32_t subdivision = 16;
+
+		int size = 0;
+		bool use_16_bits = true;
+
+		RID depth;
+		RID fb; //for copying
+
+		Vector<Shadow> shadows;
+		HashMap<RID, uint32_t> shadow_owners;
+	};
+
 	RID_Owner<ShadowAtlas> shadow_atlas_owner;
+	RID_Owner<AreaShadowAtlas> area_shadow_atlas_owner;
 
 	void _update_shadow_atlas(ShadowAtlas *shadow_atlas);
+	void _update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas);
 
 	void _shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx);
+	void _area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow *p_shadow, RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx, uint32_t p_shadow_count);
+
 	bool _shadow_atlas_find_shadow(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
 	bool _shadow_atlas_find_omni_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
-	bool _shadow_atlas_find_area_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
+	bool _area_shadow_atlas_find_shadows(AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, int &r_shadow);
 
 	/* DIRECTIONAL SHADOW */
 
@@ -688,6 +714,27 @@ public:
 		return Rect2(x / float(shadow_atlas->size), y / float(shadow_atlas->size), width / float(shadow_atlas->size), height / float(shadow_atlas->size));
 	}
 
+	_FORCE_INLINE_ Rect2 light_instance_get_area_shadow_atlas_rect(RID p_light_instance, RID p_area_shadow_atlas) {
+		AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_area_shadow_atlas);
+		LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
+		uint32_t key = shadow_atlas->shadow_owners[li->self];
+
+		uint32_t shadow = key & SHADOW_INDEX_MASK;
+
+		ERR_FAIL_COND_V(shadow >= (uint32_t)shadow_atlas->shadows.size(), Rect2());
+
+		uint32_t atlas_size = shadow_atlas->size;
+		uint32_t shadow_size = (atlas_size / shadow_atlas->subdivision);
+
+		uint32_t x = (shadow % shadow_atlas->subdivision) * shadow_size;
+		uint32_t y = (shadow / shadow_atlas->subdivision) * shadow_size;
+
+		uint32_t width = shadow_size;
+		uint32_t height = shadow_size;
+
+		return Rect2(x / float(shadow_atlas->size), y / float(shadow_atlas->size), width / float(shadow_atlas->size), height / float(shadow_atlas->size));
+	}
+
 	_FORCE_INLINE_ float light_instance_get_shadow_texel_size(RID p_light_instance, RID p_shadow_atlas) {
 #ifdef DEBUG_ENABLED
 		LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
@@ -705,6 +752,23 @@ public:
 		uint32_t quadrant_size = shadow_atlas->size >> 1;
 
 		uint32_t shadow_size = (quadrant_size / shadow_atlas->quadrants[quadrant].subdivision);
+
+		return float(1.0) / shadow_size;
+	}
+
+	_FORCE_INLINE_ float light_instance_get_area_shadow_texel_size(RID p_light_instance, RID p_area_shadow_atlas) {
+#ifdef DEBUG_ENABLED
+		LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
+		ERR_FAIL_COND_V(!li->shadow_atlases.has(p_area_shadow_atlas), 0);
+#endif
+		AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_area_shadow_atlas);
+		ERR_FAIL_NULL_V(shadow_atlas, 0);
+#ifdef DEBUG_ENABLED
+		ERR_FAIL_COND_V(!shadow_atlas->shadow_owners.has(p_light_instance), 0);
+#endif
+		uint32_t key = shadow_atlas->shadow_owners[p_light_instance];
+
+		uint32_t shadow_size = (shadow_atlas->size / shadow_atlas->subdivision);
 
 		return float(1.0) / shadow_size;
 	}
@@ -813,7 +877,7 @@ public:
 		}
 		return false;
 	}
-	void update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows);
+	void update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, RID p_area_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows);
 
 	/* REFLECTION PROBE */
 
@@ -1089,6 +1153,58 @@ public:
 	}
 
 	virtual void shadow_atlas_update(RID p_atlas) override;
+
+	/* AREA SHADOW ATLAS API */
+	bool owns_area_shadow_atlas(RID p_rid) { return area_shadow_atlas_owner.owns(p_rid); };
+	virtual RID area_shadow_atlas_create() override;
+	virtual void area_shadow_atlas_free(RID p_atlas) override;
+
+	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override;
+	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
+	virtual bool area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) override;
+
+	_FORCE_INLINE_ bool area_shadow_atlas_owns_light_instance(RID p_atlas, RID p_light_instance) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, false);
+		return atlas->shadow_owners.has(p_light_instance);
+	}
+	_FORCE_INLINE_ uint32_t area_shadow_atlas_get_light_instance_key(RID p_atlas, RID p_light_instance) { // needed?
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, -1);
+		return atlas->shadow_owners[p_light_instance];
+	}
+
+	_FORCE_INLINE_ RID area_shadow_atlas_get_texture(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->depth;
+	}
+
+	_FORCE_INLINE_ int area_shadow_atlas_get_size(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, 0);
+		return atlas->size;
+	}
+
+	_FORCE_INLINE_ int area_shadow_atlas_get_shadow_size(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, 0);
+		return atlas->shadows.size();
+	}
+
+	_FORCE_INLINE_ uint32_t area_shadow_atlas_get_subdivision(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, 0);
+		return atlas->subdivision;
+	}
+
+	_FORCE_INLINE_ RID area_shadow_atlas_get_fb(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->fb;
+	}
+
+	virtual void area_shadow_atlas_update(RID p_atlas) override;
 
 	/* DIRECTIONAL SHADOW */
 

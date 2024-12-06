@@ -386,6 +386,11 @@ void RendererSceneCull::scenario_initialize(RID p_rid) {
 	RSG::light_storage->shadow_atlas_set_quadrant_subdivision(scenario->reflection_probe_shadow_atlas, 2, 4);
 	RSG::light_storage->shadow_atlas_set_quadrant_subdivision(scenario->reflection_probe_shadow_atlas, 3, 8);
 
+	// TODO: check this
+	scenario->reflection_probe_area_shadow_atlas = RSG::light_storage->area_shadow_atlas_create();
+	RSG::light_storage->area_shadow_atlas_set_size(scenario->reflection_probe_area_shadow_atlas, 1024); //make enough shadows for close distance, don't bother with rest
+	RSG::light_storage->area_shadow_atlas_set_subdivision(scenario->reflection_probe_area_shadow_atlas, 128);
+
 	scenario->reflection_atlas = RSG::light_storage->reflection_atlas_create();
 
 	scenario->instance_aabbs.set_page_pool(&instance_aabb_page_pool);
@@ -2309,7 +2314,7 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	}
 }
 
-bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
+bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, RID p_area_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
 	Transform3D light_transform = p_instance->transform;
@@ -2553,16 +2558,16 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
 			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A);
 			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B);
-			real_t diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
+			real_t area_diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
 
 			real_t z = -1; // TODO: verify that this is indeed the correct direction
 			Vector<Plane> planes;
 			planes.resize(6); // TODO: optimize this
-			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + diagonal));
-			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + diagonal));
-			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + diagonal));
-			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + diagonal));
-			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + diagonal));
+			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + area_diagonal));
+			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + area_diagonal));
+			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + area_diagonal));
+			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + area_diagonal));
+			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + area_diagonal));
 			planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
 
 			instance_shadow_cull_result.clear();
@@ -2611,7 +2616,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 				RSG::mesh_storage->update_mesh_instances();
 
-				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius, 0, i, 0);
+				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, i, 0);
 				shadow_data.light = light->instance;
 				shadow_data.pass = i;
 			}
@@ -2621,7 +2626,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
+void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, RID p_area_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
 #ifndef _3D_DISABLED
 
 	Camera *camera = camera_owner.get_or_null(p_camera);
@@ -2720,7 +2725,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// For now just cull on the first camera
 	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, p_area_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
 #endif
 }
 
@@ -2862,6 +2867,9 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 				if (base_type == RS::INSTANCE_LIGHT) {
 					cull_result.lights.push_back(idata.instance);
 					cull_result.light_instances.push_back(RID::from_uint64(idata.instance_data_rid));
+					// TODO: add proper culling for area light shadow atlas
+					//bool shadow_atlas_valid = cull_data.shadow_atlas.is_valid() || cull_data.area_shadow_atlas.is_valid();
+					//RSG::light_storage->light_get_type(ins->base)
 					if (cull_data.shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(idata.base_rid)) {
 						RSG::light_storage->light_instance_mark_visible(RID::from_uint64(idata.instance_data_rid)); //mark it visible for shadow allocation later
 					}
@@ -3100,7 +3108,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	}
 }
 
-void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_area_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
@@ -3303,8 +3311,14 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
 
-			if (!p_shadow_atlas.is_valid()) {
-				continue;
+			if (RSG::light_storage->light_get_type(ins->base) == RS::LIGHT_CUSTOM) {
+				if (!p_area_shadow_atlas.is_valid()) {
+					continue;
+				}
+			} else {
+				if (!p_shadow_atlas.is_valid()) {
+					continue;
+				}
 			}
 
 			InstanceLightData *light = static_cast<InstanceLightData *>(ins->base_data);
@@ -3435,12 +3449,17 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				}
 			}
 
-			bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
+			bool redraw = false;
+			if (RSG::light_storage->light_get_type(ins->base) == RS::LIGHT_CUSTOM) {
+				redraw = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version);
+			} else {
+				redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
+			}
 
 			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
 				//must redraw!
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
-				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
 					light->make_shadow_dirty();
 				}
 				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
@@ -3511,7 +3530,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, p_area_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
@@ -3562,7 +3581,7 @@ RID RendererSceneCull::_render_get_compositor(RID p_camera, RID p_scenario) {
 	return RID();
 }
 
-void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas) {
+void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas, RID p_area_shadow_atlas) {
 #ifndef _3D_DISABLED
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 
@@ -3578,7 +3597,7 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), true, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, p_area_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
 #endif
 }
 
@@ -3639,10 +3658,12 @@ bool RendererSceneCull::_render_reflection_probe_step(Instance *p_instance, int 
 		Transform3D xform = p_instance->transform * local_view;
 
 		RID shadow_atlas;
+		RID area_shadow_atlas; // TODO: separately disableable?
 
 		bool use_shadows = RSG::light_storage->reflection_probe_renders_shadows(p_instance->base);
 		if (use_shadows) {
 			shadow_atlas = scenario->reflection_probe_shadow_atlas;
+			area_shadow_atlas = scenario->reflection_probe_area_shadow_atlas;
 		}
 
 		RID environment;
@@ -3657,7 +3678,7 @@ bool RendererSceneCull::_render_reflection_probe_step(Instance *p_instance, int 
 		camera_data.set_camera(xform, cm, false, false);
 
 		Ref<RenderSceneBuffers> render_buffers = RSG::light_storage->reflection_probe_atlas_get_render_buffers(scenario->reflection_atlas);
-		_render_scene(&camera_data, render_buffers, environment, RID(), RID(), RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base), p_instance->scenario->self, RID(), shadow_atlas, reflection_probe->instance, p_step, mesh_lod_threshold, use_shadows);
+		_render_scene(&camera_data, render_buffers, environment, RID(), RID(), RSG::light_storage->reflection_probe_get_cull_mask(p_instance->base), p_instance->scenario->self, RID(), shadow_atlas, area_shadow_atlas, reflection_probe->instance, p_step, mesh_lod_threshold, use_shadows);
 
 	} else {
 		//do roughness postprocess step until it believes it's done
@@ -4269,6 +4290,7 @@ bool RendererSceneCull::free(RID p_rid) {
 		scenario->instance_visibility.reset();
 
 		RSG::light_storage->shadow_atlas_free(scenario->reflection_probe_shadow_atlas);
+		RSG::light_storage->area_shadow_atlas_free(scenario->reflection_probe_area_shadow_atlas);
 		RSG::light_storage->reflection_atlas_free(scenario->reflection_atlas);
 		scenario_owner.free(p_rid);
 		RendererSceneOcclusionCull::get_singleton()->remove_scenario(p_rid);

@@ -245,7 +245,7 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 	}
 
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
-	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
+	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, p_viewport->area_shadow_atlas, xr_interface, &p_viewport->render_info);
 
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED
@@ -580,7 +580,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			// Clear now otherwise we copy over garbage from the render target.
 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 			if (!can_draw_3d) {
-				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas, p_viewport->area_shadow_atlas);
 			} else {
 				_draw_3d(p_viewport);
 			}
@@ -623,7 +623,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				// Clear now otherwise we copy over garbage from the render target.
 				RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 				if (!can_draw_3d) {
-					RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+					RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas, p_viewport->area_shadow_atlas);
 				} else {
 					_draw_3d(p_viewport);
 				}
@@ -637,7 +637,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			// Clear now otherwise we copy over garbage from the render target.
 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 			if (!can_draw_3d) {
-				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
+				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas, p_viewport->area_shadow_atlas);
 			} else {
 				_draw_3d(p_viewport);
 			}
@@ -873,6 +873,7 @@ void RendererViewport::viewport_initialize(RID p_rid) {
 	viewport->self = p_rid;
 	viewport->render_target = RSG::texture_storage->render_target_create();
 	viewport->shadow_atlas = RSG::light_storage->shadow_atlas_create();
+	viewport->area_shadow_atlas = RSG::light_storage->area_shadow_atlas_create();
 	viewport->viewport_render_direct_to_screen = false;
 
 	viewport->fsr_enabled = !RSG::rasterizer->is_low_end() && !viewport->disable_3d;
@@ -1238,6 +1239,23 @@ void RendererViewport::viewport_set_positional_shadow_atlas_quadrant_subdivision
 	RSG::light_storage->shadow_atlas_set_quadrant_subdivision(viewport->shadow_atlas, p_quadrant, p_subdiv);
 }
 
+void RendererViewport::viewport_set_area_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	viewport->area_shadow_atlas_size = p_size;
+	viewport->area_shadow_atlas_16_bits = p_16_bits;
+
+	RSG::light_storage->area_shadow_atlas_set_size(viewport->area_shadow_atlas, viewport->area_shadow_atlas_size, viewport->area_shadow_atlas_16_bits);
+}
+
+void RendererViewport::viewport_set_area_shadow_atlas_subdivision(RID p_viewport, int p_subdiv) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	RSG::light_storage->area_shadow_atlas_set_subdivision(viewport->area_shadow_atlas, p_subdiv);
+}
+
 void RendererViewport::viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_msaa) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
@@ -1478,6 +1496,7 @@ bool RendererViewport::free(RID p_rid) {
 
 		RSG::texture_storage->render_target_free(viewport->render_target);
 		RSG::light_storage->shadow_atlas_free(viewport->shadow_atlas);
+		RSG::light_storage->area_shadow_atlas_free(viewport->area_shadow_atlas);
 		if (viewport->render_buffers.is_valid()) {
 			viewport->render_buffers.unref();
 		}

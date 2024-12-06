@@ -2733,12 +2733,20 @@ void Node3DEditorViewport::_project_settings_changed() {
 	int atlas_q2 = GLOBAL_GET("rendering/lights_and_shadows/positional_shadow/atlas_quadrant_2_subdiv");
 	int atlas_q3 = GLOBAL_GET("rendering/lights_and_shadows/positional_shadow/atlas_quadrant_3_subdiv");
 
+	int area_shadowmap_size = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_size");
+	bool area_shadowmap_16_bits = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_16_bits");
+	int area_atlas_subdivision = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_subdivision");
+
 	viewport->set_positional_shadow_atlas_size(shadowmap_size);
 	viewport->set_positional_shadow_atlas_16_bits(shadowmap_16_bits);
 	viewport->set_positional_shadow_atlas_quadrant_subdiv(0, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q0));
 	viewport->set_positional_shadow_atlas_quadrant_subdiv(1, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q1));
 	viewport->set_positional_shadow_atlas_quadrant_subdiv(2, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q2));
 	viewport->set_positional_shadow_atlas_quadrant_subdiv(3, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q3));
+
+	viewport->set_area_shadow_atlas_size(area_shadowmap_size);
+	viewport->set_area_shadow_atlas_16_bits(area_shadowmap_size);
+	viewport->set_area_shadow_atlas_subdiv(Viewport::AreaShadowAtlasSubdiv(area_atlas_subdivision));
 
 	_update_shrink();
 

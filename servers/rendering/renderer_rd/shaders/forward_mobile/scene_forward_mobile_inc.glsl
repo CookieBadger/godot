@@ -154,6 +154,8 @@ layout(set = 1, binding = 3) uniform mediump textureCubeArray reflection_atlas;
 
 layout(set = 1, binding = 4) uniform highp texture2D shadow_atlas;
 
+layout(set = 1, binding = 25) uniform highp texture2D area_shadow_atlas;
+
 layout(set = 1, binding = 5) uniform highp texture2D directional_shadow_atlas;
 
 // this needs to change to providing just the lightmap we're using..

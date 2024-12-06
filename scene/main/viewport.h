@@ -113,6 +113,16 @@ public:
 		SHADOW_ATLAS_QUADRANT_SUBDIV_MAX,
 	};
 
+	enum AreaShadowAtlasSubdiv {
+		AREA_SHADOW_ATLAS_SUBDIV_DISABLED,
+		AREA_SHADOW_ATLAS_SUBDIV_4,
+		AREA_SHADOW_ATLAS_SUBDIV_16,
+		AREA_SHADOW_ATLAS_SUBDIV_64,
+		AREA_SHADOW_ATLAS_SUBDIV_256,
+		AREA_SHADOW_ATLAS_SUBDIV_1024,
+		AREA_SHADOW_ATLAS_SUBDIV_MAX,
+	};
+
 	enum MSAA {
 		MSAA_DISABLED,
 		MSAA_2X,
@@ -294,6 +304,10 @@ private:
 	int positional_shadow_atlas_size = 2048;
 	bool positional_shadow_atlas_16_bits = true;
 	PositionalShadowAtlasQuadrantSubdiv positional_shadow_atlas_quadrant_subdiv[4];
+
+	int area_shadow_atlas_size = 2048;
+	bool area_shadow_atlas_16_bits = true;
+	AreaShadowAtlasSubdiv area_shadow_atlas_subdiv;
 
 	MSAA msaa_2d = MSAA_DISABLED;
 	MSAA msaa_3d = MSAA_DISABLED;
@@ -536,6 +550,15 @@ public:
 
 	void set_positional_shadow_atlas_quadrant_subdiv(int p_quadrant, PositionalShadowAtlasQuadrantSubdiv p_subdiv);
 	PositionalShadowAtlasQuadrantSubdiv get_positional_shadow_atlas_quadrant_subdiv(int p_quadrant) const;
+
+	void set_area_shadow_atlas_size(int p_size);
+	int get_area_shadow_atlas_size() const;
+
+	void set_area_shadow_atlas_16_bits(bool p_16_bits);
+	bool get_area_shadow_atlas_16_bits() const;
+
+	void set_area_shadow_atlas_subdiv(AreaShadowAtlasSubdiv p_subdiv);
+	AreaShadowAtlasSubdiv get_area_shadow_atlas_subdiv() const;
 
 	void set_msaa_2d(MSAA p_msaa);
 	MSAA get_msaa_2d() const;

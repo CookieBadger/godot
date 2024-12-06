@@ -840,9 +840,8 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 	}
 
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_AREA_SHADOW_ATLAS) {
-		// TODO: implement area shadow atlas debug mode
-		if (p_render_data->shadow_atlas.is_valid()) {
-			RID shadow_atlas_texture = RendererRD::LightStorage::get_singleton()->shadow_atlas_get_texture(p_render_data->shadow_atlas);
+		if (p_render_data->area_shadow_atlas.is_valid()) {
+			RID shadow_atlas_texture = RendererRD::LightStorage::get_singleton()->area_shadow_atlas_get_texture(p_render_data->area_shadow_atlas);
 
 			if (shadow_atlas_texture.is_null()) {
 				shadow_atlas_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
@@ -1121,7 +1120,7 @@ void RendererSceneRenderRD::_post_prepass_render(RenderDataRD *p_render_data, bo
 	}
 }
 
-void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_area_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1178,6 +1177,11 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 			scene_data.shadow_atlas_pixel_size.x = 1.0 / shadow_atlas_size;
 			scene_data.shadow_atlas_pixel_size.y = 1.0 / shadow_atlas_size;
 		}
+		if (p_area_shadow_atlas.is_valid()) {
+			int shadow_atlas_size = light_storage->area_shadow_atlas_get_size(p_area_shadow_atlas);
+			scene_data.area_shadow_atlas_pixel_size.x = 1.0 / shadow_atlas_size;
+			scene_data.area_shadow_atlas_pixel_size.y = 1.0 / shadow_atlas_size;
+		}
 		{
 			int directional_shadow_size = light_storage->directional_shadow_get_size();
 			scene_data.directional_shadow_pixel_size.x = 1.0 / directional_shadow_size;
@@ -1205,6 +1209,7 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.compositor = p_compositor;
 		render_data.camera_attributes = p_camera_attributes;
 		render_data.shadow_atlas = p_shadow_atlas;
+		render_data.area_shadow_atlas = p_area_shadow_atlas;
 		render_data.occluder_debug_tex = p_occluder_debug_tex;
 		render_data.reflection_atlas = p_reflection_atlas;
 		render_data.reflection_probe = p_reflection_probe;

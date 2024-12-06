@@ -102,6 +102,10 @@ public:
 		uint64_t time_gpu_begin;
 		uint64_t time_gpu_end;
 
+		RID area_shadow_atlas;
+		int area_shadow_atlas_size = 2048;
+		bool area_shadow_atlas_16_bits = true;
+
 		RID shadow_atlas;
 		int shadow_atlas_size = 2048;
 		bool shadow_atlas_16_bits = true;
@@ -269,6 +273,9 @@ public:
 
 	void viewport_set_positional_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits = true);
 	void viewport_set_positional_shadow_atlas_quadrant_subdivision(RID p_viewport, int p_quadrant, int p_subdiv);
+
+	void viewport_set_area_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits = true);
+	void viewport_set_area_shadow_atlas_subdivision(RID p_viewport, int p_subdiv);
 
 	void viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_msaa);
 	void viewport_set_msaa_3d(RID p_viewport, RS::ViewportMSAA p_msaa);

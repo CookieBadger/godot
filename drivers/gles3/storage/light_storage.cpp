@@ -382,6 +382,7 @@ void LightStorage::light_instance_free(RID p_light_instance) {
 
 	// Remove from shadow atlases.
 	for (const RID &E : light_instance->shadow_atlases) {
+		// TODO: adjust for area light
 		ShadowAtlas *shadow_atlas = shadow_atlas_owner.get_or_null(E);
 		ERR_CONTINUE(!shadow_atlas->shadow_owners.has(p_light_instance));
 		uint32_t key = shadow_atlas->shadow_owners[p_light_instance];
@@ -1575,6 +1576,28 @@ void LightStorage::_shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow
 
 void LightStorage::shadow_atlas_update(RID p_atlas) {
 	// Do nothing as there is no shadow atlas texture.
+}
+
+/* AREA SHADOW ATLAS */ // TODO: implement methods, and search for their uses.
+RID LightStorage::area_shadow_atlas_create() {
+	return RID();
+}
+
+void LightStorage::area_shadow_atlas_free(RID p_atlas) {
+}
+
+void LightStorage::area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits) {
+}
+
+void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) {
+}
+
+bool LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) {
+	return false;
+}
+
+void LightStorage::area_shadow_atlas_update(RID p_atlas) {
+	// nothing, same as shadow_atlas_update
 }
 
 /* DIRECTIONAL SHADOW */

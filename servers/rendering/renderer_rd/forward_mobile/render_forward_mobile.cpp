@@ -390,6 +390,20 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 		u.append_id(texture);
 		uniforms.push_back(u);
 	}
+	{ // TODO: verify if you should put this at the end, or reorder everything
+		RD::Uniform u;
+		u.binding = 25;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID texture;
+		if (p_render_data && p_render_data->area_shadow_atlas.is_valid()) {
+			texture = RendererRD::LightStorage::get_singleton()->area_shadow_atlas_get_texture(p_render_data->area_shadow_atlas);
+		}
+		if (!texture.is_valid()) {
+			texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
+		}
+		u.append_id(texture);
+		uniforms.push_back(u);
+	}
 	{
 		RD::Uniform u;
 		u.binding = 5;
@@ -607,7 +621,7 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 
 		//cube shadows are rendered in their own way
 		for (const int &index : p_render_data->cube_shadows) {
-			_render_shadow_pass(p_render_data->render_shadows[index].light, p_render_data->shadow_atlas, p_render_data->render_shadows[index].pass, p_render_data->render_shadows[index].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, true, true, true, p_render_data->render_info, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[index].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[index].pass, p_render_data->render_shadows[index].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, true, true, true, p_render_data->render_info, p_render_data->scene_data->cam_transform);
 		}
 
 		if (p_render_data->directional_shadows.size()) {
@@ -628,11 +642,11 @@ void RenderForwardMobile::_pre_opaque_render(RenderDataRD *p_render_data) {
 
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, p_render_data->scene_data->cam_transform);
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, p_render_data->scene_data->cam_transform);
 		}
 
 		_render_shadow_process();
@@ -737,7 +751,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 	// Update light and decal buffer first so we know what lights and decals are safe to pair with.
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
-	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
+	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
 	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
 
 	p_render_data->directional_light_count = directional_light_count;
@@ -1114,7 +1128,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 
 /* these are being called from RendererSceneRenderRD::_pre_opaque_render */
 
-void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Transform3D &p_main_cam_transform) {
+void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, RID p_area_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Transform3D &p_main_cam_transform) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -1188,6 +1202,56 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, i
 		render_texture = RID();
 		flip_y = true;
 
+	} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
+		ERR_FAIL_COND(!light_storage->owns_area_shadow_atlas(p_area_shadow_atlas));
+		ERR_FAIL_COND(!light_storage->area_shadow_atlas_owns_light_instance(p_area_shadow_atlas, p_light));
+
+		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas);
+
+		uint32_t key = light_storage->area_shadow_atlas_get_light_instance_key(p_area_shadow_atlas, p_light);
+
+		uint32_t shadow = key & RendererRD::LightStorage::SHADOW_INDEX_MASK;
+		uint32_t subdivision = light_storage->area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
+
+		ERR_FAIL_INDEX((int)shadow, light_storage->area_shadow_atlas_get_shadow_size(p_area_shadow_atlas));
+
+		uint32_t shadow_atlas_size = light_storage->area_shadow_atlas_get_size(p_area_shadow_atlas);
+
+		uint32_t shadow_size = (shadow_atlas_size / subdivision);
+		atlas_rect.size.width = shadow_size;
+		atlas_rect.size.height = shadow_size;
+		atlas_rect.position.x = (shadow % subdivision) * shadow_size;
+		atlas_rect.position.y = (shadow / subdivision) * shadow_size;
+
+		atlas_rect.position.x += p_pass * atlas_rect.size.x;
+		if (atlas_rect.position.x >= shadow_atlas_size) { // can replace if with while
+			atlas_rect.position.x -= shadow_atlas_size;
+			atlas_rect.position.y += atlas_rect.size.y;
+		}
+
+		using_dual_paraboloid = true;
+		float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
+		float area_side_b = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_B);
+		float diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
+
+		light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
+		Basis light_basis = light_transform.basis;
+
+		Vector<Vector3> samples;
+		samples.resize(4);
+		samples.write[0] = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0);
+		samples.write[1] = light_basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
+		samples.write[2] = light_basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
+		samples.write[3] = light_basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
+
+		light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
+		light_transform = light_transform.translated(samples[p_pass]);
+
+		zfar = light_storage->light_get_param(base, RS::LIGHT_PARAM_RANGE) + diagonal;
+
+		render_fb = light_storage->area_shadow_atlas_get_fb(p_area_shadow_atlas);
+
+		flip_y = true;
 	} else {
 		//set from shadow atlas
 
@@ -1257,13 +1321,6 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, i
 			}
 
 		} else if (light_storage->light_get_type(base) == RS::LIGHT_SPOT) {
-			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
-			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
-
-			render_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
-
-			flip_y = true;
-		} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
 			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
 			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 

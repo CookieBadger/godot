@@ -1826,12 +1826,21 @@ SceneTree::SceneTree() {
 	int atlas_q2 = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_quadrant_2_subdiv", PROPERTY_HINT_ENUM, "Disabled,1 Shadow,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 3);
 	int atlas_q3 = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/positional_shadow/atlas_quadrant_3_subdiv", PROPERTY_HINT_ENUM, "Disabled,1 Shadow,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 4);
 
+	int area_shadowmap_size = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/area_shadow/atlas_size", PROPERTY_HINT_RANGE, "256,16384"), 4096);
+	GLOBAL_DEF("rendering/lights_and_shadows/area_shadow/atlas_size.mobile", 2048);
+	bool area_shadowmap_16_bits = GLOBAL_DEF("rendering/lights_and_shadows/area_shadow/atlas_16_bits", true);
+	int area_atlas_subdivision = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/area_shadow/atlas_subdivision", PROPERTY_HINT_ENUM, "Disabled,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 2);
+
 	root->set_positional_shadow_atlas_size(shadowmap_size);
 	root->set_positional_shadow_atlas_16_bits(shadowmap_16_bits);
 	root->set_positional_shadow_atlas_quadrant_subdiv(0, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q0));
 	root->set_positional_shadow_atlas_quadrant_subdiv(1, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q1));
 	root->set_positional_shadow_atlas_quadrant_subdiv(2, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q2));
 	root->set_positional_shadow_atlas_quadrant_subdiv(3, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q3));
+
+	root->set_area_shadow_atlas_size(area_shadowmap_size);
+	root->set_area_shadow_atlas_16_bits(area_shadowmap_16_bits);
+	root->set_area_shadow_atlas_subdiv(Viewport::AreaShadowAtlasSubdiv(area_atlas_subdivision));
 
 	Viewport::SDFOversize sdf_oversize = Viewport::SDFOversize(int(GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/sdf/oversize", PROPERTY_HINT_ENUM, "100%,120%,150%,200%"), 1)));
 	root->set_sdf_oversize(sdf_oversize);

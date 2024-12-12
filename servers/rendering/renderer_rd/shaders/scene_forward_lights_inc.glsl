@@ -1051,8 +1051,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		//base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
 		//base_uv_rect.zw -= texel_size * 2.0;
 
-		float quadrant_width = 0.5;
-		float quadrant_limit_x = custom_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
+		//float quadrant_width = 0.5;
+		//float quadrant_limit_x = custom_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
 
 		float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
 		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_a;
@@ -1091,16 +1091,20 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
 			vec4 uv_rect = base_uv_rect;
+
 			vec2 sample_atlas_offset = i * vec2(custom_lights.data[idx].atlas_rect.z, 0.0);
-			if (uv_rect.x + sample_atlas_offset.x >= quadrant_limit_x) { // can replace if with while
-				sample_atlas_offset += vec2(-quadrant_width, custom_lights.data[idx].atlas_rect.w);
-			}
+
+			//if (uv_rect.x + sample_atlas_offset.x >= quadrant_limit_x) { // can replace if with while
+			//sample_atlas_offset += vec2(-quadrant_width, custom_lights.data[idx].atlas_rect.w);
+			//}
 			// depending on the current area light sample point, select the right region on the atlas
+
 			uv_rect.xy += sample_atlas_offset;
+
 			// TODO (discuss): use sample_omni_pcf_shadow for soft sampling
 			pos = pos * 0.5 + 0.5;
 			pos = uv_rect.xy + pos * uv_rect.zw;
-			avg += textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
+			avg += textureProj(sampler2DShadow(area_shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
 		}
 
 		float avg_shadow = avg * (1.0 / float(area_soft_shadow_samples));

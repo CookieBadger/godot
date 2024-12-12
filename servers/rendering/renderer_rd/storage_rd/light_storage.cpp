@@ -1065,9 +1065,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			float shadow_texel_size;
 
 			if (type == RS::LIGHT_CUSTOM) {
-				light_instance_get_area_shadow_texel_size(light_instance->self, p_area_shadow_atlas);
+				shadow_texel_size = light_instance_get_area_shadow_texel_size(light_instance->self, p_area_shadow_atlas);
 			} else {
-				light_instance_get_shadow_texel_size(light_instance->self, p_shadow_atlas);
+				shadow_texel_size = light_instance_get_shadow_texel_size(light_instance->self, p_shadow_atlas);
 			}
 			light_data.shadow_normal_bias = light->param[RS::LIGHT_PARAM_SHADOW_NORMAL_BIAS] * shadow_texel_size * 10.0;
 

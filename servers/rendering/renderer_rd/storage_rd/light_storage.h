@@ -104,7 +104,7 @@ private:
 
 		RS::LightType light_type = RS::LIGHT_DIRECTIONAL;
 
-		ShadowTransform shadow_transform[6];
+		ShadowTransform shadow_transform[64]; // TODO: does this impact performance or memory of other lights?
 
 		AABB aabb;
 		RID self;

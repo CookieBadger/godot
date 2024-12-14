@@ -2481,14 +2481,10 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		uint32_t shadow_size = (shadow_atlas_size / subdivision);
 		atlas_rect.size.width = shadow_size;
 		atlas_rect.size.height = shadow_size;
-		atlas_rect.position.x = (shadow % subdivision) * shadow_size;
-		atlas_rect.position.y = (shadow / subdivision) * shadow_size;
 
-		atlas_rect.position.x += p_pass * atlas_rect.size.x;
-		if (atlas_rect.position.x >= shadow_atlas_size) { // can replace if with while
-			atlas_rect.position.x -= shadow_atlas_size;
-			atlas_rect.position.y += atlas_rect.size.y;
-		}
+		// TODO: need to check row and col for several area lights. Currently only works if shadow = 0. Is shadow the light index, or the shadow map index? (e.g. 4 maps per light -> is shadow of second light 1 or 4 ?)
+		atlas_rect.position.x = ((shadow + p_pass) % subdivision) * atlas_rect.size.x;
+		atlas_rect.position.y = ((shadow + p_pass) / subdivision) * atlas_rect.size.x;
 
 		using_dual_paraboloid = true;
 		float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
@@ -2498,15 +2494,14 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 		Basis light_basis = light_transform.basis;
 
-		Vector<Vector3> samples;
-		samples.resize(4);
-		samples.write[0] = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0);
-		samples.write[1] = light_basis.xform(Vector3(-area_side_a, area_side_b, 0) / 2.0);
-		samples.write[2] = light_basis.xform(Vector3(area_side_a, -area_side_b, 0) / 2.0);
-		samples.write[3] = light_basis.xform(Vector3(-area_side_a, -area_side_b, 0) / 2.0);
+		uint32_t columns = 8;
+		uint32_t sample_count = 64;
+		uint32_t row = p_pass / columns;
+		uint32_t col = p_pass % columns;
+		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * col / columns, area_side_b * row / columns, 0));
 
 		light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
-		light_transform = light_transform.translated(samples[p_pass]);
+		light_transform = light_transform.translated(sample);
 
 		zfar = light_storage->light_get_param(base, RS::LIGHT_PARAM_RANGE) + area_diagonal;
 

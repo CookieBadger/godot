@@ -1043,7 +1043,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		// there is a shadowmap
 
 		// TODO: this should probably be turned into a uniform with the FASSALSS implementation
-		uint area_soft_shadow_samples = 4;
+		uint area_soft_shadow_samples = 64;
+		uint columns = 8;
 
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
@@ -1058,20 +1059,20 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_a;
 		vec3 world_side_b = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_b;
 
-		// Array of offset vectors to the corner points in World space
-		vec3 samples[4] = vec3[4](
-				(world_side_a + world_side_b) / 2.0,
-				(-world_side_a + world_side_b) / 2.0,
-				(world_side_a - world_side_b) / 2.0,
-				(-world_side_a - world_side_b) / 2.0);
 		float inv_depth_range = 1.0 / (1.0 / custom_lights.data[idx].inv_radius + len_diagonal);
 
 		float avg = 0.0;
 		for (uint i = 0; i < area_soft_shadow_samples; i++) {
+			uint row = i / columns;
+			uint col = i % columns;
+
+			// top right corner - (col/columns*side_a, row/columns*side_b)
+			vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * col / columns + world_side_b * row / columns);
+
 			// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
 			// for area lights, shadow_matrix stores the inverse transform
 			mat4 sample_mat = scene_data_block.data.inv_view_matrix;
-			sample_mat[3] -= vec4(samples[i].x, samples[i].y, samples[i].z, 0.0);
+			sample_mat[3] -= vec4(sample_pos, 0.0);
 			mat4 shadow_sample_matrix = custom_lights.data[idx].shadow_matrix * sample_mat;
 
 			vec3 local_vert = (shadow_sample_matrix * vec4(vertex, 1.0)).xyz;
@@ -1091,8 +1092,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
 			vec4 uv_rect = base_uv_rect;
-
-			vec2 sample_atlas_offset = i * vec2(custom_lights.data[idx].atlas_rect.z, 0.0);
+			// TODO: need to adjust row and col for several area lights.
+			vec2 sample_atlas_offset = vec2(col * custom_lights.data[idx].atlas_rect.z, row * custom_lights.data[idx].atlas_rect.w);
 
 			//if (uv_rect.x + sample_atlas_offset.x >= quadrant_limit_x) { // can replace if with while
 			//sample_atlas_offset += vec2(-quadrant_width, custom_lights.data[idx].atlas_rect.w);

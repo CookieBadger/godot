@@ -2549,7 +2549,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			// 1. render shadows same as a point light does (single paraboloid)
 			RENDER_TIMESTAMP("Cull CustomLight3D Shadow");
 
-			int sample_count = 4; // how many light samples do we want to take? for now, one at each corner
+			int sample_count = 64; // how many light samples do we want to take? for now, 64
 
 			if (max_shadows_used + sample_count > MAX_UPDATE_SHADOWS) {
 				return true;

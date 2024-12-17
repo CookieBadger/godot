@@ -4767,6 +4767,12 @@ void Viewport::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_positional_shadow_atlas_16_bits", "enable"), &Viewport::set_positional_shadow_atlas_16_bits);
 	ClassDB::bind_method(D_METHOD("get_positional_shadow_atlas_16_bits"), &Viewport::get_positional_shadow_atlas_16_bits);
 
+	ClassDB::bind_method(D_METHOD("set_area_shadow_atlas_size", "size"), &Viewport::set_area_shadow_atlas_size);
+	ClassDB::bind_method(D_METHOD("get_area_shadow_atlas_size"), &Viewport::get_area_shadow_atlas_size);
+
+	ClassDB::bind_method(D_METHOD("set_area_shadow_atlas_16_bits", "enable"), &Viewport::set_area_shadow_atlas_16_bits);
+	ClassDB::bind_method(D_METHOD("get_area_shadow_atlas_16_bits"), &Viewport::get_area_shadow_atlas_16_bits);
+
 	ClassDB::bind_method(D_METHOD("set_snap_controls_to_pixels", "enabled"), &Viewport::set_snap_controls_to_pixels);
 	ClassDB::bind_method(D_METHOD("is_snap_controls_to_pixels_enabled"), &Viewport::is_snap_controls_to_pixels_enabled);
 
@@ -4778,6 +4784,9 @@ void Viewport::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_positional_shadow_atlas_quadrant_subdiv", "quadrant", "subdiv"), &Viewport::set_positional_shadow_atlas_quadrant_subdiv);
 	ClassDB::bind_method(D_METHOD("get_positional_shadow_atlas_quadrant_subdiv", "quadrant"), &Viewport::get_positional_shadow_atlas_quadrant_subdiv);
+
+	ClassDB::bind_method(D_METHOD("set_area_shadow_atlas_subdiv", "quadrant", "subdiv"), &Viewport::set_area_shadow_atlas_subdiv);
+	ClassDB::bind_method(D_METHOD("get_area_shadow_atlas_subdiv", "quadrant"), &Viewport::get_area_shadow_atlas_subdiv);
 
 	ClassDB::bind_method(D_METHOD("set_input_as_handled"), &Viewport::set_input_as_handled);
 	ClassDB::bind_method(D_METHOD("is_input_handled"), &Viewport::is_input_handled);
@@ -4906,6 +4915,11 @@ void Viewport::_bind_methods() {
 	ADD_GROUP("SDF", "sdf_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sdf_oversize", PROPERTY_HINT_ENUM, "100%,120%,150%,200%"), "set_sdf_oversize", "get_sdf_oversize");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sdf_scale", PROPERTY_HINT_ENUM, "100%,50%,25%"), "set_sdf_scale", "get_sdf_scale");
+	ADD_GROUP("Area Shadow Atlas", "area_shadow_atlas_"); // TODO: move to end
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "area_shadow_atlas_size"), "set_area_shadow_atlas_size", "get_area_shadow_atlas_size");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "area_shadow_atlas_16_bits"), "set_area_shadow_atlas_16_bits", "get_area_shadow_atlas_16_bits");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "area_shadow_atlas_subdivision", PROPERTY_HINT_ENUM, "Disabled,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), "set_area_shadow_atlas_subdiv", "get_area_shadow_atlas_subdiv");
+
 	ADD_GROUP("Positional Shadow Atlas", "positional_shadow_atlas_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "positional_shadow_atlas_size"), "set_positional_shadow_atlas_size", "get_positional_shadow_atlas_size");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "positional_shadow_atlas_16_bits"), "set_positional_shadow_atlas_16_bits", "get_positional_shadow_atlas_16_bits");
@@ -4928,6 +4942,14 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(SHADOW_ATLAS_QUADRANT_SUBDIV_256);
 	BIND_ENUM_CONSTANT(SHADOW_ATLAS_QUADRANT_SUBDIV_1024);
 	BIND_ENUM_CONSTANT(SHADOW_ATLAS_QUADRANT_SUBDIV_MAX);
+
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_DISABLED);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_4);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_16);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_64);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_256);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_1024);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_MAX);
 
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR);
@@ -5049,6 +5071,8 @@ Viewport::Viewport() {
 	set_positional_shadow_atlas_quadrant_subdiv(1, SHADOW_ATLAS_QUADRANT_SUBDIV_4);
 	set_positional_shadow_atlas_quadrant_subdiv(2, SHADOW_ATLAS_QUADRANT_SUBDIV_16);
 	set_positional_shadow_atlas_quadrant_subdiv(3, SHADOW_ATLAS_QUADRANT_SUBDIV_64);
+
+	set_area_shadow_atlas_size(area_shadow_atlas_size);
 
 	set_mesh_lod_threshold(mesh_lod_threshold);
 

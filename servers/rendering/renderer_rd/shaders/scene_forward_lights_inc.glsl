@@ -1046,11 +1046,11 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		uint area_soft_shadow_samples = 16;
 		uint columns = 4;
 
-		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
+		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
 		// This offset is required if we decide to do soft sampling (sample kernel around actual point)
-		//base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
-		//base_uv_rect.zw -= texel_size * 2.0;
+		base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
+		base_uv_rect.zw -= texel_size * 2.0;
 
 		//float quadrant_width = 0.5;
 		//float quadrant_limit_x = custom_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
@@ -1102,10 +1102,12 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 			uv_rect.xy += sample_atlas_offset;
 
-			// TODO (discuss): use sample_omni_pcf_shadow for soft sampling
 			pos = pos * 0.5 + 0.5;
 			pos = uv_rect.xy + pos * uv_rect.zw;
-			avg += textureProj(sampler2DShadow(area_shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
+
+			vec2 shadow_pixel_size = custom_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
+
+			avg += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
 		}
 
 		float avg_shadow = avg * (1.0 / float(area_soft_shadow_samples));

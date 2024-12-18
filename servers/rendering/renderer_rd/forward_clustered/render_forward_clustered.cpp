@@ -2486,6 +2486,11 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		atlas_rect.position.x = ((shadow + p_pass) % subdivision) * atlas_rect.size.x;
 		atlas_rect.position.y = ((shadow + p_pass) / subdivision) * atlas_rect.size.x;
 
+		atlas_rect.position.x += 1;
+		atlas_rect.position.y += 1;
+		atlas_rect.size.x -= 2;
+		atlas_rect.size.y -= 2;
+
 		using_dual_paraboloid = true;
 		float area_side_a = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_A);
 		float area_side_b = light_storage->light_get_param(base, RS::LIGHT_PARAM_AREA_SIDE_B);

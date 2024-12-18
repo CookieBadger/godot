@@ -518,7 +518,7 @@ void LightStorage::light_instance_set_shadow_transform(RID p_light_instance, con
 	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
 	ERR_FAIL_NULL(light_instance);
 
-	ERR_FAIL_INDEX(p_pass, 64); // TODO: get max value from project settings here?
+	ERR_FAIL_INDEX(p_pass, 16); // TODO: get max value from project settings here?
 
 	light_instance->shadow_transform[p_pass].camera = p_projection;
 	light_instance->shadow_transform[p_pass].transform = p_transform;

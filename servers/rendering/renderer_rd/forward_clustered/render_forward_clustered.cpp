@@ -2494,8 +2494,8 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 		Basis light_basis = light_transform.basis;
 
-		uint32_t columns = 8;
-		uint32_t sample_count = 64;
+		uint32_t columns = 4;
+		uint32_t sample_count = 16;
 		uint32_t row = p_pass / columns;
 		uint32_t col = p_pass % columns;
 		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * col / columns, area_side_b * row / columns, 0));

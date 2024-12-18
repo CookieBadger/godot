@@ -1043,8 +1043,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		// there is a shadowmap
 
 		// TODO: this should probably be turned into a uniform with the FASSALSS implementation
-		uint area_soft_shadow_samples = 64;
-		uint columns = 8;
+		uint area_soft_shadow_samples = 16;
+		uint columns = 4;
 
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;

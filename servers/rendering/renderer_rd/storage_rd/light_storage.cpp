@@ -1005,6 +1005,22 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.area_side_b[0] = area_vec_b.x;
 			light_data.area_side_b[1] = area_vec_b.y;
 			light_data.area_side_b[2] = area_vec_b.z;
+
+			uint32_t columns = 4;
+			uint32_t sample_count = 16;
+			uint32_t rows = sample_count / columns;
+
+			light_data.area_shadow_samples = sample_count;
+			for (uint32_t i = 0; i < sample_count; i++) {
+				uint32_t row = i / columns;
+				uint32_t col = i % columns;
+
+				light_data.map_idx[i] = i;
+				light_data.weights[i] = 1.0f;
+				light_data.shadow_samples[i * 2] = col / (float(columns - 1));
+				light_data.shadow_samples[i * 2 + 1] = row / (float(rows - 1));
+			}
+
 		}
 
 		light_data.mask = light->cull_mask;

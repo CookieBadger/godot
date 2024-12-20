@@ -135,6 +135,12 @@ private:
 
 	/* OMNI/SPOT LIGHT DATA */
 
+	struct AreaLightParams {
+		enum {
+			MAX_SHADOW_SAMPLES = 256,
+		};
+	};
+
 	struct LightData {
 		float position[3];
 		float inv_radius;
@@ -154,6 +160,7 @@ private:
 		float specular_amount;
 		float shadow_opacity;
 		uint32_t area_stochastic_samples;
+		uint32_t area_shadow_samples;
 		// 8 bytes are missing to complete this block, so ensure alignment in the next block
 		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
@@ -166,6 +173,11 @@ private:
 		float volumetric_fog_energy;
 		uint32_t bake_mode;
 		float projector_rect[4];
+
+		
+		uint32_t map_idx[AreaLightParams::MAX_SHADOW_SAMPLES];
+		float weights[AreaLightParams::MAX_SHADOW_SAMPLES];
+		float shadow_samples[AreaLightParams::MAX_SHADOW_SAMPLES * 2]; // vec2
 	};
 
 	struct LightInstanceDepthSort {

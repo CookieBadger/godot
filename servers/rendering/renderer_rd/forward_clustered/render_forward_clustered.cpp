@@ -1452,6 +1452,26 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	if (render_shadows) {
 		_render_shadow_begin();
 
+		// for (each area light) {
+		//     list<quad> quads = full_area_light_quad (four corners of area light)
+		//     map<point_idx, point> new_points = {four corners of area light}
+		//	   for (each quad) {
+		//         for (each point in quad) {
+		//			   if (new_points contains point) {
+		//                 render shadow map for point.
+		//                 remove from new_points
+		//             }
+		//         }
+		//         // render pass for the quad only, or for all the shadow maps we have rendered so far? ig just the quad is sufficient.
+		//		   render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
+		//         in fragment shader:
+		//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
+		//         too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
+		//         if (too much banding) {
+		//		       introduce new point in the middle of the quad. add four new quads.
+		//         }
+		//     }
+		// }
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
@@ -2501,9 +2521,10 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 		uint32_t columns = 4;
 		uint32_t sample_count = 16;
+		uint32_t rows = sample_count / columns;
 		uint32_t row = p_pass / columns;
 		uint32_t col = p_pass % columns;
-		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * col / columns, area_side_b * row / columns, 0));
+		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * col / (columns-1), area_side_b * row / (rows-1), 0));
 
 		light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
 		light_transform = light_transform.translated(sample);

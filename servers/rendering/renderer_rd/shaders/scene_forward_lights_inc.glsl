@@ -1042,8 +1042,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	if (custom_lights.data[idx].shadow_opacity > 0.001) {
 		// there is a shadowmap
 
-		// TODO: this should probably be turned into a uniform with the FASSALSS implementation
-		uint area_soft_shadow_samples = 16;
+		// TODO: make this a uniform in scene data probably
+		// uint columns = scene_data_block.data.area_shadow_atlas_subdivision
 		uint columns = 4;
 
 		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
@@ -1062,12 +1062,18 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		float inv_depth_range = 1.0 / (1.0 / custom_lights.data[idx].inv_radius + len_diagonal);
 
 		float avg = 0.0;
-		for (uint i = 0; i < area_soft_shadow_samples; i++) {
-			uint row = i / columns;
-			uint col = i % columns;
+		float weight_sum = 0.0;
+		for (uint i = 0; i < custom_lights.data[idx].area_shadow_samples; i++) {
+			// TODO: create uniform arrays: uint area_shadow_samples, vec2 shadow_samples, uint map_idx, float weight
+			vec2 sample_on_light = custom_lights.data[idx].shadow_samples[i]; // where is point i on the light, relative to the light's topright corner
+			uint map_idx = custom_lights.data[idx].map_idx[i]; // where is point i on the shadow map
+			float weight = custom_lights.data[idx].weights[i]; // weight of this sample (depends on subdivision level in its area)
 
-			// top right corner - (col/columns*side_a, row/columns*side_b)
-			vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * col / columns + world_side_b * row / columns);
+			uint row = map_idx / columns;
+			uint col = map_idx % columns;
+
+			// position of point on light in view space
+			vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);
 
 			// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
 			// for area lights, shadow_matrix stores the inverse transform
@@ -1107,10 +1113,11 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 			vec2 shadow_pixel_size = custom_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 
-			avg += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
+			avg += weight * sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
+			weight_sum += weight;
 		}
 
-		float avg_shadow = avg * (1.0 / float(area_soft_shadow_samples));
+		float avg_shadow = avg / weight_sum;
 
 		return mix(1.0, avg_shadow, custom_lights.data[idx].shadow_opacity);
 	}

@@ -2,6 +2,8 @@
 #define LIGHT_BAKE_STATIC 1
 #define LIGHT_BAKE_DYNAMIC 2
 
+#define MAX_AREA_LIGHT_SHADOW_SAMPLES 256
+
 struct LightData { //this structure needs to be as packed as possible
 	highp vec3 position;
 	highp float inv_radius;
@@ -21,6 +23,7 @@ struct LightData { //this structure needs to be as packed as possible
 	mediump float specular_amount;
 	mediump float shadow_opacity;
 	uint area_stochastic_samples;
+	uint area_shadow_samples;
 
 	highp vec4 atlas_rect; // rect in the shadow atlas
 	highp mat4 shadow_matrix;
@@ -33,6 +36,11 @@ struct LightData { //this structure needs to be as packed as possible
 	mediump float volumetric_fog_energy;
 	uint bake_mode;
 	highp vec4 projector_rect; //projector rect in srgb decal atlas
+
+	// 256 is the max amount of samples
+	uint map_idx[MAX_AREA_LIGHT_SHADOW_SAMPLES];
+	float weights[MAX_AREA_LIGHT_SHADOW_SAMPLES];
+	vec2 shadow_samples[MAX_AREA_LIGHT_SHADOW_SAMPLES];
 };
 
 #define REFLECTION_AMBIENT_DISABLED 0

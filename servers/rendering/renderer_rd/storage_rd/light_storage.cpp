@@ -1011,6 +1011,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			uint32_t rows = sample_count / columns;
 
 			light_data.area_shadow_samples = sample_count;
+			light_data.area_map_subdivision = columns;
 			for (uint32_t i = 0; i < sample_count; i++) {
 				uint32_t row = i / columns;
 				uint32_t col = i % columns;

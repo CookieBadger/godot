@@ -1043,8 +1043,6 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 		// there is a shadowmap
 
 		// TODO: make this a uniform in scene data probably
-		// uint columns = scene_data_block.data.area_shadow_atlas_subdivision
-		uint columns = 4;
 
 		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
@@ -1069,8 +1067,8 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			uint map_idx = custom_lights.data[idx].map_idx[i]; // where is point i on the shadow map
 			float weight = custom_lights.data[idx].weights[i]; // weight of this sample (depends on subdivision level in its area)
 
-			uint row = map_idx / columns;
-			uint col = map_idx % columns;
+			uint row = map_idx / custom_lights.data[idx].area_map_subdivision;
+			uint col = map_idx % custom_lights.data[idx].area_map_subdivision;
 
 			// position of point on light in view space
 			vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);

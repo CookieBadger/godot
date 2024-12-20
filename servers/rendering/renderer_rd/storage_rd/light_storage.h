@@ -178,6 +178,8 @@ private:
 		uint32_t map_idx[AreaLightParams::MAX_SHADOW_SAMPLES];
 		float weights[AreaLightParams::MAX_SHADOW_SAMPLES];
 		float shadow_samples[AreaLightParams::MAX_SHADOW_SAMPLES * 2]; // vec2
+
+		uint32_t area_map_subdivision;
 	};
 
 	struct LightInstanceDepthSort {

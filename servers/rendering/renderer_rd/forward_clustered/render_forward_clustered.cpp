@@ -1405,6 +1405,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	p_render_data->cube_shadows.clear();
 	p_render_data->shadows.clear();
 	p_render_data->directional_shadows.clear();
+	p_render_data->area_shadows.clear();
 
 	float lod_distance_multiplier = p_render_data->scene_data->cam_projection.get_lod_multiplier();
 	{
@@ -1416,6 +1417,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				p_render_data->directional_shadows.push_back(i);
 			} else if (light_storage->light_get_type(base) == RS::LIGHT_OMNI && light_storage->light_omni_get_shadow_mode(base) == RS::LIGHT_OMNI_SHADOW_CUBE) {
 				p_render_data->cube_shadows.push_back(i);
+			} else if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
+				p_render_data->area_shadows.push_back(i);
 			} else { // RS::LIGHT_OMNI with Dual Paraboloid mode or RS::LIGHT_CUSTOM or RS::LIGHT_SPOT
 				p_render_data->shadows.push_back(i);
 			}
@@ -1437,7 +1440,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
+	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size() || p_render_data->area_shadows.size();
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -1479,41 +1482,35 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
 		//render positional shadows
-		//for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-		//	_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
-		//}
+		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
+		}
 		
 		//for each area light {
 
 		// } // for each area light
 
-		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
+		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) {
 			Vector<Vector2> area_shadow_samples;
 			Vector<uint32_t> area_shadow_map_indices;
 
-			RID base = light_storage->light_instance_get_base_light(p_render_data->render_shadows[p_render_data->shadows[i]].light);
+			uint32_t columns = 4;
+			uint32_t sample_count = 16;
+			uint32_t rows = sample_count / columns;
 
-			if (light_storage->light_get_type(base) != RS::LIGHT_CUSTOM) {
-				_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
-			} else {
-				uint32_t columns = 4;
-				uint32_t sample_count = 16;
-				uint32_t rows = sample_count / columns;
+			for (uint32_t j = 0; j < sample_count; j++) {
+				uint32_t row = j / columns;
+				uint32_t col = j % columns;
 
-				for (uint32_t j = 0; j < sample_count; j++) {
-					uint32_t row = j / columns;
-					uint32_t col = j % columns;
+				area_shadow_map_indices.push_back(j);
+				float x = col / (float(columns - 1));
+				float y = row / (float(rows - 1));
+				area_shadow_samples.push_back(Vector2(x, y));
+			}
+			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_map_subdivision, area_shadow_samples, area_shadow_map_indices);
 
-					area_shadow_map_indices.push_back(j);
-					float x = col / (float(columns - 1));
-					float y = row / (float(rows - 1));
-					area_shadow_samples.push_back(Vector2(x, y));
-				}
-				light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->shadows[i]].light, area_shadow_map_subdivision, area_shadow_samples, area_shadow_map_indices);
-
-				for (uint32_t k = 0; k < sample_count; k++) {
-					_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, k, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, k == 0, k == sample_count - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
-				}
+			for (uint32_t k = 0; k < sample_count; k++) {
+				_render_shadow_pass(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, k, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, k == 0, k == sample_count - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
 			}
 		}
 

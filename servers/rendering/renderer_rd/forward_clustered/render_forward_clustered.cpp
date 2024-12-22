@@ -1472,13 +1472,39 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		//         }
 		//     }
 		// }
+
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			// Problem: this is called for each shadow map of all positional lights, so it does not make a lot of sense to do set_shadow_samples each time.
+			// Instead, it should be done once per light.
+			Vector<Vector2> area_shadow_samples;
+			Vector<uint32_t> area_shadow_map_indices;
+			uint32_t area_shadow_map_subdivision = 4;
+
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
+
+			RID base = light_storage->light_instance_get_base_light(p_render_data->render_shadows[p_render_data->shadows[i]].light);
+
+			if (light_storage->light_get_type(base) == RS::LIGHT_CUSTOM) {
+				uint32_t columns = 4;
+				uint32_t sample_count = 16;
+				uint32_t rows = sample_count / columns;
+
+				for (uint32_t i = 0; i < sample_count; i++) {
+					uint32_t row = i / columns;
+					uint32_t col = i % columns;
+
+					area_shadow_map_indices.push_back(i);
+					float x = col / (float(columns - 1));
+					float y = row / (float(rows - 1));
+					area_shadow_samples.push_back(Vector2(x, y));
+				}
+			}
+			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->shadows[i]].light, area_shadow_map_subdivision, area_shadow_samples, area_shadow_map_indices);
 		}
 
 		_render_shadow_process();
@@ -2408,7 +2434,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 	}
 }
 
-void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, RID p_area_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform) {
+void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, RID p_area_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, int p_area_shadow_map_subdivision) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -2519,8 +2545,8 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 		Basis light_basis = light_transform.basis;
 
-		uint32_t columns = 4;
-		uint32_t sample_count = 16;
+		uint32_t columns = p_area_shadow_map_subdivision;
+		uint32_t sample_count = p_area_shadow_map_subdivision * p_area_shadow_map_subdivision;
 		uint32_t rows = sample_count / columns;
 		uint32_t row = p_pass / columns;
 		uint32_t col = p_pass % columns;

@@ -128,6 +128,11 @@ private:
 
 		ForwardID forward_id = -1;
 
+		// TODO: extract these with an abstraction of LightInstance? Or move to LightStorage::Light (above)?
+		uint32_t area_shadow_atlas_subdivision;
+		Vector<Vector2> area_shadow_samples;
+		Vector<uint32_t> area_shadow_map_indices;
+
 		LightInstance() {}
 	};
 
@@ -643,6 +648,7 @@ public:
 	virtual void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override;
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override;
 	virtual void light_instance_mark_visible(RID p_light_instance) override;
+	virtual void area_light_instance_set_shadow_samples(RID p_area_light_instance, uint32_t p_area_shadow_atlas_subdivision, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) override;
 
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override {
 		const LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);

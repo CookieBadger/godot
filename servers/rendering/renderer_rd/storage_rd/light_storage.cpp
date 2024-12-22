@@ -530,6 +530,15 @@ void LightStorage::light_instance_set_shadow_transform(RID p_light_instance, con
 	light_instance->shadow_transform[p_pass].uv_scale = p_uv_scale;
 }
 
+void LightStorage::area_light_instance_set_shadow_samples(RID p_area_light_instance, uint32_t p_area_shadow_atlas_subdivision, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) {
+	LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
+	ERR_FAIL_NULL(light_instance);
+
+	light_instance->area_shadow_atlas_subdivision = p_area_shadow_atlas_subdivision;
+	light_instance->area_shadow_map_indices = p_area_shadow_map_indices;
+	light_instance->area_shadow_samples = p_area_shadow_samples;
+}
+
 void LightStorage::light_instance_mark_visible(RID p_light_instance) {
 	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
 	ERR_FAIL_NULL(light_instance);
@@ -1006,20 +1015,16 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.area_side_b[1] = area_vec_b.y;
 			light_data.area_side_b[2] = area_vec_b.z;
 
-			uint32_t columns = 4;
-			uint32_t sample_count = 16;
-			uint32_t rows = sample_count / columns;
-
-			light_data.area_shadow_samples = sample_count;
-			light_data.area_map_subdivision = columns;
-			for (uint32_t i = 0; i < sample_count; i++) {
-				uint32_t row = i / columns;
-				uint32_t col = i % columns;
+			light_data.area_shadow_samples = light_instance->area_shadow_samples.size();
+			light_data.area_map_subdivision = light_instance->area_shadow_atlas_subdivision;
+			for (uint32_t i = 0; i < light_instance->area_shadow_samples.size(); i++) {
+				uint32_t row = i / light_instance->area_shadow_atlas_subdivision;
+				uint32_t col = i % light_instance->area_shadow_atlas_subdivision;
 
 				light_data.map_idx[i] = i;
 				light_data.weights[i] = 1.0f;
-				light_data.shadow_samples[i * 2] = col / (float(columns - 1));
-				light_data.shadow_samples[i * 2 + 1] = row / (float(rows - 1));
+				light_data.shadow_samples[i * 2] = light_instance->area_shadow_samples[i].x;
+				light_data.shadow_samples[i * 2 + 1] = light_instance->area_shadow_samples[i].y;
 			}
 
 		}

@@ -2549,9 +2549,8 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			// 1. render shadows same as a point light does (single paraboloid)
 			RENDER_TIMESTAMP("Cull CustomLight3D Shadow");
 
-			int sample_count = 16; // how many light samples do we want to take? for now, 64
-
-			if (max_shadows_used + sample_count > MAX_UPDATE_SHADOWS) {
+			// TODO: define an own maximum here for area lights
+			if (max_shadows_used + 1 > MAX_UPDATE_SHADOWS) {
 				return true;
 			}
 
@@ -2594,32 +2593,30 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 				light_culler->cull_regular_light(instance_shadow_cull_result);
 			}
 
-			// TODO: re-evaluate if culling could just be done once
-			for (int i = 0; i < sample_count; i++) {
-				RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
+			RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
-				for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
-					Instance *instance = instance_shadow_cull_result[j];
-					if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
-						continue;
-					} else {
-						if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
-							animated_material_found = true;
-						}
-
-						if (instance->mesh_instance.is_valid()) {
-							RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
-						}
+			for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
+				Instance *instance = instance_shadow_cull_result[j];
+				if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
+					continue;
+				} else {
+					if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
+						animated_material_found = true;
 					}
-					shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
+
+					if (instance->mesh_instance.is_valid()) {
+						RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
+					}
 				}
-
-				RSG::mesh_storage->update_mesh_instances();
-
-				RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, i, 0);
-				shadow_data.light = light->instance;
-				shadow_data.pass = i;
+				shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
 			}
+
+			RSG::mesh_storage->update_mesh_instances();
+
+			RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, 0, 0);
+			shadow_data.light = light->instance;
+			shadow_data.pass = 0;
+			
 		} break;
 	}
 

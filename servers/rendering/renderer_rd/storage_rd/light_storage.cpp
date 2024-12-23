@@ -530,11 +530,10 @@ void LightStorage::light_instance_set_shadow_transform(RID p_light_instance, con
 	light_instance->shadow_transform[p_pass].uv_scale = p_uv_scale;
 }
 
-void LightStorage::area_light_instance_set_shadow_samples(RID p_area_light_instance, uint32_t p_area_shadow_atlas_subdivision, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) {
+void LightStorage::area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) {
 	LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
 	ERR_FAIL_NULL(light_instance);
 
-	light_instance->area_shadow_atlas_subdivision = p_area_shadow_atlas_subdivision;
 	light_instance->area_shadow_map_indices = p_area_shadow_map_indices;
 	light_instance->area_shadow_samples = p_area_shadow_samples;
 }
@@ -1016,10 +1015,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.area_side_b[2] = area_vec_b.z;
 
 			light_data.area_shadow_samples = light_instance->area_shadow_samples.size();
-			light_data.area_map_subdivision = light_instance->area_shadow_atlas_subdivision;
+			light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
 			for (uint32_t i = 0; i < light_instance->area_shadow_samples.size(); i++) {
-				uint32_t row = i / light_instance->area_shadow_atlas_subdivision;
-				uint32_t col = i % light_instance->area_shadow_atlas_subdivision;
+				uint32_t row = i / light_data.area_map_subdivision;
+				uint32_t col = i % light_data.area_map_subdivision;
 
 				light_data.map_idx[i] = i;
 				light_data.weights[i] = 1.0f;

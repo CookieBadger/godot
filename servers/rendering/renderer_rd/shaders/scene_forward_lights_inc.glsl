@@ -1067,6 +1067,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			uint map_idx = custom_lights.data[idx].map_idx[i]; // where is point i on the shadow map
 			float weight = custom_lights.data[idx].weights[i]; // weight of this sample (depends on subdivision level in its area)
 
+			// TODO: area_map_subdivision needed? or can we just calculate subdivision from atlas_rect.size and size of area_shadow_atlas?
 			uint row = map_idx / custom_lights.data[idx].area_map_subdivision;
 			uint col = map_idx % custom_lights.data[idx].area_map_subdivision;
 

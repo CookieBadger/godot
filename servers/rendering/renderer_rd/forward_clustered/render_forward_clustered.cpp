@@ -1455,35 +1455,13 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	if (render_shadows) {
 		_render_shadow_begin();
 
-		// for (each area light) {
-		//     list<quad> quads = full_area_light_quad (four corners of area light)
-		//     map<point_idx, point> new_points = {four corners of area light}
-		//	   while (quads not empty) {
-		//         for (each point in quad) {
-		//			   if (new_points contains point) {
-		//                 render shadow map for point.
-		//                 remove from new_points
-		//             }
-		//         }
-		//         // render pass for the quad only, or for all the shadow maps we have rendered so far? ig just the quad is sufficient.
-		//		   render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
-		//         in fragment shader:
-		//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
-		//         too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
-		//         if (too much banding) {
-		//		       introduce new point in the middle of the quad. add four new quads.
-		//         }
-		//     }
-		// }
-		const uint32_t area_shadow_map_subdivision = 4;
-
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
 		
 		//for each area light {
@@ -1491,27 +1469,40 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		// } // for each area light
 
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) {
+			Vector<Rect2> quads; // todo
+			quads.push_back(Rect2(0.0, 0.0, 1.0, 1.0));
+			HashMap<Vector2, uint32_t> point_index_map; // TODO: verify that hashmap actually works with Vector2. Alternative: Custom Vector2 with fractions (4 ints)
 			Vector<Vector2> area_shadow_samples;
 			Vector<uint32_t> area_shadow_map_indices;
 
-			uint32_t columns = 4;
-			uint32_t sample_count = 16;
-			uint32_t rows = sample_count / columns;
+			const uint32_t area_shadow_map_subdivision = 2;
 
-			for (uint32_t j = 0; j < sample_count; j++) {
-				uint32_t row = j / columns;
-				uint32_t col = j % columns;
-
-				area_shadow_map_indices.push_back(j);
-				float x = col / (float(columns - 1));
-				float y = row / (float(rows - 1));
-				area_shadow_samples.push_back(Vector2(x, y));
+			int pass = 0;
+			for (uint32_t q = 0; q < quads.size(); q++) { // while quads not empty
+				Vector2 points_in_quad[4] = { Vector2(quads[q].get_position()), Vector2(quads[q].get_position().x + quads[q].get_size().x, quads[q].get_position().y), Vector2(quads[q].get_position().x, quads[q].get_position().y + quads[q].get_size().y), Vector2(quads[q].get_end()) };
+				
+				for (uint32_t p = 0; p < 4; p++) { // for each point in quad
+					if (!point_index_map.has(points_in_quad[p])) {
+						point_index_map[points_in_quad[p]] = pass; // TODO: = count of used area light shadow maps + pass
+						area_shadow_samples.push_back(points_in_quad[p]);
+						area_shadow_map_indices.push_back(pass);
+						_render_shadow_pass(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, pass, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, pass == 0, false, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, points_in_quad[p]);
+						pass++;
+					}
+				}
+				// if (area_shadow_samples + 5 <= max_samples) { // 5 is the maximum amount of maps that we can add.
+				// // render pass for the quad only
+				//     render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
+				//         in fragment shader:
+				//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
+				//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
+				//     if (too much banding) {
+				//    	introduce new point in the middle of the quad. add four new quads.
+				//     }
+				// }
 			}
-			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_map_subdivision, area_shadow_samples, area_shadow_map_indices);
-
-			for (uint32_t k = 0; k < sample_count; k++) {
-				_render_shadow_pass(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, k, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, k == 0, k == sample_count - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, area_shadow_map_subdivision);
-			}
+			
+			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices);
 		}
 
 		_render_shadow_process();
@@ -2441,7 +2432,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 	}
 }
 
-void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, RID p_area_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, int p_area_shadow_map_subdivision) {
+void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, RID p_area_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, Vector2 area_light_sample_pos) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -2552,12 +2543,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 		Basis light_basis = light_transform.basis;
 
-		uint32_t columns = p_area_shadow_map_subdivision;
-		uint32_t sample_count = p_area_shadow_map_subdivision * p_area_shadow_map_subdivision;
-		uint32_t rows = sample_count / columns;
-		uint32_t row = p_pass / columns;
-		uint32_t col = p_pass % columns;
-		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * col / (columns-1), area_side_b * row / (rows-1), 0));
+		Vector3 sample = light_basis.xform(Vector3(area_side_a, area_side_b, 0) / 2.0 - Vector3(area_side_a * area_light_sample_pos.x, area_side_b * area_light_sample_pos.y, 0));
 
 		light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
 		light_transform = light_transform.translated(sample);

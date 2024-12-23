@@ -1475,9 +1475,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			Vector<Vector2> area_shadow_samples;
 			Vector<uint32_t> area_shadow_map_indices;
 
-			const uint32_t area_shadow_map_subdivision = 2;
-
-			int pass = 0;
+			const uint32_t max_samples = 256;
+			uint32_t test_subdivision_count = 0;
+			uint32_t pass = 0;
 			for (uint32_t q = 0; q < quads.size(); q++) { // while quads not empty
 				Vector2 points_in_quad[4] = { Vector2(quads[q].get_position()), Vector2(quads[q].get_position().x + quads[q].get_size().x, quads[q].get_position().y), Vector2(quads[q].get_position().x, quads[q].get_position().y + quads[q].get_size().y), Vector2(quads[q].get_end()) };
 				
@@ -1490,16 +1490,22 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 						pass++;
 					}
 				}
-				// if (area_shadow_samples + 5 <= max_samples) { // 5 is the maximum amount of maps that we can add.
-				// // render pass for the quad only
+				if (area_shadow_samples.size() + 5 <= max_samples) { // 5 is the maximum amount of maps that we can add.
+				// render pass for the quad only
 				//     render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 				//         in fragment shader:
 				//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
 				//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
 				//     if (too much banding) {
-				//    	introduce new point in the middle of the quad. add four new quads.
-				//     }
-				// }
+					if (test_subdivision_count == 0) {
+						Vector2 half_size = quads[q].get_size() / 2.0;
+						quads.push_back(Rect2(quads[q].get_position(), half_size));
+						quads.push_back(Rect2(quads[q].get_position() + Vector2(half_size.x, 0.0), half_size));
+						quads.push_back(Rect2(quads[q].get_position() + Vector2(0.0, half_size.y), half_size));
+						quads.push_back(Rect2(quads[q].get_position() + half_size, half_size));
+						test_subdivision_count++;
+					}
+				}
 			}
 			
 			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices);

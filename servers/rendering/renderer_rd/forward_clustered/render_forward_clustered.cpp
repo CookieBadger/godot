@@ -1464,6 +1464,18 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
 
+		_render_shadow_process();
+	}
+
+	if (render_gi) {
+		gi.process_gi(rb, p_normal_roughness_slices, p_voxel_gi_buffer, p_render_data->environment, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances);
+	}
+
+	if (render_shadows) {
+		_render_shadow_end();
+	}
+
+	if (render_shadows) {
 		// render area shadows
 		uint32_t rendered_area_shadow_maps = 0;
 		uint32_t area_shadow_atlas_subdivision = light_storage->area_shadow_atlas_get_subdivision(p_render_data->area_shadow_atlas);
@@ -1480,7 +1492,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			uint32_t pass = 0;
 			for (uint32_t q = 0; q < quads.size(); q++) { // while quads not empty
 				Vector2 points_in_quad[4] = { Vector2(quads[q].get_position()), Vector2(quads[q].get_position().x + quads[q].get_size().x, quads[q].get_position().y), Vector2(quads[q].get_position().x, quads[q].get_position().y + quads[q].get_size().y), Vector2(quads[q].get_end()) };
-				
+
+				_render_shadow_begin();
 				for (uint32_t p = 0; p < 4; p++) { // for each point in quad
 					if (!point_index_map.has(points_in_quad[p])) {
 						point_index_map[points_in_quad[p]] = pass; // TODO: = count of used area light shadow maps + pass
@@ -1491,13 +1504,17 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 						rendered_area_shadow_maps++;
 					}
 				}
+				_render_shadow_process();
+				_render_shadow_end();
+
 				if (area_shadow_samples.size() + 5 <= possible_samples) { // 5 is the maximum amount of maps that we can add.
 				// render pass for the quad only
 				//     render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 				//         in fragment shader:
 				//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
 				//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
-				//     if (too much banding) {
+					bool banding_test = _render_area_shadow_test(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, quads[q], point_index_map);
+					//if (banding_test) {
 					if (test_subdivision_count == 0) {
 						Vector2 half_size = quads[q].get_size() / 2.0;
 						quads.push_back(Rect2(quads[q].get_position(), half_size));
@@ -1511,16 +1528,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			
 			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices);
 		}
-
-		_render_shadow_process();
-	}
-
-	if (render_gi) {
-		gi.process_gi(rb, p_normal_roughness_slices, p_voxel_gi_buffer, p_render_data->environment, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances);
-	}
-
-	if (render_shadows) {
-		_render_shadow_end();
 	}
 
 	if (rb_data.is_valid() && ss_effects) {
@@ -2763,6 +2770,11 @@ void RenderForwardClustered::_render_shadow_end() {
 	}
 
 	RD::get_singleton()->draw_command_end_label();
+}
+
+bool RenderForwardClustered::_render_area_shadow_test(RID p_light, RID p_area_shadow_atlas, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, const Rect2 &quad, const HashMap<Vector2, uint32_t> &point_idx_map) {
+	// TODO
+	return false;
 }
 
 void RenderForwardClustered::_render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) {

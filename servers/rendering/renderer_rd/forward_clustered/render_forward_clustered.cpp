@@ -1463,11 +1463,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
 			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
 		}
-		
-		//for each area light {
 
-		// } // for each area light
-
+		// render area shadows
+		uint32_t rendered_area_shadow_maps = 0;
+		uint32_t area_shadow_atlas_subdivision = light_storage->area_shadow_atlas_get_subdivision(p_render_data->area_shadow_atlas);
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) {
 			Vector<Rect2> quads; // todo
 			quads.push_back(Rect2(0.0, 0.0, 1.0, 1.0));
@@ -1476,7 +1475,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			Vector<uint32_t> area_shadow_map_indices;
 
 			const uint32_t max_samples = 256;
-			uint32_t test_subdivision_count = 0;
+			uint32_t possible_samples = MIN(max_samples, area_shadow_atlas_subdivision * area_shadow_atlas_subdivision - rendered_area_shadow_maps); // TODO: subtract already used samples
+			uint32_t test_subdivision_count = 0; // TODO: remove this, replace with banding check
 			uint32_t pass = 0;
 			for (uint32_t q = 0; q < quads.size(); q++) { // while quads not empty
 				Vector2 points_in_quad[4] = { Vector2(quads[q].get_position()), Vector2(quads[q].get_position().x + quads[q].get_size().x, quads[q].get_position().y), Vector2(quads[q].get_position().x, quads[q].get_position().y + quads[q].get_size().y), Vector2(quads[q].get_end()) };
@@ -1488,9 +1488,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 						area_shadow_map_indices.push_back(pass);
 						_render_shadow_pass(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, pass, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, pass == 0, false, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, points_in_quad[p]);
 						pass++;
+						rendered_area_shadow_maps++;
 					}
 				}
-				if (area_shadow_samples.size() + 5 <= max_samples) { // 5 is the maximum amount of maps that we can add.
+				if (area_shadow_samples.size() + 5 <= possible_samples) { // 5 is the maximum amount of maps that we can add.
 				// render pass for the quad only
 				//     render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 				//         in fragment shader:

@@ -3575,6 +3575,7 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 		case VIEW_DISPLAY_DEBUG_SHADOW_ATLAS:
 		case VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS:
 		case VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS:
+		case VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_ALBEDO:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_LIGHTING:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_EMISSION:
@@ -3605,6 +3606,7 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				VIEW_DISPLAY_DEBUG_SHADOW_ATLAS,
 				VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS,
 				VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS,
+				VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_ALBEDO,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_LIGHTING,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_EMISSION,
@@ -3637,6 +3639,7 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				Viewport::DEBUG_DRAW_SHADOW_ATLAS,
 				Viewport::DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS,
 				Viewport::DEBUG_DRAW_AREA_SHADOW_ATLAS,
+				Viewport::DEBUG_DRAW_AREA_SHADOW_REPROJECTION,
 				Viewport::DEBUG_DRAW_VOXEL_GI_ALBEDO,
 				Viewport::DEBUG_DRAW_VOXEL_GI_LIGHTING,
 				Viewport::DEBUG_DRAW_VOXEL_GI_EMISSION,
@@ -5285,6 +5288,7 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	display_submenu->add_radio_check_item(TTR("Shadow Atlas"), VIEW_DISPLAY_DEBUG_SHADOW_ATLAS);
 	display_submenu->add_radio_check_item(TTR("Directional Shadow Map"), VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS);
 	display_submenu->add_radio_check_item(TTR("Area Shadow Atlas"), VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS);
+	display_submenu->add_radio_check_item(TTR("Area Shadow Reprojection"), VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION);
 	display_submenu->add_separator();
 	display_submenu->add_radio_check_item(TTR("Decal Atlas"), VIEW_DISPLAY_DEBUG_DECAL_ATLAS);
 	display_submenu->add_separator();

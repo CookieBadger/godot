@@ -1571,8 +1571,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
 					//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
 					bool banding_test = _render_area_shadow_test(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, quads[q], point_index_map);
-					//if (banding_test) {
-					if (test_subdivision_count == 0) {
+					if (banding_test) {
+					//if (test_subdivision_count == 0) {
 						Vector2 half_size = quads[q].get_size() / 2.0;
 						quads.push_back(Rect2(quads[q].get_position(), half_size));
 						quads.push_back(Rect2(quads[q].get_position() + Vector2(half_size.x, 0.0), half_size));

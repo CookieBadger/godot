@@ -1596,7 +1596,7 @@ bool LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_insta
 	return false;
 }
 
-void LightStorage::area_shadow_atlas_update(RID p_atlas) {
+void LightStorage::area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) {
 	// nothing, same as shadow_atlas_update
 }
 

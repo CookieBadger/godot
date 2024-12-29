@@ -186,6 +186,8 @@ private:
 		uint32_t area_map_subdivision;
 	};
 
+	void _update_light_data(const Transform3D &p_inverse_transform, bool p_using_forward_ids, bool p_using_shadow, LightData *p_light_data_ptr, RS::LightType p_type, LightInstance *p_light_instance, uint32_t p_index, real_t p_distance, RenderDataRD *p_render_data, RID p_shadow_atlas, RID p_area_shadow_atlas);
+
 	struct LightInstanceDepthSort {
 		float depth;
 		LightInstance *light_instance;
@@ -899,6 +901,8 @@ public:
 		return false;
 	}
 	void update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, RID p_area_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows);
+
+	void set_area_reprojection_buffer(RenderDataRD *p_render_data, const Transform3D &p_camera_transform, RID p_light_instance, RID p_shadow_atlas, RID p_area_shadow_atlas);
 
 	/* REFLECTION PROBE */
 

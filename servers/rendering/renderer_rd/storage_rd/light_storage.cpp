@@ -625,8 +625,276 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 	directional_light_buffer = RD::get_singleton()->uniform_buffer_create(directional_light_buffer_size);
 }
 
+void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bool p_using_forward_ids, bool p_using_shadows, LightData *p_light_data_ptr, RS::LightType p_type, LightInstance *p_light_instance, uint32_t p_index, real_t p_distance, RenderDataRD *p_render_data, RID p_shadow_atlas, RID p_area_shadow_atlas) {
+	LightData light_data = *p_light_data_ptr;
+	Light *light = light_owner.get_or_null(p_light_instance->light);
+
+	if (p_using_forward_ids) { // TODO: investigate "forward id"
+		ForwardIDStorage::get_singleton()->map_forward_id(p_type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, p_light_instance->forward_id, p_index, p_light_instance->last_pass);
+	}
+
+	Transform3D light_transform = p_light_instance->transform;
+
+	float sign = light->negative ? -1 : 1;
+	Color linear_col = light->color.srgb_to_linear();
+
+	light_data.attenuation = light->param[RS::LIGHT_PARAM_ATTENUATION];
+
+	// Reuse fade begin, fade length and distance for shadow LOD determination later.
+	float fade_begin = 0.0;
+	float fade_shadow = 0.0;
+	float fade_length = 0.0;
+
+	float fade = 1.0;
+	float shadow_opacity_fade = 1.0;
+	if (light->distance_fade) {
+		fade_begin = light->distance_fade_begin;
+		fade_shadow = light->distance_fade_shadow;
+		fade_length = light->distance_fade_length;
+
+		// Use `smoothstep()` to make opacity changes more gradual and less noticeable to the player.
+		if (p_distance > fade_begin) {
+			fade = Math::smoothstep(0.0f, 1.0f, 1.0f - float(p_distance - fade_begin) / fade_length);
+		}
+
+		if (p_distance > fade_shadow) {
+			shadow_opacity_fade = Math::smoothstep(0.0f, 1.0f, 1.0f - float(p_distance - fade_shadow) / fade_length);
+		}
+	}
+
+	float energy = sign * light->param[RS::LIGHT_PARAM_ENERGY] * fade;
+
+	if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= light->param[RS::LIGHT_PARAM_INTENSITY];
+
+		// Convert from Luminous Power to Luminous Intensity
+		if (p_type == RS::LIGHT_OMNI) {
+			energy *= 1.0 / (Math_PI * 4.0);
+		} else if (p_type == RS::LIGHT_SPOT) {
+			// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
+			// We make this assumption to keep them easy to control.
+			energy *= 1.0 / Math_PI;
+		} else { // type == RS::LIGHT_CUSTOM
+			energy *= 1.0 / Math_PI;
+		}
+	} else {
+		energy *= Math_PI;
+	}
+
+	if (p_render_data->camera_attributes.is_valid()) {
+		energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
+
+	light_data.color[0] = linear_col.r * energy;
+	light_data.color[1] = linear_col.g * energy;
+	light_data.color[2] = linear_col.b * energy;
+	light_data.specular_amount = light->param[RS::LIGHT_PARAM_SPECULAR] * 2.0;
+	light_data.volumetric_fog_energy = light->param[RS::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY];
+	light_data.bake_mode = light->bake_mode;
+
+	float radius = MAX(0.001, light->param[RS::LIGHT_PARAM_RANGE]);
+	light_data.inv_radius = 1.0 / radius;
+
+	float area_side_a = light->param[RS::LIGHT_PARAM_AREA_SIDE_A];
+	float area_side_b = light->param[RS::LIGHT_PARAM_AREA_SIDE_B];
+
+	Vector3 pos = p_inverse_transform.xform(light_transform.origin);
+	if (p_type == RS::LIGHT_CUSTOM) {
+		pos = p_inverse_transform.xform(light_transform.xform(Vector3(-area_side_a / 2.0, -area_side_b / 2.0, 0.0)));
+	}
+
+	light_data.position[0] = pos.x;
+	light_data.position[1] = pos.y;
+	light_data.position[2] = pos.z;
+
+	Vector3 direction = p_inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, -1))).normalized();
+
+	light_data.direction[0] = direction.x;
+	light_data.direction[1] = direction.y;
+	light_data.direction[2] = direction.z;
+
+	float size = light->param[RS::LIGHT_PARAM_SIZE];
+
+	light_data.size = size;
+
+	light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
+	float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
+	light_data.area_stochastic_samples = light->param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES];
+	light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
+
+	if (p_type == RS::LIGHT_CUSTOM) {
+		Vector3 area_vec_a = p_inverse_transform.basis.xform(light_transform.basis.get_column(0)) * area_side_a;
+		Vector3 area_vec_b = p_inverse_transform.basis.xform(light_transform.basis.get_column(1)) * area_side_b;
+
+		light_data.area_side_a[0] = area_vec_a.x;
+		light_data.area_side_a[1] = area_vec_a.y;
+		light_data.area_side_a[2] = area_vec_a.z;
+
+		light_data.area_side_b[0] = area_vec_b.x;
+		light_data.area_side_b[1] = area_vec_b.y;
+		light_data.area_side_b[2] = area_vec_b.z;
+
+		light_data.area_shadow_samples = p_light_instance->area_shadow_samples.size();
+		light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
+		for (uint32_t i = 0; i < p_light_instance->area_shadow_samples.size(); i++) {
+			uint32_t row = i / light_data.area_map_subdivision;
+			uint32_t col = i % light_data.area_map_subdivision;
+
+			light_data.map_idx[i] = i;
+			light_data.weights[i] = 1.0f;
+			light_data.shadow_samples[i * 2] = p_light_instance->area_shadow_samples[i].x;
+			light_data.shadow_samples[i * 2 + 1] = p_light_instance->area_shadow_samples[i].y;
+		}
+	}
+
+	light_data.mask = light->cull_mask;
+
+	light_data.atlas_rect[0] = 0;
+	light_data.atlas_rect[1] = 0;
+	light_data.atlas_rect[2] = 0;
+	light_data.atlas_rect[3] = 0;
+
+	RID projector = light->projector;
+
+	if (projector.is_valid()) {
+		Rect2 rect = RendererRD::TextureStorage::get_singleton()->decal_atlas_get_texture_rect(projector);
+
+		if (p_type == RS::LIGHT_SPOT) {
+			light_data.projector_rect[0] = rect.position.x;
+			light_data.projector_rect[1] = rect.position.y + rect.size.height; //flip because shadow is flipped
+			light_data.projector_rect[2] = rect.size.width;
+			light_data.projector_rect[3] = -rect.size.height;
+		} else if (p_type == RS::LIGHT_CUSTOM) {
+			// TODO: replace with actual Area Light shadow implemenation
+			light_data.projector_rect[0] = rect.position.x;
+			light_data.projector_rect[1] = rect.position.y + rect.size.height; //flip because shadow is flipped
+			light_data.projector_rect[2] = rect.size.width;
+			light_data.projector_rect[3] = -rect.size.height;
+		} else {
+			light_data.projector_rect[0] = rect.position.x;
+			light_data.projector_rect[1] = rect.position.y;
+			light_data.projector_rect[2] = rect.size.width;
+			light_data.projector_rect[3] = rect.size.height * 0.5; //used by dp, so needs to be half
+		}
+	} else {
+		light_data.projector_rect[0] = 0;
+		light_data.projector_rect[1] = 0;
+		light_data.projector_rect[2] = 0;
+		light_data.projector_rect[3] = 0;
+	}
+
+	const bool needs_shadow =
+			p_using_shadows &&
+			(p_type == RS::LIGHT_CUSTOM ? owns_area_shadow_atlas(p_area_shadow_atlas) && area_shadow_atlas_owns_light_instance(p_area_shadow_atlas, p_light_instance->self)
+									  : owns_shadow_atlas(p_shadow_atlas) && shadow_atlas_owns_light_instance(p_shadow_atlas, p_light_instance->self)) &&
+			light->shadow;
+
+	bool in_shadow_range = true;
+	if (needs_shadow && light->distance_fade) {
+		if (p_distance > light->distance_fade_shadow + light->distance_fade_length) {
+			// Out of range, don't draw shadows to improve performance.
+			in_shadow_range = false;
+		}
+	}
+
+	if (needs_shadow && in_shadow_range) {
+		// fill in the shadow information
+
+		light_data.shadow_opacity = light->param[RS::LIGHT_PARAM_SHADOW_OPACITY] * shadow_opacity_fade;
+
+		float shadow_texel_size;
+
+		if (p_type == RS::LIGHT_CUSTOM) {
+			shadow_texel_size = light_instance_get_area_shadow_texel_size(p_light_instance->self, p_area_shadow_atlas);
+		} else {
+			shadow_texel_size = light_instance_get_shadow_texel_size(p_light_instance->self, p_shadow_atlas);
+		}
+		light_data.shadow_normal_bias = light->param[RS::LIGHT_PARAM_SHADOW_NORMAL_BIAS] * shadow_texel_size * 10.0;
+
+		if (p_type == RS::LIGHT_SPOT) {
+			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
+		} else if (p_type == RS::LIGHT_CUSTOM) {
+			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
+		} else { // (type == RS::LIGHT_OMNI)
+			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS];
+		}
+
+		light_data.transmittance_bias = light->param[RS::LIGHT_PARAM_TRANSMITTANCE_BIAS];
+
+		Vector2i omni_offset;
+		Rect2 rect;
+
+		if (p_type == RS::LIGHT_CUSTOM) {
+			rect = light_instance_get_area_shadow_atlas_rect(p_light_instance->self, p_area_shadow_atlas);
+		} else {
+			rect = light_instance_get_shadow_atlas_rect(p_light_instance->self, p_shadow_atlas, omni_offset);
+		}
+
+		light_data.atlas_rect[0] = rect.position.x;
+		light_data.atlas_rect[1] = rect.position.y;
+		light_data.atlas_rect[2] = rect.size.width;
+		light_data.atlas_rect[3] = rect.size.height;
+
+		light_data.soft_shadow_scale = light->param[RS::LIGHT_PARAM_SHADOW_BLUR];
+
+		// Set soft shadow scale and/or size, as well as shadow bias
+		if (p_type == RS::LIGHT_OMNI) {
+			Transform3D proj = (p_inverse_transform * light_transform).inverse();
+
+			RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
+
+			if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
+				// Only enable PCSS-like soft shadows if blurring is enabled.
+				// Otherwise, performance would decrease with no visual difference.
+				light_data.soft_shadow_size = size;
+			} else {
+				light_data.soft_shadow_size = 0.0;
+				light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
+			}
+
+			light_data.direction[0] = omni_offset.x * float(rect.size.width);
+			light_data.direction[1] = omni_offset.y * float(rect.size.height);
+		} else if (p_type == RS::LIGHT_SPOT) {
+			Transform3D modelview = (p_inverse_transform * light_transform).inverse();
+			Projection bias;
+			bias.set_light_bias();
+
+			Projection correction;
+			correction.set_depth_correction(false, true, false);
+			Projection cm = correction * p_light_instance->shadow_transform[0].camera;
+			Projection shadow_mtx = bias * cm * modelview;
+			RendererRD::MaterialStorage::store_camera(shadow_mtx, light_data.shadow_matrix);
+
+			if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
+				// Only enable PCSS-like soft shadows if blurring is enabled.
+				// Otherwise, performance would decrease with no visual difference.
+				float half_np = cm.get_z_near() * Math::tan(Math::deg_to_rad(spot_angle));
+				light_data.soft_shadow_size = (size * 0.5 / radius) / (half_np / cm.get_z_near()) * rect.size.width;
+			} else {
+				light_data.soft_shadow_size = 0.0;
+				light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
+			}
+			light_data.shadow_bias *= light_data.soft_shadow_scale;
+		} else if (p_type == RS::LIGHT_CUSTOM) {
+			RendererRD::MaterialStorage::store_transform(light_transform.inverse(), light_data.shadow_matrix);
+
+			if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
+				// Only enable PCSS-like soft shadows if blurring is enabled.
+				// Otherwise, performance would decrease with no visual difference.
+				light_data.soft_shadow_size = size;
+			} else {
+				light_data.soft_shadow_size = 0.0;
+				light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
+			}
+		}
+	} else {
+		light_data.shadow_opacity = 0.0;
+	}
+
+	p_light_instance->cull_mask = light->cull_mask;
+}
+
 void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const PagedArray<RID> &p_lights, const Transform3D &p_camera_transform, RID p_shadow_atlas, RID p_area_shadow_atlas, bool p_using_shadows, uint32_t &r_directional_light_count, uint32_t &r_positional_light_count, bool &r_directional_light_soft_shadows) {
-	ForwardIDStorage *forward_id_storage = ForwardIDStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
 	Transform3D inverse_transform = p_camera_transform.affine_inverse();
@@ -873,7 +1141,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 		sorter.sort(custom_light_sort, custom_light_count);
 	}
 
-	bool using_forward_ids = forward_id_storage->uses_forward_ids();
+	bool using_forward_ids = ForwardIDStorage::get_singleton()->uses_forward_ids();
 
 	for (uint32_t i = 0; i < (omni_light_count + spot_light_count + custom_light_count); i++) {
 		uint32_t index;
@@ -905,277 +1173,18 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light = omni_light_sort[index].light;
 			distance = omni_light_sort[index].depth;
 		}
-		LightData &light_data = *light_data_ptr;
 
-		if (using_forward_ids) { // TODO: investigate "forward id"
-			forward_id_storage->map_forward_id(type == RS::LIGHT_OMNI ? RendererRD::FORWARD_ID_TYPE_OMNI_LIGHT : RendererRD::FORWARD_ID_TYPE_SPOT_LIGHT, light_instance->forward_id, index, light_instance->last_pass);
-		}
-
-		Transform3D light_transform = light_instance->transform;
-
-		float sign = light->negative ? -1 : 1;
-		Color linear_col = light->color.srgb_to_linear();
-
-		light_data.attenuation = light->param[RS::LIGHT_PARAM_ATTENUATION];
-
-		// Reuse fade begin, fade length and distance for shadow LOD determination later.
-		float fade_begin = 0.0;
-		float fade_shadow = 0.0;
-		float fade_length = 0.0;
-
-		float fade = 1.0;
-		float shadow_opacity_fade = 1.0;
-		if (light->distance_fade) {
-			fade_begin = light->distance_fade_begin;
-			fade_shadow = light->distance_fade_shadow;
-			fade_length = light->distance_fade_length;
-
-			// Use `smoothstep()` to make opacity changes more gradual and less noticeable to the player.
-			if (distance > fade_begin) {
-				fade = Math::smoothstep(0.0f, 1.0f, 1.0f - float(distance - fade_begin) / fade_length);
-			}
-
-			if (distance > fade_shadow) {
-				shadow_opacity_fade = Math::smoothstep(0.0f, 1.0f, 1.0f - float(distance - fade_shadow) / fade_length);
-			}
-		}
-
-		float energy = sign * light->param[RS::LIGHT_PARAM_ENERGY] * fade;
-
-		if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
-			energy *= light->param[RS::LIGHT_PARAM_INTENSITY];
-
-			// Convert from Luminous Power to Luminous Intensity
-			if (type == RS::LIGHT_OMNI) {
-				energy *= 1.0 / (Math_PI * 4.0);
-			} else if (type == RS::LIGHT_SPOT) {
-				// Spot Lights are not physically accurate, Luminous Intensity should change in relation to the cone angle.
-				// We make this assumption to keep them easy to control.
-				energy *= 1.0 / Math_PI;
-			} else { // type == RS::LIGHT_CUSTOM
-				energy *= 1.0 / Math_PI;
-			}
-		} else {
-			energy *= Math_PI;
-		}
-
-		if (p_render_data->camera_attributes.is_valid()) {
-			energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
-		}
-
-		light_data.color[0] = linear_col.r * energy;
-		light_data.color[1] = linear_col.g * energy;
-		light_data.color[2] = linear_col.b * energy;
-		light_data.specular_amount = light->param[RS::LIGHT_PARAM_SPECULAR] * 2.0;
-		light_data.volumetric_fog_energy = light->param[RS::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY];
-		light_data.bake_mode = light->bake_mode;
-
-		float radius = MAX(0.001, light->param[RS::LIGHT_PARAM_RANGE]);
-		light_data.inv_radius = 1.0 / radius;
-
-		float area_side_a = light->param[RS::LIGHT_PARAM_AREA_SIDE_A];
-		float area_side_b = light->param[RS::LIGHT_PARAM_AREA_SIDE_B];
-
-		Vector3 pos = inverse_transform.xform(light_transform.origin);
-		if (type == RS::LIGHT_CUSTOM) {
-			pos = inverse_transform.xform(light_transform.xform(Vector3(-area_side_a / 2.0, -area_side_b / 2.0, 0.0)));
-		}
-
-		light_data.position[0] = pos.x;
-		light_data.position[1] = pos.y;
-		light_data.position[2] = pos.z;
-
-		Vector3 direction = inverse_transform.basis.xform(light_transform.basis.xform(Vector3(0, 0, -1))).normalized();
-
-		light_data.direction[0] = direction.x;
-		light_data.direction[1] = direction.y;
-		light_data.direction[2] = direction.z;
-
-		float size = light->param[RS::LIGHT_PARAM_SIZE];
-
-		light_data.size = size;
-
-		light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
-		float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
-		light_data.area_stochastic_samples = light->param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES];
-		light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
-		float area_diagonal;
+		real_t radius = MAX(0.001, light->param[RS::LIGHT_PARAM_RANGE]);
+		real_t spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
+		real_t area_diagonal;
+		_update_light_data(inverse_transform, using_forward_ids, p_using_shadows, light_data_ptr, type, light_instance, index, distance, p_render_data, p_shadow_atlas, p_area_shadow_atlas);
 
 		if (type == RS::LIGHT_CUSTOM) {
-			Vector3 area_vec_a = inverse_transform.basis.xform(light_transform.basis.get_column(0)) * area_side_a;
-			Vector3 area_vec_b = inverse_transform.basis.xform(light_transform.basis.get_column(1)) * area_side_b;
-			area_diagonal = sqrt(area_vec_a.length_squared() + area_vec_b.length_squared());
-
-			light_data.area_side_a[0] = area_vec_a.x;
-			light_data.area_side_a[1] = area_vec_a.y;
-			light_data.area_side_a[2] = area_vec_a.z;
-
-			light_data.area_side_b[0] = area_vec_b.x;
-			light_data.area_side_b[1] = area_vec_b.y;
-			light_data.area_side_b[2] = area_vec_b.z;
-
-			light_data.area_shadow_samples = light_instance->area_shadow_samples.size();
-			light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
-			for (uint32_t i = 0; i < light_instance->area_shadow_samples.size(); i++) {
-				uint32_t row = i / light_data.area_map_subdivision;
-				uint32_t col = i % light_data.area_map_subdivision;
-
-				light_data.map_idx[i] = i;
-				light_data.weights[i] = 1.0f;
-				light_data.shadow_samples[i * 2] = light_instance->area_shadow_samples[i].x;
-				light_data.shadow_samples[i * 2 + 1] = light_instance->area_shadow_samples[i].y;
-			}
-
+			area_diagonal = sqrt(Vector3(light_data_ptr->area_side_a[0], light_data_ptr->area_side_a[1], light_data_ptr->area_side_a[2]).length_squared() + Vector3(light_data_ptr->area_side_b[0], light_data_ptr->area_side_b[1], light_data_ptr->area_side_b[2]).length_squared());
 		}
-
-		light_data.mask = light->cull_mask;
-
-		light_data.atlas_rect[0] = 0;
-		light_data.atlas_rect[1] = 0;
-		light_data.atlas_rect[2] = 0;
-		light_data.atlas_rect[3] = 0;
-
-		RID projector = light->projector;
-
-		if (projector.is_valid()) {
-			Rect2 rect = texture_storage->decal_atlas_get_texture_rect(projector);
-
-			if (type == RS::LIGHT_SPOT) {
-				light_data.projector_rect[0] = rect.position.x;
-				light_data.projector_rect[1] = rect.position.y + rect.size.height; //flip because shadow is flipped
-				light_data.projector_rect[2] = rect.size.width;
-				light_data.projector_rect[3] = -rect.size.height;
-			} else if (type == RS::LIGHT_CUSTOM) {
-				// TODO: replace with actual Area Light shadow implemenation
-				light_data.projector_rect[0] = rect.position.x;
-				light_data.projector_rect[1] = rect.position.y + rect.size.height; //flip because shadow is flipped
-				light_data.projector_rect[2] = rect.size.width;
-				light_data.projector_rect[3] = -rect.size.height;
-			} else {
-				light_data.projector_rect[0] = rect.position.x;
-				light_data.projector_rect[1] = rect.position.y;
-				light_data.projector_rect[2] = rect.size.width;
-				light_data.projector_rect[3] = rect.size.height * 0.5; //used by dp, so needs to be half
-			}
-		} else {
-			light_data.projector_rect[0] = 0;
-			light_data.projector_rect[1] = 0;
-			light_data.projector_rect[2] = 0;
-			light_data.projector_rect[3] = 0;
-		}
-
-		const bool needs_shadow =
-				p_using_shadows &&
-				(type == RS::LIGHT_CUSTOM ? owns_area_shadow_atlas(p_area_shadow_atlas) && area_shadow_atlas_owns_light_instance(p_area_shadow_atlas, light_instance->self)
-										  : owns_shadow_atlas(p_shadow_atlas) && shadow_atlas_owns_light_instance(p_shadow_atlas, light_instance->self)) &&
-				light->shadow;
-
-		bool in_shadow_range = true;
-		if (needs_shadow && light->distance_fade) {
-			if (distance > light->distance_fade_shadow + light->distance_fade_length) {
-				// Out of range, don't draw shadows to improve performance.
-				in_shadow_range = false;
-			}
-		}
-
-		if (needs_shadow && in_shadow_range) {
-			// fill in the shadow information
-
-			light_data.shadow_opacity = light->param[RS::LIGHT_PARAM_SHADOW_OPACITY] * shadow_opacity_fade;
-
-			float shadow_texel_size;
-
-			if (type == RS::LIGHT_CUSTOM) {
-				shadow_texel_size = light_instance_get_area_shadow_texel_size(light_instance->self, p_area_shadow_atlas);
-			} else {
-				shadow_texel_size = light_instance_get_shadow_texel_size(light_instance->self, p_shadow_atlas);
-			}
-			light_data.shadow_normal_bias = light->param[RS::LIGHT_PARAM_SHADOW_NORMAL_BIAS] * shadow_texel_size * 10.0;
-
-			if (type == RS::LIGHT_SPOT) {
-				light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
-			} else if (type == RS::LIGHT_CUSTOM) {
-				light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
-			} else { // (type == RS::LIGHT_OMNI)
-				light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS];
-			}
-
-			light_data.transmittance_bias = light->param[RS::LIGHT_PARAM_TRANSMITTANCE_BIAS];
-
-			Vector2i omni_offset;
-			Rect2 rect;
-
-			if (type == RS::LIGHT_CUSTOM) {
-				rect = light_instance_get_area_shadow_atlas_rect(light_instance->self, p_area_shadow_atlas);
-			} else {
-				rect = light_instance_get_shadow_atlas_rect(light_instance->self, p_shadow_atlas, omni_offset);
-			}
-
-			light_data.atlas_rect[0] = rect.position.x;
-			light_data.atlas_rect[1] = rect.position.y;
-			light_data.atlas_rect[2] = rect.size.width;
-			light_data.atlas_rect[3] = rect.size.height;
-
-			light_data.soft_shadow_scale = light->param[RS::LIGHT_PARAM_SHADOW_BLUR];
-
-			// Set soft shadow scale and/or size, as well as shadow bias
-			if (type == RS::LIGHT_OMNI) {
-				Transform3D proj = (inverse_transform * light_transform).inverse();
-
-				RendererRD::MaterialStorage::store_transform(proj, light_data.shadow_matrix);
-
-				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
-					// Only enable PCSS-like soft shadows if blurring is enabled.
-					// Otherwise, performance would decrease with no visual difference.
-					light_data.soft_shadow_size = size;
-				} else {
-					light_data.soft_shadow_size = 0.0;
-					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
-				}
-
-				light_data.direction[0] = omni_offset.x * float(rect.size.width);
-				light_data.direction[1] = omni_offset.y * float(rect.size.height);
-			} else if (type == RS::LIGHT_SPOT) {
-				Transform3D modelview = (inverse_transform * light_transform).inverse();
-				Projection bias;
-				bias.set_light_bias();
-
-				Projection correction;
-				correction.set_depth_correction(false, true, false);
-				Projection cm = correction * light_instance->shadow_transform[0].camera;
-				Projection shadow_mtx = bias * cm * modelview;
-				RendererRD::MaterialStorage::store_camera(shadow_mtx, light_data.shadow_matrix);
-
-				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
-					// Only enable PCSS-like soft shadows if blurring is enabled.
-					// Otherwise, performance would decrease with no visual difference.
-					float half_np = cm.get_z_near() * Math::tan(Math::deg_to_rad(spot_angle));
-					light_data.soft_shadow_size = (size * 0.5 / radius) / (half_np / cm.get_z_near()) * rect.size.width;
-				} else {
-					light_data.soft_shadow_size = 0.0;
-					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
-				}
-				light_data.shadow_bias *= light_data.soft_shadow_scale;
-			} else if (type == RS::LIGHT_CUSTOM) {
-				RendererRD::MaterialStorage::store_transform(light_transform.inverse(), light_data.shadow_matrix);
-
-				if (size > 0.0 && light_data.soft_shadow_scale > 0.0) {
-					// Only enable PCSS-like soft shadows if blurring is enabled.
-					// Otherwise, performance would decrease with no visual difference.
-					light_data.soft_shadow_size = size;
-				} else {
-					light_data.soft_shadow_size = 0.0;
-					light_data.soft_shadow_scale *= RendererSceneRenderRD::get_singleton()->shadows_quality_radius_get(); // Only use quality radius for PCF
-				}
-			}
-		} else {
-			light_data.shadow_opacity = 0.0;
-		}
-
-		light_instance->cull_mask = light->cull_mask;
 
 		// hook for subclass to do further processing.
-		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_transform, radius, spot_angle, area_diagonal);
+		RendererSceneRenderRD::get_singleton()->setup_added_light(type, light_instance->transform, radius, spot_angle, area_diagonal);
 
 		r_positional_light_count++;
 	}
@@ -1198,11 +1207,22 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	}
 }
 
-/* REFLECTION PROBE */
+void LightStorage::set_area_reprojection_buffer(RenderDataRD *p_render_data, const Transform3D &p_camera_transform, RID p_light_instance, RID p_shadow_atlas, RID p_area_shadow_atlas) {
+	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
+	
+	ERR_FAIL_NULL(light_instance);
 
-void LightStorage::set_area_light_buffer() {
-	RD::get_singleton()->buffer_update(custom_light_buffer, 0, sizeof(LightData) * custom_light_count, custom_lights);
+	bool using_forward_ids = ForwardIDStorage::get_singleton()->uses_forward_ids();
+
+	Transform3D inverse_transform = p_camera_transform.affine_inverse();
+
+	LightData *custom_lights_data_ptr = &custom_lights[0];
+	_update_light_data(inverse_transform, using_forward_ids, true, custom_lights_data_ptr, RS::LIGHT_CUSTOM, light_instance, 0, 0, p_render_data, p_shadow_atlas, p_area_shadow_atlas);
+
+	RD::get_singleton()->buffer_update(custom_light_buffer, 0, sizeof(LightData) * 1, custom_lights);
 }
+
+/* REFLECTION PROBE */
 
 RID LightStorage::reflection_probe_allocate() {
 	return reflection_probe_owner.allocate_rid();

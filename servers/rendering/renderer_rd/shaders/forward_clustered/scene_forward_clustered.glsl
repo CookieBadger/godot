@@ -1760,8 +1760,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 
 // LIGHTING
-#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
-#ifndef AREA_SHADOW_REPROJECTION
+#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
 	{ // Directional light.
 
 		// Do shadow and lighting in two passes to reduce register pressure.
@@ -2245,7 +2244,7 @@ void fragment_shader(in SceneData scene_data) {
 			}
 		}
 	}
-#endif // !AREA_SHADOW_REPROJECTION
+	
 	{ // custom lights
 
 		uint cluster_custom_offset = cluster_offset + implementation_data.cluster_type_size * 2;
@@ -2291,9 +2290,6 @@ void fragment_shader(in SceneData scene_data) {
 				}
 
 				float shadow = light_process_custom_shadow(light_index, vertex, normal);
-#ifdef AREA_SHADOW_REPROJECTION
-				albedo = vec3(shadow, shadow, shadow);
-#else
 
 				shadow = blur_shadow(shadow);
 				
@@ -2320,13 +2316,12 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
-#endif //AREA SHADOW REPROJECTION
 			}
 		}
 	}
 
 #ifdef USE_SHADOW_TO_OPACITY
-#if !defined(MODE_RENDER_DEPTH) && !defined(AREA_SHADOW_REPROJECTION)
+#ifndef MODE_RENDER_DEPTH // TODO: this #if seems obsolete
 	alpha = min(alpha, clamp(length(ambient_light), 0.0, 1.0));
 
 #if defined(ALPHA_SCISSOR_USED)
@@ -2335,12 +2330,14 @@ void fragment_shader(in SceneData scene_data) {
 	}
 #endif // ALPHA_SCISSOR_USED
 
-#endif // !MODE_RENDER_DEPTH && !AREA_SHADOW_REPROJECTION
+#endif // !MODE_RENDER_DEPTH
 #endif // USE_SHADOW_TO_OPACITY
 
-#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
+#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
 
 #ifdef AREA_SHADOW_REPROJECTION
+	float shadow = light_process_custom_shadow(0, vertex, normal); // TODO: let's hope 0 works.
+	albedo = vec3(shadow, shadow, shadow);
 	frag_color = vec4(albedo, alpha);
 #else
 #ifdef MODE_RENDER_DEPTH

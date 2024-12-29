@@ -446,8 +446,10 @@ private:
 		int size = 0;
 		bool use_16_bits = true;
 
-		RID depth;
-		RID fb; //for copying
+		RID depth; // depth texture
+		RID reprojection_texture;
+		RID fb; //for copying: TODO: check if this, reprojection_fb and ShadowAtlas::fb are needed
+		RID reprojection_fb;
 
 		Vector<Shadow> shadows;
 		HashMap<RID, uint32_t> shadow_owners;
@@ -457,7 +459,7 @@ private:
 	RID_Owner<AreaShadowAtlas> area_shadow_atlas_owner;
 
 	void _update_shadow_atlas(ShadowAtlas *shadow_atlas);
-	void _update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas);
+	void _update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size);
 
 	void _shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx);
 	void _area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow *p_shadow, RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx, uint32_t p_shadow_count);
@@ -1223,7 +1225,19 @@ public:
 		return atlas->fb;
 	}
 
-	virtual void area_shadow_atlas_update(RID p_atlas) override;
+	_FORCE_INLINE_ RID area_shadow_atlas_get_reprojection_fb(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->reprojection_fb;
+	}
+
+	_FORCE_INLINE_ RID area_shadow_atlas_get_reprojection_texture(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->reprojection_texture;
+	}
+
+	virtual void area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) override;
 
 	/* DIRECTIONAL SHADOW */
 

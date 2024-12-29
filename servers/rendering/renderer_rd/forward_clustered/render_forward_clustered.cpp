@@ -287,7 +287,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	RID prev_pipeline_rd;
 	RID prev_xforms_uniform_set;
 
-	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
+	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP) || (p_pass_mode == PASS_MODE_AREA_SHADOW_REPROJECTION);
 
 	SceneState::PushConstant push_constant;
 
@@ -440,6 +440,10 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for SDF pass");
 				pipeline_version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF;
 			} break;
+			case PASS_MODE_AREA_SHADOW_REPROJECTION: {
+				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for Area Shadow Reprojection pass");
+				pipeline_version = SceneShaderForwardClustered::PIPELINE_VERSION_AREA_SHADOW_REPROJECTION;
+			} break;
 		}
 
 		PipelineCacheRD *pipeline = nullptr;
@@ -574,6 +578,9 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 		} break;
 		case PASS_MODE_SDF: {
 			_render_list_template<PASS_MODE_SDF>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_AREA_SHADOW_REPROJECTION: {
+			_render_list_template<PASS_MODE_AREA_SHADOW_REPROJECTION>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 		} break;
 	}
 }
@@ -1504,15 +1511,65 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 						rendered_area_shadow_maps++;
 					}
 				}
+				// setup uniforms
 				_render_shadow_process();
+				// actually render the shadow on the GPU (_render_list_with_draw_list)
 				_render_shadow_end();
 
 				if (area_shadow_samples.size() + 5 <= possible_samples) { // 5 is the maximum amount of maps that we can add.
-				// render pass for the quad only
-				//     render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
-				//         in fragment shader:
-				//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
-				//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
+					// render pass for the quad only
+					render_list[RENDER_LIST_SECONDARY].clear();
+					scene_state.instance_data[RENDER_LIST_SECONDARY].clear();
+					// TODO: update custom_lights buffer, such that it only contains this light and only the shadow samples, weights and map indices of interest.
+					_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler.
+
+					{
+						RID rp_tex = light_storage->area_shadow_atlas_get_reprojection_texture(p_render_data->area_shadow_atlas); // how to get size of fb?
+						int32_t width = RD::get_singleton()->texture_get_format(rp_tex).width;
+						int32_t height = RD::get_singleton()->texture_get_format(rp_tex).height;
+
+						bool opaque_render_buffers = true; // TODO
+						_setup_environment(p_render_data, true, Size2i(width, height), Color(), opaque_render_buffers, false);
+					}
+
+
+					/*{ // custom list of instances
+						RenderDataRD render_data;
+						render_data.scene_data = p_render_data->scene_data;
+						render_data.cluster_size = 1;
+						render_data.cluster_max_elements = 32;
+						render_data.instances = &p_render_data->render_shadows[p_render_data->shadows[i]].instances;
+						render_data.render_info = p_render_data->render_info;
+					}*/
+
+					uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
+					_fill_render_list(RENDER_LIST_SECONDARY, p_render_data, pass_mode, false, false, false, true); // TODO. maybe render lists can be pre-assembled once before the entire light loop?
+					uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
+					render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
+					_fill_instance_data(RENDER_LIST_SECONDARY, p_render_data->render_info ? p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false); // TODO
+
+					// we don't need most of these uniforms in this pass
+					RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false); // TODO
+
+					// TODO, since I don't know what they do.
+					bool reverse_cull = false; // TODO
+					uint32_t color_pass_flags = 0; // TODO
+					uint32_t view_count = 1; // TODO
+					float lod_distance_multiplier = 0.0; // TODO
+					float screen_mesh_lod_threshold = 0.0; // TODO
+					PassMode pass_mode = PASS_MODE_COLOR;
+					RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + render_list_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + render_list_from, render_list_size, reverse_cull, pass_mode, color_pass_flags, true, false, rp_uniform_set, false, Vector2(), lod_distance_multiplier, screen_mesh_lod_threshold, view_count, render_list_from);
+					
+					_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, Vector<Color>(), 0.0, 0);
+					// render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
+							// "
+							// The comparison of four neighboring shadow maps in camera space is done in a pixel shader by applying a 2 - pass strategy :
+							// In the first pass, the reprojected depth values of the four shadow maps are evaluated as in the original shadow map algorithm :
+							// For each screen space fragment, the 4 corresponding shadow values are calculated and summed up(i.e.each fragment obtains an integer value between 0 and 4), and stored in the comparison render target.
+							// "
+					//         in fragment shader:
+					//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
+					//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
 					bool banding_test = _render_area_shadow_test(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, quads[q], point_index_map);
 					//if (banding_test) {
 					if (test_subdivision_count == 0) {
@@ -2525,7 +2582,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		ERR_FAIL_COND(!light_storage->owns_area_shadow_atlas(p_area_shadow_atlas));
 		ERR_FAIL_COND(!light_storage->area_shadow_atlas_owns_light_instance(p_area_shadow_atlas, p_light));
 
-		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas);
+		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas, p_viewport_size);
 
 		uint32_t key = light_storage->area_shadow_atlas_get_light_instance_key(p_area_shadow_atlas, p_light);
 

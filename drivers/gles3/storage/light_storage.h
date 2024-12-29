@@ -907,7 +907,7 @@ public:
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
 	virtual bool area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) override;
 
-	virtual void area_shadow_atlas_update(RID p_atlas) override;
+	virtual void area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) override;
 };
 
 } // namespace GLES3

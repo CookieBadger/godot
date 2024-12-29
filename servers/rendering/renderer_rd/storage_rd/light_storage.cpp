@@ -1200,6 +1200,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 /* REFLECTION PROBE */
 
+void LightStorage::set_area_light_buffer() {
+	RD::get_singleton()->buffer_update(custom_light_buffer, 0, sizeof(LightData) * custom_light_count, custom_lights);
+}
+
 RID LightStorage::reflection_probe_allocate() {
 	return reflection_probe_owner.allocate_rid();
 }
@@ -2580,8 +2584,8 @@ void LightStorage::area_shadow_atlas_free(RID p_atlas) {
 	area_shadow_atlas_owner.free(p_atlas);
 }
 
-void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas) {
-	// consider an inheritance structure for Shadow atlas and Area Shadow Atlas (e.g. positional Shadow Atlas), such that this method can be merged with _update_shadow_atlas(), as they have no difference.
+void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size) {
+	// recreate framebuffer and texture if necessary
 	if (p_area_shadow_atlas->size > 0 && p_area_shadow_atlas->depth.is_null()) {
 		RD::TextureFormat tf;
 		tf.format = p_area_shadow_atlas->use_16_bits ? RD::DATA_FORMAT_D16_UNORM : RD::DATA_FORMAT_D32_SFLOAT;
@@ -2593,6 +2597,31 @@ void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atla
 		Vector<RID> fb_tex;
 		fb_tex.push_back(p_area_shadow_atlas->depth);
 		p_area_shadow_atlas->fb = RD::get_singleton()->framebuffer_create(fb_tex);
+	}
+
+	if (p_area_shadow_atlas->size > 0) {
+		// test if size needs to change
+		if (p_area_shadow_atlas->reprojection_texture.is_valid()) {
+			RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_texture);
+			if (p_viewport_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
+				RD::get_singleton()->free(p_area_shadow_atlas->reprojection_texture);
+				p_area_shadow_atlas->reprojection_texture = RID();
+			}
+		}
+
+		// recreate framebuffer and texture if necessary
+		if (p_area_shadow_atlas->reprojection_texture.is_null()) {
+			RD::TextureFormat tf;
+			tf.format = RD::DATA_FORMAT_R16_UNORM; // single channel, range: [0.0; 1.0], 16 bit is probably sufficient
+			tf.width = p_viewport_size.width;
+			tf.height = p_viewport_size.height;
+			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT; // shadow does also | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT; TODO: This will depend on how we do the hardware occlusion query thing
+
+			RID texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+			Vector<RID> fb_tex;
+			fb_tex.push_back(texture);
+			RID fb = RD::get_singleton()->framebuffer_create(fb_tex);
+		}
 	}
 }
 
@@ -2824,11 +2853,11 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow 
 	}
 }
 
-void LightStorage::area_shadow_atlas_update(RID p_atlas) {
+void LightStorage::area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) {
 	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 	ERR_FAIL_NULL(shadow_atlas);
 
-	_update_area_shadow_atlas(shadow_atlas);
+	_update_area_shadow_atlas(shadow_atlas, p_viewport_size);
 }
 
 /* DIRECTIONAL SHADOW */

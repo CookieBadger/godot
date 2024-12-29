@@ -308,6 +308,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 					SHADER_VERSION_DEPTH_PASS_MULTIVIEW,
 					SHADER_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW,
 					SHADER_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW,
+					SHADER_VERSION_AREA_SHADOW_REPROJECTION,
 					SHADER_VERSION_COLOR_PASS,
 				};
 
@@ -517,6 +518,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		shader_versions.push_back(ShaderRD::VariantDefine(SHADER_GROUP_MULTIVIEW, "\n#define USE_MULTIVIEW\n#define MODE_RENDER_DEPTH\n", false)); // SHADER_VERSION_DEPTH_PASS_MULTIVIEW
 		shader_versions.push_back(ShaderRD::VariantDefine(SHADER_GROUP_MULTIVIEW, "\n#define USE_MULTIVIEW\n#define MODE_RENDER_DEPTH\n#define MODE_RENDER_NORMAL_ROUGHNESS\n", false)); // SHADER_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW
 		shader_versions.push_back(ShaderRD::VariantDefine(SHADER_GROUP_MULTIVIEW, "\n#define USE_MULTIVIEW\n#define MODE_RENDER_DEPTH\n#define MODE_RENDER_NORMAL_ROUGHNESS\n#define MODE_RENDER_VOXEL_GI\n", false)); // SHADER_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW
+		shader_versions.push_back(ShaderRD::VariantDefine(SHADER_GROUP_BASE, "\n#define MODE_AREA_SHADOW_REPROJECTION", false)); // SHADER_VERSION_AREA_SHADOW_REPROJECTION //TODO: maybe move to advanced group: see https://github.com/godotengine/godot/pull/79606
 
 		Vector<String> color_pass_flags = {
 			"\n#define MODE_SEPARATE_SPECULAR\n", // SHADER_COLOR_PASS_FLAG_SEPARATE_SPECULAR

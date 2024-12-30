@@ -398,6 +398,8 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 						blend_state = RD::PipelineColorBlendState::create_disabled(5); //writes to normal and roughness in opaque way
 					} else if (k == PIPELINE_VERSION_DEPTH_PASS_WITH_SDF) {
 						blend_state = RD::PipelineColorBlendState(); //no color targets for SDF
+					} else if (k == PIPELINE_VERSION_AREA_SHADOW_REPROJECTION) {
+						blend_state = RD::PipelineColorBlendState::create_disabled(1); // overwrite framebuffer
 					}
 
 					RID shader_variant = shader_singleton->shader.version_get_shader(version, shader_version);

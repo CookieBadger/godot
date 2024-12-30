@@ -1485,7 +1485,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	if (render_shadows) {
 		// render area shadows
 		uint32_t rendered_area_shadow_maps = 0;
-		uint32_t area_shadow_atlas_subdivision = light_storage->area_shadow_atlas_get_subdivision(p_render_data->area_shadow_atlas);
+		uint32_t area_shadow_atlas_subdivision = light_storage->area_shadow_atlas_get_subdivision(p_render_data->area_shadow_atlas); // TODO: for some reason, this returns 4 at initialization
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) {
 			Vector<Rect2> quads; // todo
 			quads.push_back(Rect2(0.0, 0.0, 1.0, 1.0));
@@ -1525,12 +1525,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler.
 
 					{
-						RID rp_tex = light_storage->area_shadow_atlas_get_reprojection_texture(p_render_data->area_shadow_atlas); // how to get size of fb?
-						int32_t width = RD::get_singleton()->texture_get_format(rp_tex).width;
-						int32_t height = RD::get_singleton()->texture_get_format(rp_tex).height;
+						Size2i rp_tex_size = light_storage->area_shadow_atlas_get_reprojection_size(p_render_data->area_shadow_atlas); // how to get size of fb?
 
 						bool opaque_render_buffers = true; // TODO
-						_setup_environment(p_render_data, true, Size2i(width, height), Color(), opaque_render_buffers, false);
+						_setup_environment(p_render_data, true, rp_tex_size, Color(), opaque_render_buffers, false);
 					}
 
 
@@ -1559,8 +1557,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					float lod_distance_multiplier = 0.0; // TODO
 					float screen_mesh_lod_threshold = 0.0; // TODO
 					RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + render_list_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + render_list_from, render_list_size, reverse_cull, PASS_MODE_AREA_SHADOW_REPROJECTION, color_pass_flags, true, false, rp_uniform_set, false, Vector2(), lod_distance_multiplier, screen_mesh_lod_threshold, view_count, render_list_from);
-					
-					_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, Vector<Color>(), 0.0, 0);
+					Vector<Color> clear_colors;
+					clear_colors.push_back(Color(1.0, 1.0, 1.0));
+					_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, clear_colors, 0.0, 0);
 					// render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 							// "
 							// The comparison of four neighboring shadow maps in camera space is done in a pixel shader by applying a 2 - pass strategy :

@@ -452,6 +452,7 @@ private:
 		RID reprojection_texture;
 		RID fb; //for copying: TODO: check if this, reprojection_fb and ShadowAtlas::fb are needed
 		RID reprojection_fb;
+		Size2i reprojection_texture_size;
 
 		Vector<Shadow> shadows;
 		HashMap<RID, uint32_t> shadow_owners;
@@ -1239,6 +1240,12 @@ public:
 		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 		ERR_FAIL_NULL_V(atlas, RID());
 		return atlas->reprojection_texture;
+	}
+
+	_FORCE_INLINE_ Size2i area_shadow_atlas_get_reprojection_size(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, Size2i());
+		return atlas->reprojection_texture_size;
 	}
 
 	virtual void area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) override;

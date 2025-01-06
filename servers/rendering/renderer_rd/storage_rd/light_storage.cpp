@@ -626,7 +626,7 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 }
 
 void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bool p_using_forward_ids, bool p_using_shadows, LightData *p_light_data_ptr, RS::LightType p_type, LightInstance *p_light_instance, uint32_t p_index, real_t p_distance, RenderDataRD *p_render_data, RID p_shadow_atlas, RID p_area_shadow_atlas) {
-	LightData light_data = *p_light_data_ptr;
+	LightData &light_data = *p_light_data_ptr;
 	Light *light = light_owner.get_or_null(p_light_instance->light);
 
 	if (p_using_forward_ids) { // TODO: investigate "forward id"

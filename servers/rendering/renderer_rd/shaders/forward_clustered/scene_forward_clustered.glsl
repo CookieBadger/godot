@@ -792,7 +792,7 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_aa_inc.glsl"
 
-#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#if (!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)) || defined(AREA_SHADOW_REPROJECTION)
 
 // Default to SPECULAR_SCHLICK_GGX.
 #if !defined(SPECULAR_DISABLED) && !defined(SPECULAR_SCHLICK_GGX) && !defined(SPECULAR_TOON)
@@ -801,15 +801,11 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_lights_inc.glsl"
 
+#ifndef AREA_SHADOW_REPROJECTION
 #include "../scene_forward_gi_inc.glsl"
+#endif
 
 #endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
-
-#ifdef AREA_SHADOW_REPROJECTION
-
-#include "../scene_forward_lights_inc.glsl"
-
-#endif
 
 #ifndef MODE_RENDER_DEPTH
 #ifndef AREA_SHADOW_REPROJECTION
@@ -2336,6 +2332,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
 
 #ifdef AREA_SHADOW_REPROJECTION
+	
 	float shadow = light_process_custom_shadow(0, vertex, normal); // TODO: let's hope 0 works.
 	albedo = vec3(shadow, shadow, shadow);
 	frag_color = vec4(albedo, alpha);

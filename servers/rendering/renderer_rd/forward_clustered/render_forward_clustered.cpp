@@ -1075,7 +1075,11 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
 					rl->add_element(surf);
 				}
-			} else {
+			} else if (p_pass_mode == PASS_MODE_AREA_SHADOW_REPROJECTION) {
+				// TODO: add exclusively for elements that receive shadows. need to find out how. exclude all gizmos.
+				rl->add_element(surf);
+			}
+			else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
 					rl->add_element(surf);
 				}
@@ -1522,10 +1526,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					scene_state.instance_data[RENDER_LIST_SECONDARY].clear();
 					// TODO: update custom_lights buffer, such that it only contains this light and only the shadow samples, weights and map indices of interest.
 					light_storage->set_area_reprojection_buffer(p_render_data, p_render_data->scene_data->cam_transform, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas);
-					_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler.
+					_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler. TODO: if this was actually needed, then base_uniforms_changed() would be needed.
 
 					{
-						Size2i rp_tex_size = light_storage->area_shadow_atlas_get_reprojection_size(p_render_data->area_shadow_atlas); // how to get size of fb?
+						Size2i rp_tex_size = light_storage->area_shadow_atlas_get_reprojection_size(p_render_data->area_shadow_atlas); // TODO: why is x != y when debugging this?
 
 						bool opaque_render_buffers = true; // TODO
 						_setup_environment(p_render_data, true, rp_tex_size, Color(), opaque_render_buffers, false);
@@ -1552,13 +1556,13 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 					// TODO, since I don't know what they do.
 					bool reverse_cull = false; // TODO
-					uint32_t color_pass_flags = 0; // TODO
+					uint32_t color_pass_flags = 0; // it's not a color pass
 					uint32_t view_count = 1; // TODO
 					float lod_distance_multiplier = 0.0; // TODO
 					float screen_mesh_lod_threshold = 0.0; // TODO
 					RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + render_list_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + render_list_from, render_list_size, reverse_cull, PASS_MODE_AREA_SHADOW_REPROJECTION, color_pass_flags, true, false, rp_uniform_set, false, Vector2(), lod_distance_multiplier, screen_mesh_lod_threshold, view_count, render_list_from);
 					Vector<Color> clear_colors;
-					clear_colors.push_back(Color(1.0, 1.0, 1.0));
+					clear_colors.push_back(Color(0, 0, 0.5));
 					_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, clear_colors, 0.0, 0);
 					// render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 							// "

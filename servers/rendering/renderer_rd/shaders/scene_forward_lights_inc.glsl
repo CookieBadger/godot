@@ -1112,7 +1112,11 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 			vec2 shadow_pixel_size = custom_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 
+#ifdef AREA_SHADOW_REPROJECTION
+			avg += weight * textureProj(sampler2DShadow(area_shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
+#else
 			avg += weight * sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
+#endif
 			weight_sum += weight;
 		}
 

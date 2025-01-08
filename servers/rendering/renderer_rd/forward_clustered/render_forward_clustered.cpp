@@ -1548,7 +1548,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					_fill_render_list(RENDER_LIST_SECONDARY, p_render_data, PASS_MODE_AREA_SHADOW_REPROJECTION); // TODO. maybe render lists can be pre-assembled once before the entire light loop?
 					uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
 					render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
-					_fill_instance_data(RENDER_LIST_SECONDARY, p_render_data->render_info ? p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false); // TODO
+					_fill_instance_data(RENDER_LIST_SECONDARY, p_render_data->render_info ? p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size);
 
 					RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, p_render_data, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false); // TODO: could also use rb->samplers. Not sure what that would imply.
 

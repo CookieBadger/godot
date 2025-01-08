@@ -1524,7 +1524,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					// render pass for the quad only
 					render_list[RENDER_LIST_SECONDARY].clear();
 					scene_state.instance_data[RENDER_LIST_SECONDARY].clear();
-					// TODO: update custom_lights buffer, such that it only contains this light and only the shadow samples, weights and map indices of interest.
 					light_storage->set_area_reprojection_buffer(p_render_data, p_render_data->scene_data->cam_transform, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas);
 					_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler. TODO: if this was actually needed, then base_uniforms_changed() would be needed.
 
@@ -1546,13 +1545,12 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					}*/
 
 					uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
-					_fill_render_list(RENDER_LIST_SECONDARY, p_render_data, PASS_MODE_AREA_SHADOW_REPROJECTION, false, false, false, true); // TODO. maybe render lists can be pre-assembled once before the entire light loop?
+					_fill_render_list(RENDER_LIST_SECONDARY, p_render_data, PASS_MODE_AREA_SHADOW_REPROJECTION); // TODO. maybe render lists can be pre-assembled once before the entire light loop?
 					uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
 					render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
 					_fill_instance_data(RENDER_LIST_SECONDARY, p_render_data->render_info ? p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false); // TODO
 
-					// we don't need most of these uniforms in this pass
-					RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false); // TODO
+					RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, p_render_data, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false); // TODO: could also use rb->samplers. Not sure what that would imply.
 
 					// TODO, since I don't know what they do.
 					bool reverse_cull = false; // TODO

@@ -2332,8 +2332,12 @@ void fragment_shader(in SceneData scene_data) {
 #endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
 
 #ifdef AREA_SHADOW_REPROJECTION
-	
-	float shadow = light_process_custom_shadow(0, vertex, normal); // TODO: let's hope 0 works.
+	float shadow = 1.0; // full light
+#ifndef MODE_UNSHADED
+	if (bool(custom_lights.data[0].mask & instances.data[instance_index].layer_mask)) {
+		shadow = light_process_custom_shadow(0, vertex, normal);
+	}
+#endif
 	albedo = vec3(shadow, shadow, shadow);
 	frag_color = vec4(albedo, alpha);
 #else

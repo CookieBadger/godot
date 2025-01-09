@@ -287,7 +287,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	RID prev_pipeline_rd;
 	RID prev_xforms_uniform_set;
 
-	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP) || (p_pass_mode == PASS_MODE_AREA_SHADOW_REPROJECTION);
+	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
 
 	SceneState::PushConstant push_constant;
 
@@ -1077,7 +1077,9 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				}
 			} else if (p_pass_mode == PASS_MODE_AREA_SHADOW_REPROJECTION) {
 				// TODO: add exclusively for elements that receive shadows. need to find out how. exclude all gizmos.
-				rl->add_element(surf);
+				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
+					rl->add_element(surf);
+				}
 			}
 			else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
@@ -1560,7 +1562,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					float screen_mesh_lod_threshold = 0.0; // TODO
 					RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + render_list_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + render_list_from, render_list_size, reverse_cull, PASS_MODE_AREA_SHADOW_REPROJECTION, color_pass_flags, true, false, rp_uniform_set, false, Vector2(), lod_distance_multiplier, screen_mesh_lod_threshold, view_count, render_list_from);
 					Vector<Color> clear_colors;
-					clear_colors.push_back(Color(0, 0, 0.5));
+					clear_colors.push_back(Color(1, 1, 1));
 					_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, clear_colors, 0.0, 0);
 					// render only shadow values (custom pass, custom resolution, black&white, like depth but smaller resolution)
 							// "

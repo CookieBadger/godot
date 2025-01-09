@@ -1042,8 +1042,6 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	if (custom_lights.data[idx].shadow_opacity > 0.001) {
 		// there is a shadowmap
 
-		// TODO: make this a uniform in scene data probably
-
 		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
 		// This offset is required if we decide to do soft sampling (sample kernel around actual point)

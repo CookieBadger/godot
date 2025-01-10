@@ -462,7 +462,8 @@ private:
 	RID_Owner<AreaShadowAtlas> area_shadow_atlas_owner;
 
 	void _update_shadow_atlas(ShadowAtlas *shadow_atlas);
-	void _update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size);
+	void _update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas);
+	void _update_area_shadow_reprojection(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size, RID p_depth_texture);
 
 	void _shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx);
 	void _area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow *p_shadow, RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx, uint32_t p_shadow_count);
@@ -1248,7 +1249,8 @@ public:
 		return atlas->reprojection_texture_size;
 	}
 
-	virtual void area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) override;
+	virtual void area_shadow_atlas_update(RID p_atlas) override;
+	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) override;
 
 	/* DIRECTIONAL SHADOW */
 

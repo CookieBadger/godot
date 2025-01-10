@@ -2604,7 +2604,7 @@ void LightStorage::area_shadow_atlas_free(RID p_atlas) {
 	area_shadow_atlas_owner.free(p_atlas);
 }
 
-void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size) {
+void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atlas) {
 	// recreate framebuffer and texture if necessary
 	if (p_area_shadow_atlas->size > 0 && p_area_shadow_atlas->depth.is_null()) {
 		RD::TextureFormat tf;
@@ -2618,11 +2618,17 @@ void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atla
 		fb_tex.push_back(p_area_shadow_atlas->depth);
 		p_area_shadow_atlas->fb = RD::get_singleton()->framebuffer_create(fb_tex);
 	}
+}
 
+void LightStorage::_update_area_shadow_reprojection(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) {
 	if (p_area_shadow_atlas->size > 0) {
 		// test if size needs to change
 		if (p_area_shadow_atlas->reprojection_texture.is_valid()) {
 			RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_texture);
+
+			RD::TextureFormat depth_format = RD::get_singleton()->texture_get_format(p_depth_texture); // TODO: remove this eventually, consider just using the size of the depth buffer.
+			ERR_FAIL_COND(p_viewport_size != Vector2(depth_format.width, depth_format.height));
+
 			if (p_viewport_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
 				RD::get_singleton()->free(p_area_shadow_atlas->reprojection_texture);
 				p_area_shadow_atlas->reprojection_texture = RID();
@@ -2641,6 +2647,7 @@ void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atla
 			p_area_shadow_atlas->reprojection_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
 			Vector<RID> fb_tex;
 			fb_tex.push_back(p_area_shadow_atlas->reprojection_texture);
+			fb_tex.push_back(p_depth_texture);
 			p_area_shadow_atlas->reprojection_fb = RD::get_singleton()->framebuffer_create(fb_tex);
 			p_area_shadow_atlas->reprojection_texture_size = p_viewport_size;
 		}
@@ -2875,11 +2882,18 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow 
 	}
 }
 
-void LightStorage::area_shadow_atlas_update(RID p_atlas, const Vector2 &p_viewport_size) {
+void LightStorage::area_shadow_atlas_update(RID p_atlas) {
 	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 	ERR_FAIL_NULL(shadow_atlas);
 
-	_update_area_shadow_atlas(shadow_atlas, p_viewport_size);
+	_update_area_shadow_atlas(shadow_atlas);
+}
+
+void LightStorage::area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) {
+	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_NULL(shadow_atlas);
+
+	_update_area_shadow_reprojection(shadow_atlas, p_viewport_size, p_depth_texture);
 }
 
 /* DIRECTIONAL SHADOW */

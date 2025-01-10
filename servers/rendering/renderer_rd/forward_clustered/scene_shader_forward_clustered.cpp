@@ -399,6 +399,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 					} else if (k == PIPELINE_VERSION_DEPTH_PASS_WITH_SDF) {
 						blend_state = RD::PipelineColorBlendState(); //no color targets for SDF
 					} else if (k == PIPELINE_VERSION_AREA_SHADOW_REPROJECTION) {
+						depth_stencil.enable_depth_write = false; // uses depth test, but does not write depth
 						blend_state = RD::PipelineColorBlendState::create_disabled(1); // overwrite framebuffer
 					}
 

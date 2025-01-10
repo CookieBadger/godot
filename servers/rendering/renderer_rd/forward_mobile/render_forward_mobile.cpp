@@ -1208,7 +1208,7 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, R
 		ERR_FAIL_COND(!light_storage->owns_area_shadow_atlas(p_area_shadow_atlas));
 		ERR_FAIL_COND(!light_storage->area_shadow_atlas_owns_light_instance(p_area_shadow_atlas, p_light));
 
-		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas, p_viewport_size);
+		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas);
 
 		uint32_t key = light_storage->area_shadow_atlas_get_light_instance_key(p_area_shadow_atlas, p_light);
 

@@ -42,6 +42,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/area_light_shadow_banding.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/utilities.h"
 
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
@@ -177,6 +178,15 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RID pipeline;
 		RID texture;
 	} best_fit_normal;
+
+	struct AreaLightShadowBanding {
+		AreaLightShadowBandingShaderRD area_light_shadow_banding_shader;
+		RID shader_version;
+		RID shader;
+		RID shader_pipeline;
+		RID banding_flag_buffer;
+		RID uniform_set;
+	} area_light_shadow_banding;
 
 	enum PassMode {
 		PASS_MODE_COLOR,
@@ -604,7 +614,7 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 	void _render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, const Rect2i &p_rect = Rect2i(), bool p_flip_y = false, bool p_clear_region = true, bool p_begin = true, bool p_end = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
 	void _render_shadow_process();
 	void _render_shadow_end();
-	bool _render_area_shadow_test(RenderDataRD *p_render_data, RID p_light, RID p_depth_texture, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size);
+	bool _render_area_shadow_banding_test(RenderDataRD *p_render_data, RID p_light, RID p_depth_texture, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size, const Rect2 &p_quad, const HashMap<Vector2, uint32_t> &p_point_index_map);
 
 	/* Render Scene */
 	void _process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections);

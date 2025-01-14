@@ -1250,7 +1250,7 @@ public:
 	}
 
 	virtual void area_shadow_atlas_update(RID p_atlas) override;
-	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) override;
+	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) override;
 
 	/* DIRECTIONAL SHADOW */
 

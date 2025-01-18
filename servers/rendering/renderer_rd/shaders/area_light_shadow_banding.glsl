@@ -11,11 +11,17 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform texture2D reprojection_texture;
 
 layout(set = 0, binding = 1, std430) restrict buffer Result {
-	uint flag;
+	uint flag[];
 };
 
+layout(push_constant, std430) uniform IndexBuffer {
+	uint index;
+	uint pad[3];
+} index_buffer;
+
+
 void main() {
-	if (flag == 1) return;
+	if (flag[index_buffer.index] == 1) return;
 
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 1);
 	float center = texelFetch(reprojection_texture, pos, 0).r;
@@ -32,5 +38,5 @@ void main() {
 		}
 	}
 
-	atomicExchange(flag, 1);
+	atomicExchange(flag[index_buffer.index], 1);
 }

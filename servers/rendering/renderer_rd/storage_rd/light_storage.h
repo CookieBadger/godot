@@ -56,6 +56,241 @@ public:
 		SHADOW_INVALID = 0xFFFFFFFF
 	};
 
+	class AreaLightQuadTree { // TODO: move this to where it makes sense
+	public:
+		class SampleNode {
+		friend class AreaLightQuadTree;
+		private:
+			Rect2 rect;
+			uint32_t idle_counter = 0;
+			uint32_t banding_index = 0;
+			Vector<uint32_t> shadow_map_indices;
+
+			Vector<AreaLightQuadTree::SampleNode *> children;
+
+			void add_child(SampleNode *p_child) { children.push_back(p_child); }
+			void set_rect(Rect2 p_rect) { rect = p_rect; }
+			void prune() { children.resize(0); }
+
+		public:
+			Vector<SampleNode*> get_children() { return children; }
+			Rect2 get_rect() { return rect; }
+			uint32_t get_idle_counter() { return idle_counter; }
+			void set_idle_counter(uint32_t p_counter) { idle_counter = p_counter; }
+			const Vector<uint32_t> get_shadow_indices() { return shadow_map_indices; }
+			void set_shadow_indices(uint32_t p_index1, uint32_t p_index2, uint32_t p_index3, uint32_t p_index4) {
+				shadow_map_indices.clear(); // TODO: could use a faster data structure (e.g. array)
+				shadow_map_indices.push_back(p_index1);
+				shadow_map_indices.push_back(p_index2);
+				shadow_map_indices.push_back(p_index3);
+				shadow_map_indices.push_back(p_index4);
+			}
+			uint32_t get_banding_index() { return banding_index; }
+			void set_banding_index(uint32_t p_index) { banding_index = p_index; }
+			bool is_leaf() { return children.size() == 0; }
+
+
+			SampleNode() {
+				rect.position = Vector2(0, 0);
+				rect.size = Vector2(1, 1);
+				idle_counter = 0;
+				banding_index = 0;
+			}
+			SampleNode(Rect2 p_rect) {
+				rect = p_rect;
+				idle_counter = 0;
+				banding_index = 0;
+			}
+		};
+
+		struct Iterator {
+			friend class AreaLightQuadTree;
+
+		public:
+			SampleNode *next() {
+				SampleNode* node = nodes_under_condition[current_index];
+				current_index++;
+				return node;
+			}
+			bool has_next() { return current_index < nodes_under_condition.size(); }
+
+		private:
+			Vector<SampleNode*> nodes_under_condition;
+			uint32_t current_index = 0;
+
+			virtual bool _fulfills_condition(SampleNode* node) {
+				return true;
+			}
+
+			void initialize(SampleNode *root) {
+				Vector<SampleNode *> nodes;
+				nodes.push_back(root);
+				uint32_t current = 0;
+				while (current < nodes.size()) {
+					SampleNode *node = nodes[current];
+					if (_fulfills_condition(node)) {
+						nodes_under_condition.push_back(node);
+					}
+					Vector<SampleNode *> children = node->get_children();
+					for (uint32_t c = 0; c < children.size(); c++) { // expand quad
+						nodes.push_back(children[c]);
+					}
+					current++;
+				}
+			}
+
+			Iterator() : current_index(0) {}
+
+		};
+
+		struct LeafIterator : public Iterator {
+			friend class AreaLightQuadTree;
+		private:
+			bool _fulfills_condition(SampleNode *node) override {
+				return node->get_children().size() == 0;
+			}
+			LeafIterator() : Iterator() {}
+		};
+		struct IdleLeafParentIterator : public Iterator {
+			friend class AreaLightQuadTree;
+		private:
+			bool _fulfills_condition(SampleNode *node) override {
+				Vector<SampleNode *> children = node->get_children();
+				if (children.size() != 0) {
+					for (uint32_t c = 0; c < children.size(); c++) {
+						if (children[c]->get_children().size() != 0 || children[c]->get_idle_counter() == 0) {
+							return false;
+						}
+					}
+					return true;
+				}
+				return false;
+			}
+			IdleLeafParentIterator() : Iterator() {}
+		};
+
+		Iterator iterator() {
+			Iterator iterator = Iterator();
+			iterator.initialize(get_root());
+			return iterator;
+		}
+
+		LeafIterator leaf_iterator() {
+			LeafIterator iterator = LeafIterator();
+			iterator.initialize(get_root());
+			return iterator;
+		}
+
+		IdleLeafParentIterator idle_leaf_parent_iterator() {
+			IdleLeafParentIterator iterator = IdleLeafParentIterator();
+			iterator.initialize(get_root());
+			return iterator;
+		}
+
+		SampleNode *get_root() { return &root; }
+
+		uint32_t size() { return node_count; }
+		uint32_t unique_point_count() { return point_frequency.size(); }
+
+		uint32_t expand_node(SampleNode *p_node) {
+			if (p_node == nullptr || !p_node->is_leaf())
+				return 0;
+			uint32_t added_points = 0;
+			for (uint32_t i = 0; i < 4; i++) {
+				Rect2 rect = (Rect2(p_node->get_rect().position + Vector2(p_node->get_rect().size.x / 2 * (i % 2), p_node->get_rect().size.y / 2 * (i / 2)), p_node->get_rect().size / 2));
+				SampleNode *n = memnew(LightStorage::AreaLightQuadTree::SampleNode(rect));
+				p_node->add_child(n);
+
+				Vector2 points[4] = {
+					rect.position,
+					Vector2(rect.position.x + rect.size.x, rect.position.y),
+					Vector2(rect.position.x, rect.position.y + rect.size.y),
+					rect.position + rect.size
+				};
+
+				for (uint32_t j = 0; j < 4; j++) {
+					if (!point_frequency.has(points[j])) {
+						point_frequency[points[j]] = 1;
+						added_points++;
+					} else {
+						point_frequency[points[j]] += 1;
+					}
+				}
+			}
+			node_count += added_points;
+			return added_points;
+		}
+
+		uint32_t get_number_of_new_points_on_expansion(SampleNode* p_node) {
+			uint32_t points_to_add = 0;
+			Rect2 rect = p_node->get_rect();
+			Vector2 half_size = rect.size / 2;
+
+			Vector2 new_points[5] = {
+				Vector2(rect.position.x + half_size.x, rect.position.y),
+				Vector2(rect.position.x, rect.position.y + half_size.y),
+				rect.position + half_size,
+				Vector2(rect.position.x + rect.size.x, rect.position.y + half_size.y),
+				Vector2(rect.position.x + half_size.x, rect.position.y + rect.size.y)
+			};
+
+			for (uint32_t i = 0; i < 5; i++) {
+				if (!point_frequency.has(new_points[i])) {
+					points_to_add++;
+				}
+			}
+			return points_to_add;
+		}
+
+		uint32_t prune_node(SampleNode* p_node) {
+			if (p_node == nullptr || p_node->is_leaf())
+				return 0;
+			uint32_t removed_points = 0;
+			Vector<SampleNode*> children = p_node->get_children();
+			for (uint32_t i = 0; i < 4; i++) { // recursively prune children
+				Rect2 rect = children[i]->get_rect();
+				Vector2 points[4] = { rect.position, Vector2(rect.position.x + rect.size.x, rect.position.y), Vector2(rect.position.x, rect.position.y + rect.size.y), rect.position + rect.size };
+
+				removed_points += prune_node(children[i]);
+
+				for (uint32_t j = 0; j < 4; j++) {
+					ERR_FAIL_COND_V(!point_frequency.has(points[j]), removed_points);
+					if (point_frequency[points[j]] == 1) {
+						point_frequency.erase(points[j]);
+						removed_points++;
+					} else {
+						point_frequency[points[j]] -= 1;
+						ERR_FAIL_COND_V(point_frequency[points[j]] < 1, removed_points);
+					}
+				}
+
+				memdelete(children[i]);
+				// TODO: how to remove from unique_points here?
+			}
+			p_node->prune();
+			node_count--;
+			return removed_points;
+		}
+
+		bool is_initialized() { return initialized; }
+		void initialize() { initialized = true; }
+
+		AreaLightQuadTree(): initialized(false), node_count(1) {
+			point_frequency[Vector2(0, 0)] = 1;
+			point_frequency[Vector2(1, 0)] = 1;
+			point_frequency[Vector2(0, 1)] = 1;
+			point_frequency[Vector2(1, 1)] = 1;
+		}
+		~AreaLightQuadTree() {
+			prune_node(&root);
+		}
+	private:
+		SampleNode root;
+		bool initialized;
+		uint32_t node_count;
+		HashMap<Vector2, uint32_t> point_frequency;
+	};
+
 private:
 	static LightStorage *singleton;
 	uint32_t max_cluster_elements = 512;
@@ -123,6 +358,7 @@ private:
 		uint32_t light_directional_index = 0;
 
 		Rect2 directional_rect;
+		AreaLightQuadTree sample_tree;
 
 		HashSet<RID> shadow_atlases; //shadow atlases where this light is registered
 
@@ -654,7 +890,7 @@ public:
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override;
 	virtual void light_instance_mark_visible(RID p_light_instance) override;
 	virtual void area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) override;
-
+	
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override {
 		const LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
 		ERR_FAIL_NULL_V(light_instance, false);
@@ -796,6 +1032,13 @@ public:
 		uint32_t shadow_size = (shadow_atlas->size / shadow_atlas->subdivision);
 
 		return float(1.0) / shadow_size;
+	}
+
+	_FORCE_INLINE_ AreaLightQuadTree* area_light_instance_get_quad_tree(RID p_area_light_instance) {
+		LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
+		ERR_FAIL_NULL_V(light_instance, nullptr);
+
+		return &light_instance->sample_tree;
 	}
 
 	_FORCE_INLINE_ Projection light_instance_get_shadow_camera(RID p_light_instance, int p_index) {

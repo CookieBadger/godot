@@ -740,7 +740,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 			uint32_t row = i / light_data.area_map_subdivision;
 			uint32_t col = i % light_data.area_map_subdivision;
 
-			light_data.map_idx[i] = i;
+			light_data.map_idx[i] = p_light_instance->area_shadow_map_indices[i];
 			light_data.weights[i] = 1.0f;
 			light_data.shadow_samples[i * 2] = p_light_instance->area_shadow_samples[i].x;
 			light_data.shadow_samples[i * 2 + 1] = p_light_instance->area_shadow_samples[i].y;

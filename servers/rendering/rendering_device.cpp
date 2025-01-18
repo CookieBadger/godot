@@ -2796,7 +2796,9 @@ RID RenderingDevice::uniform_set_create(const Vector<Uniform> &p_uniforms, RID p
 	ERR_FAIL_COND_V(p_uniforms.is_empty(), RID());
 
 	Shader *shader = shader_owner.get_or_null(p_shader);
-	ERR_FAIL_NULL_V(shader, RID());
+	if (shader == nullptr) {
+		ERR_FAIL_NULL_V(shader, RID());
+	}
 
 	ERR_FAIL_COND_V_MSG(p_shader_set >= (uint32_t)shader->uniform_sets.size() || shader->uniform_sets[p_shader_set].is_empty(), RID(),
 			"Desired set (" + itos(p_shader_set) + ") not used by shader.");
@@ -3606,14 +3608,18 @@ Error RenderingDevice::_draw_list_setup_framebuffer(Framebuffer *p_framebuffer, 
 			if (texture) {
 				attachments.push_back(texture->driver_id);
 				if (!(texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) { // VRS attachment will be a different size.
-					ERR_FAIL_COND_V(texture->width != p_framebuffer->size.width, ERR_BUG);
-					ERR_FAIL_COND_V(texture->height != p_framebuffer->size.height, ERR_BUG);
+					if (texture->width != p_framebuffer->size.width || texture->height != p_framebuffer->size.height) {
+						ERR_FAIL_COND_V(texture->width != p_framebuffer->size.width, ERR_BUG);
+						ERR_FAIL_COND_V(texture->height != p_framebuffer->size.height, ERR_BUG);
+					}
 				}
 			}
 		}
 
 		version.framebuffer = driver->framebuffer_create(version.render_pass, attachments, p_framebuffer->size.width, p_framebuffer->size.height);
-		ERR_FAIL_COND_V(!version.framebuffer, ERR_CANT_CREATE);
+		if (!version.framebuffer) {	
+			ERR_FAIL_COND_V(!version.framebuffer, ERR_CANT_CREATE);
+		}
 
 		version.subpass_count = framebuffer_formats[p_framebuffer->format_id].E->key().passes.size();
 
@@ -3655,7 +3661,9 @@ Error RenderingDevice::_draw_list_render_pass_begin(Framebuffer *p_framebuffer, 
 
 			if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
 				if (color_index < p_clear_colors.size()) {
-					ERR_FAIL_INDEX_V(color_index, p_clear_colors.size(), ERR_BUG); // A bug.
+					if (color_index >= p_clear_colors.size()) {
+						ERR_FAIL_INDEX_V(color_index, p_clear_colors.size(), ERR_BUG); // A bug.
+					}
 					clear_value.color = p_clear_colors[color_index];
 					color_index++;
 				}
@@ -3781,7 +3789,9 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 	RDD::RenderPassID render_pass;
 
 	Error err = _draw_list_setup_framebuffer(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, &fb_driver_id, &render_pass, &draw_list_subpass_count);
-	ERR_FAIL_COND_V(err != OK, INVALID_ID);
+	if (err != OK) {
+		ERR_FAIL_COND_V(err != OK, INVALID_ID);
+	}
 
 	err = _draw_list_render_pass_begin(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, p_clear_color_values, p_clear_depth, p_clear_stencil, viewport_offset, viewport_size, fb_driver_id, render_pass);
 
@@ -3923,7 +3933,9 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 			"Attempting to bind a descriptor set (" + itos(p_index) + ") greater than what the hardware supports (" + itos(driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS)) + ").");
 #endif
 	DrawList *dl = _get_draw_list_ptr(p_list);
-	ERR_FAIL_NULL(dl);
+	if (dl == nullptr) {
+		ERR_FAIL_NULL(dl);
+	}
 
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");

@@ -508,6 +508,7 @@ protected:
 
 	/* Rendering */
 
+	virtual void read_buffers() override;
 	virtual void _render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) override;
 
 	virtual void _render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region, float p_exposure_normalization) override;

@@ -662,6 +662,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 }
 
 void RendererViewport::draw_viewports(bool p_swap_buffers) {
+	RSG::scene->read_buffers(); // TODO: does this make sense here?
 	timestamp_vp_map.clear();
 
 #ifndef _3D_DISABLED

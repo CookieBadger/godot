@@ -530,12 +530,13 @@ void LightStorage::light_instance_set_shadow_transform(RID p_light_instance, con
 	light_instance->shadow_transform[p_pass].uv_scale = p_uv_scale;
 }
 
-void LightStorage::area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) {
+void LightStorage::area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices, const Vector<float> &p_area_shadow_sample_weights) {
 	LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
 	ERR_FAIL_NULL(light_instance);
 
 	light_instance->area_shadow_map_indices = p_area_shadow_map_indices;
 	light_instance->area_shadow_samples = p_area_shadow_samples;
+	light_instance->area_shadow_sample_weights = p_area_shadow_sample_weights;
 }
 
 void LightStorage::light_instance_mark_visible(RID p_light_instance) {
@@ -741,7 +742,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 			uint32_t col = i % light_data.area_map_subdivision;
 
 			light_data.map_idx[i] = p_light_instance->area_shadow_map_indices[i];
-			light_data.weights[i] = 1.0f;
+			light_data.weights[i] = p_light_instance->area_shadow_sample_weights[i];
 			light_data.shadow_samples[i * 2] = p_light_instance->area_shadow_samples[i].x;
 			light_data.shadow_samples[i * 2 + 1] = p_light_instance->area_shadow_samples[i].y;
 		}

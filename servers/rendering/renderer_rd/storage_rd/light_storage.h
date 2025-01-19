@@ -58,6 +58,49 @@ public:
 
 	class AreaLightQuadTree { // TODO: move this to where it makes sense
 	public:
+		struct SampleMultiplicity {
+			HashMap<uint32_t, uint32_t> depth_multiplicities;
+			Vector<uint32_t> depths;
+
+			uint32_t get(uint32_t p_depth) {
+				ERR_FAIL_COND_V(!depth_multiplicities.has(p_depth), 0);
+				return depth_multiplicities[p_depth];
+			}
+			uint32_t get_last() {
+				return depth_multiplicities[depths[depths.size() - 1]];
+			}
+			uint32_t get_highest_depth() {
+				return depths[depths.size() - 1];
+			}
+
+			void increment_at(uint32_t p_depth) {
+				if (depth_multiplicities.has(p_depth)) {
+					depth_multiplicities[p_depth] += 1;
+				} else {
+					depth_multiplicities[p_depth] = 1;
+					depths.push_back(p_depth);
+				}
+			}
+
+			void decrement_last() {
+				uint32_t last_idx = depths.size() - 1;
+				uint32_t depth = depths[last_idx];
+
+				if (depth_multiplicities[depth] == 1) {
+					depth_multiplicities.erase(depth);
+					depths.remove_at(last_idx);
+				} else {
+					depth_multiplicities[depth] -= 1;
+				}
+			}
+
+			SampleMultiplicity(uint32_t p_depth) {
+				depth_multiplicities[p_depth] = 1;
+				depths.push_back(p_depth);
+			}
+			SampleMultiplicity() {}
+		};
+
 		class SampleNode {
 		friend class AreaLightQuadTree;
 		private:
@@ -65,6 +108,7 @@ public:
 			uint32_t idle_counter = 0;
 			uint32_t banding_index = 0;
 			Vector<uint32_t> shadow_map_indices;
+			uint32_t depth;
 
 			Vector<AreaLightQuadTree::SampleNode *> children;
 
@@ -95,11 +139,13 @@ public:
 				rect.size = Vector2(1, 1);
 				idle_counter = 0;
 				banding_index = 0;
+				depth = 0;
 			}
-			SampleNode(Rect2 p_rect) {
+			SampleNode(Rect2 p_rect, uint32_t p_depth) {
 				rect = p_rect;
 				idle_counter = 0;
 				banding_index = 0;
+				depth = p_depth;
 			}
 		};
 
@@ -190,7 +236,7 @@ public:
 		SampleNode *get_root() { return &root; }
 
 		uint32_t size() { return node_count; }
-		uint32_t unique_point_count() { return point_frequency.size(); }
+		uint32_t unique_point_count() { return point_multiplicities.size(); }
 
 		uint32_t expand_node(SampleNode *p_node) {
 			if (p_node == nullptr || !p_node->is_leaf())
@@ -198,7 +244,7 @@ public:
 			uint32_t added_points = 0;
 			for (uint32_t i = 0; i < 4; i++) {
 				Rect2 rect = (Rect2(p_node->get_rect().position + Vector2(p_node->get_rect().size.x / 2 * (i % 2), p_node->get_rect().size.y / 2 * (i / 2)), p_node->get_rect().size / 2));
-				SampleNode *n = memnew(LightStorage::AreaLightQuadTree::SampleNode(rect));
+				SampleNode *n = memnew(LightStorage::AreaLightQuadTree::SampleNode(rect, p_node->depth+1));
 				p_node->add_child(n);
 
 				Vector2 points[4] = {
@@ -208,22 +254,23 @@ public:
 					rect.position + rect.size
 				};
 
-				for (uint32_t j = 0; j < 4; j++) {
-					if (!point_frequency.has(points[j])) {
-						point_frequency[points[j]] = 1;
+				for (uint32_t j = 0; j < 4; j++) { // TODO: this could be reduced from running 4*4=16 times to running just 5 times and adding the exact numbers, instead of increment by 1.
+					if (!point_multiplicities.has(points[j])) {
+						point_multiplicities[points[j]] = SampleMultiplicity(n->depth);
 						added_points++;
 					} else {
-						point_frequency[points[j]] += 1;
+						point_multiplicities[points[j]].increment_at(n->depth);
 					}
 				}
 			}
-			node_count += added_points;
+			weights_dirty = true;
+			node_count += 4;
 			return added_points;
 		}
 
 		uint32_t get_number_of_new_points_on_expansion(SampleNode* p_node) {
 			uint32_t points_to_add = 0;
-			Rect2 rect = p_node->get_rect();
+			const Rect2 &rect = p_node->get_rect();
 			Vector2 half_size = rect.size / 2;
 
 			Vector2 new_points[5] = {
@@ -235,7 +282,7 @@ public:
 			};
 
 			for (uint32_t i = 0; i < 5; i++) {
-				if (!point_frequency.has(new_points[i])) {
+				if (!point_multiplicities.has(new_points[i])) {
 					points_to_add++;
 				}
 			}
@@ -248,19 +295,20 @@ public:
 			uint32_t removed_points = 0;
 			Vector<SampleNode*> children = p_node->get_children();
 			for (uint32_t i = 0; i < 4; i++) { // recursively prune children
-				Rect2 rect = children[i]->get_rect();
+				const Rect2 &rect = children[i]->get_rect();
 				Vector2 points[4] = { rect.position, Vector2(rect.position.x + rect.size.x, rect.position.y), Vector2(rect.position.x, rect.position.y + rect.size.y), rect.position + rect.size };
 
 				removed_points += prune_node(children[i]);
 
 				for (uint32_t j = 0; j < 4; j++) {
-					ERR_FAIL_COND_V(!point_frequency.has(points[j]), removed_points);
-					if (point_frequency[points[j]] == 1) {
-						point_frequency.erase(points[j]);
+					SampleMultiplicity &multiplicities = point_multiplicities[points[j]];
+					ERR_FAIL_COND_V(!multiplicities.depths.has(p_node->depth), 0);
+					if (multiplicities.depths.size() == 1 && multiplicities.get_last() == 1) {
+						point_multiplicities.erase(points[j]);
 						removed_points++;
 					} else {
-						point_frequency[points[j]] -= 1;
-						ERR_FAIL_COND_V(point_frequency[points[j]] < 1, removed_points);
+						// 
+						multiplicities.decrement_last();
 					}
 				}
 
@@ -268,18 +316,46 @@ public:
 				// TODO: how to remove from unique_points here?
 			}
 			p_node->prune();
-			node_count--;
+			node_count -= 4;
+			weights_dirty = true;
 			return removed_points;
+		}
+
+		Vector<float> get_sample_weights() {
+			if (!weights_dirty) {
+				weights_dirty = false;
+				//return sample_weights; // TODO: check if this cache works
+			}
+			sample_weights.clear();
+			float sum = 0;
+
+			for (HashMap<Vector2, SampleMultiplicity>::Iterator E = point_multiplicities.begin(); E; ++E) { // calculate weights
+				uint32_t depth = E->value.get_highest_depth();
+				float ratio = (pow(2, depth) + 1);
+				float weight = 1.0 / (ratio * ratio); // = 1 / (2^d+1)^2
+				sum += weight;
+				sample_weights.push_back(weight);
+			}
+
+			for (int i = 0; i < sample_weights.size(); i++) { // normalize weights
+				sample_weights.set(i, sample_weights[i] / sum);
+			}
+			weights_dirty = false;
+			return sample_weights;
 		}
 
 		bool is_initialized() { return initialized; }
 		void initialize() { initialized = true; }
 
 		AreaLightQuadTree(): initialized(false), node_count(1) {
-			point_frequency[Vector2(0, 0)] = 1;
-			point_frequency[Vector2(1, 0)] = 1;
-			point_frequency[Vector2(0, 1)] = 1;
-			point_frequency[Vector2(1, 1)] = 1;
+			point_multiplicities[Vector2(0, 0)] = SampleMultiplicity(0);
+			point_multiplicities[Vector2(1, 0)] = SampleMultiplicity(0);
+			point_multiplicities[Vector2(0, 1)] = SampleMultiplicity(0);
+			point_multiplicities[Vector2(1, 1)] = SampleMultiplicity(0);
+			sample_weights.push_back(0.25);
+			sample_weights.push_back(0.25);
+			sample_weights.push_back(0.25);
+			sample_weights.push_back(0.25);
 		}
 		~AreaLightQuadTree() {
 			prune_node(&root);
@@ -288,7 +364,9 @@ public:
 		SampleNode root;
 		bool initialized;
 		uint32_t node_count;
-		HashMap<Vector2, uint32_t> point_frequency;
+		HashMap<Vector2, SampleMultiplicity> point_multiplicities;
+		Vector<float> sample_weights;
+		bool weights_dirty;
 	};
 
 private:
@@ -367,6 +445,7 @@ private:
 		// TODO: extract these with an abstraction of LightInstance? Or move to LightStorage::Light (above)?
 		Vector<Vector2> area_shadow_samples;
 		Vector<uint32_t> area_shadow_map_indices;
+		Vector<float> area_shadow_sample_weights;
 
 		LightInstance() {}
 	};
@@ -889,7 +968,7 @@ public:
 	virtual void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override;
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override;
 	virtual void light_instance_mark_visible(RID p_light_instance) override;
-	virtual void area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices) override;
+	virtual void area_light_instance_set_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices, const Vector<float> &p_area_shadow_sample_weights) override;
 	
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override {
 		const LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);

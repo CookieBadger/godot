@@ -1563,7 +1563,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				uint32_t indices[4];
 
 				for (uint32_t p = 0; p < 4; p++) { // expand quad
-					int32_t index = area_shadow_samples.find(points_in_quad[p]); // TODO: could use a faster data structure here? like hashmap?
+					int32_t index = area_shadow_samples.find(points_in_quad[p]); // TODO: add a method to tree to get the set or an iterator directly.
 					if (index < 0) {
 						indices[p] = area_shadow_map_indices.size() + atlas_offset;
 						area_shadow_map_indices.push_back(area_shadow_map_indices.size() + atlas_offset); // TODO: could just use the offset instead, as the sample order already gives a mapping
@@ -1603,8 +1603,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 			atlas_offset += area_shadow_samples.size();
 			quad_tree->initialize();
+			Vector<float> area_shadow_sample_weights = quad_tree->get_sample_weights();
 
-			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices);
+			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices, area_shadow_sample_weights);
 		}
 
 	}
@@ -2868,7 +2869,7 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, p_depth_texture); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
 
 	Vector<Vector2> points_in_quad = { Vector2(p_quad.get_position()), Vector2(p_quad.get_position().x + p_quad.get_size().x, p_quad.get_position().y), Vector2(p_quad.get_position().x, p_quad.get_position().y + p_quad.get_size().y), Vector2(p_quad.get_end()) };
-	light_storage->area_light_instance_set_shadow_samples(p_light, points_in_quad, p_shadow_map_indices);
+	light_storage->area_light_instance_set_shadow_samples(p_light, points_in_quad, p_shadow_map_indices, Vector<float>({0.25, 0.25, 0.25, 0.25}));
 
 	render_list[RENDER_LIST_SECONDARY].clear();
 	scene_state.instance_data[RENDER_LIST_SECONDARY].clear();

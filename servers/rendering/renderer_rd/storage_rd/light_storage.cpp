@@ -736,6 +736,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 		light_data.area_side_b[2] = area_vec_b.z;
 
 		light_data.area_shadow_samples = p_light_instance->area_shadow_samples.size();
+		ERR_FAIL_COND(p_light_instance->area_shadow_samples.size() != p_light_instance->area_shadow_sample_weights.size());
 		light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
 		for (uint32_t i = 0; i < p_light_instance->area_shadow_samples.size(); i++) {
 			uint32_t row = i / light_data.area_map_subdivision;
@@ -2870,7 +2871,7 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow 
 	if (p_shadow->owner.is_valid()) {
 		LightInstance *sli = light_instance_owner.get_or_null(p_shadow->owner);
 
-		for (int i = 1; i < p_shadow_count; i++) {
+		for (uint32_t i = 1; i < p_shadow_count; i++) {
 			AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx + i];
 			shadow->version = 0;
 			shadow->owner = RID();

@@ -66,9 +66,6 @@ public:
 				ERR_FAIL_COND_V(!depth_multiplicities.has(p_depth), 0);
 				return depth_multiplicities[p_depth];
 			}
-			uint32_t get_last() {
-				return depth_multiplicities[depths[depths.size() - 1]];
-			}
 			uint32_t get_highest_depth() {
 				return depths[depths.size() - 1];
 			}
@@ -82,15 +79,12 @@ public:
 				}
 			}
 
-			void decrement_last() {
-				uint32_t last_idx = depths.size() - 1;
-				uint32_t depth = depths[last_idx];
-
-				if (depth_multiplicities[depth] == 1) {
-					depth_multiplicities.erase(depth);
-					depths.remove_at(last_idx);
+			void decrement_at(uint32_t p_depth) {
+				if (depth_multiplicities[p_depth] == 1) {
+					depth_multiplicities.erase(p_depth);
+					depths.erase(p_depth);
 				} else {
-					depth_multiplicities[depth] -= 1;
+					depth_multiplicities[p_depth] -= 1;
 				}
 			}
 
@@ -98,7 +92,9 @@ public:
 				depth_multiplicities[p_depth] = 1;
 				depths.push_back(p_depth);
 			}
-			SampleMultiplicity() {}
+			SampleMultiplicity() {
+				CRASH_NOW();
+			}
 		};
 
 		class SampleNode {
@@ -256,7 +252,7 @@ public:
 
 				for (uint32_t j = 0; j < 4; j++) { // TODO: this could be reduced from running 4*4=16 times to running just 5 times and adding the exact numbers, instead of increment by 1.
 					if (!point_multiplicities.has(points[j])) {
-						point_multiplicities[points[j]] = SampleMultiplicity(n->depth);
+						point_multiplicities.insert(points[j], SampleMultiplicity(n->depth));
 						added_points++;
 					} else {
 						point_multiplicities[points[j]].increment_at(n->depth);
@@ -292,8 +288,10 @@ public:
 		uint32_t prune_node(SampleNode* p_node) {
 			if (p_node == nullptr || p_node->is_leaf())
 				return 0;
+			CRASH_COND(p_node->children.size() != 4);
 			uint32_t removed_points = 0;
 			Vector<SampleNode*> children = p_node->get_children();
+			uint32_t child_depth = p_node->depth + 1;
 			for (uint32_t i = 0; i < 4; i++) { // recursively prune children
 				const Rect2 &rect = children[i]->get_rect();
 				Vector2 points[4] = { rect.position, Vector2(rect.position.x + rect.size.x, rect.position.y), Vector2(rect.position.x, rect.position.y + rect.size.y), rect.position + rect.size };
@@ -302,13 +300,12 @@ public:
 
 				for (uint32_t j = 0; j < 4; j++) {
 					SampleMultiplicity &multiplicities = point_multiplicities[points[j]];
-					ERR_FAIL_COND_V(!multiplicities.depths.has(p_node->depth), 0);
-					if (multiplicities.depths.size() == 1 && multiplicities.get_last() == 1) {
+					CRASH_COND(!multiplicities.depths.has(child_depth));
+					if (multiplicities.depths.size() == 1 && multiplicities.get(child_depth) == 1) {
 						point_multiplicities.erase(points[j]);
 						removed_points++;
 					} else {
-						// 
-						multiplicities.decrement_last();
+						multiplicities.decrement_at(child_depth);
 					}
 				}
 
@@ -348,10 +345,10 @@ public:
 		void initialize() { initialized = true; }
 
 		AreaLightQuadTree(): initialized(false), node_count(1) {
-			point_multiplicities[Vector2(0, 0)] = SampleMultiplicity(0);
-			point_multiplicities[Vector2(1, 0)] = SampleMultiplicity(0);
-			point_multiplicities[Vector2(0, 1)] = SampleMultiplicity(0);
-			point_multiplicities[Vector2(1, 1)] = SampleMultiplicity(0);
+			point_multiplicities.insert(Vector2(0, 0), SampleMultiplicity(0));
+			point_multiplicities.insert(Vector2(1, 0), SampleMultiplicity(0));
+			point_multiplicities.insert(Vector2(0, 1), SampleMultiplicity(0));
+			point_multiplicities.insert(Vector2(1, 1), SampleMultiplicity(0));
 			sample_weights.push_back(0.25);
 			sample_weights.push_back(0.25);
 			sample_weights.push_back(0.25);

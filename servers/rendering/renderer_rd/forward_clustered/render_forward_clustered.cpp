@@ -1514,7 +1514,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			// update buffers
 			if (quad_tree->is_initialized()) { // tree was built once
 
-				
 				int32_t points_delta = 0;
 				RendererRD::LightStorage::AreaLightQuadTree::IdleLeafParentIterator idle_leaf_parent_iterator = quad_tree->idle_leaf_parent_iterator();
 				while (idle_leaf_parent_iterator.has_next()) {
@@ -1568,8 +1567,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 						indices[p] = area_shadow_map_indices.size() + atlas_offset;
 						area_shadow_map_indices.push_back(area_shadow_map_indices.size() + atlas_offset); // TODO: could just use the offset instead, as the sample order already gives a mapping
 						area_shadow_samples.push_back(points_in_quad[p]);
-						if (area_shadow_samples.size() > possible_samples)
-							ERR_FAIL_COND(area_shadow_samples.size() > possible_samples);
+						ERR_FAIL_COND(area_shadow_samples.size() > possible_samples);
 					} else {
 						indices[p] = index;
 					}
@@ -1605,6 +1603,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			quad_tree->initialize();
 			Vector<float> area_shadow_sample_weights = quad_tree->get_sample_weights();
 
+			ERR_FAIL_COND(area_shadow_samples.size() != area_shadow_sample_weights.size());
 			light_storage->area_light_instance_set_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, area_shadow_samples, area_shadow_map_indices, area_shadow_sample_weights);
 		}
 

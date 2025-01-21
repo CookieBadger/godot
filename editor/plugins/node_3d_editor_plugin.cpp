@@ -2736,6 +2736,7 @@ void Node3DEditorViewport::_project_settings_changed() {
 	int area_shadowmap_size = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_size");
 	bool area_shadowmap_16_bits = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_16_bits");
 	int area_atlas_subdivision = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_subdivision");
+	int area_reprojection_ratio = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/viewport_reprojection_ratio");
 
 	viewport->set_positional_shadow_atlas_size(shadowmap_size);
 	viewport->set_positional_shadow_atlas_16_bits(shadowmap_16_bits);
@@ -2747,6 +2748,7 @@ void Node3DEditorViewport::_project_settings_changed() {
 	viewport->set_area_shadow_atlas_size(area_shadowmap_size);
 	viewport->set_area_shadow_atlas_16_bits(area_shadowmap_size);
 	viewport->set_area_shadow_atlas_subdiv(Viewport::AreaShadowAtlasSubdiv(area_atlas_subdivision));
+	viewport->set_area_shadow_reprojection_ratio(Viewport::AreaShadowReprojectionRatio(area_reprojection_ratio));
 
 	_update_shrink();
 

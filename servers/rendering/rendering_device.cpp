@@ -3971,7 +3971,9 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 
 void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array) {
 	DrawList *dl = _get_draw_list_ptr(p_list);
-	ERR_FAIL_NULL(dl);
+	if (dl == nullptr) {
+		ERR_FAIL_NULL(dl);
+	}
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");
 #endif
@@ -4038,7 +4040,9 @@ void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width)
 
 void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void *p_data, uint32_t p_data_size) {
 	DrawList *dl = _get_draw_list_ptr(p_list);
-	ERR_FAIL_NULL(dl);
+	if (dl == nullptr) {
+		ERR_FAIL_NULL(dl);
+	}
 
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");
@@ -4058,7 +4062,9 @@ void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void 
 
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
 	DrawList *dl = _get_draw_list_ptr(p_list);
-	ERR_FAIL_NULL(dl);
+	if (dl == nullptr) {
+		ERR_FAIL_NULL(dl);
+	}
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");
 #endif

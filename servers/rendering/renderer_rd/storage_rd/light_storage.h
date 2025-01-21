@@ -754,12 +754,15 @@ private:
 			Shadow() {}
 		};
 		uint32_t subdivision = 16;
+		int reprojection_ratio = 1;
 
 		int size = 0;
 		bool use_16_bits = true;
 
 		RID depth; // depth texture
 		RID reprojection_texture;
+		RID reprojection_depth_texture;
+		RID reprojection_depth_fb;
 		RID fb; //for copying: TODO: check if this, reprojection_fb and ShadowAtlas::fb are needed
 		RID reprojection_fb;
 		Size2i reprojection_texture_size;
@@ -1505,6 +1508,7 @@ public:
 
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
+	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) override;
 	virtual bool area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) override;
 
 	_FORCE_INLINE_ bool area_shadow_atlas_owns_light_instance(RID p_atlas, RID p_light_instance) {
@@ -1554,10 +1558,28 @@ public:
 		return atlas->reprojection_fb;
 	}
 
+	_FORCE_INLINE_ RID area_shadow_atlas_get_reprojection_depth_fb(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->reprojection_depth_fb;
+	}
+
+	_FORCE_INLINE_ int area_shadow_atlas_get_reprojection_ratio(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, 1.0);
+		return atlas->reprojection_ratio;
+	}
+
 	_FORCE_INLINE_ RID area_shadow_atlas_get_reprojection_texture(RID p_atlas) {
 		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 		ERR_FAIL_NULL_V(atlas, RID());
 		return atlas->reprojection_texture;
+	}
+
+	_FORCE_INLINE_ RID area_shadow_atlas_get_reprojection_depth_texture(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, RID());
+		return atlas->reprojection_depth_texture;
 	}
 
 	_FORCE_INLINE_ Size2i area_shadow_atlas_get_reprojection_size(RID p_atlas) {

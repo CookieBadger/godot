@@ -557,6 +557,7 @@ public:
 	virtual RID area_shadow_atlas_create() = 0;
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_use_16_bits = true) = 0;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) = 0;
+	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) = 0;
 
 	virtual void directional_shadow_atlas_set_size(int p_size, bool p_16_bits = true) = 0;
 
@@ -964,6 +965,7 @@ public:
 
 	virtual void viewport_set_area_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits = true) = 0;
 	virtual void viewport_set_area_shadow_atlas_subdivision(RID p_viewport, int p_subdiv) = 0;
+	virtual void viewport_set_area_shadow_reprojection_ratio(RID p_viewport, int p_ratio) = 0;
 
 	enum ViewportMSAA {
 		VIEWPORT_MSAA_DISABLED,

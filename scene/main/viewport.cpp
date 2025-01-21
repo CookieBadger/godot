@@ -1369,6 +1369,25 @@ Viewport::AreaShadowAtlasSubdiv Viewport::get_area_shadow_atlas_subdiv() const {
 	return area_shadow_atlas_subdiv;
 }
 
+void Viewport::set_area_shadow_reprojection_ratio(AreaShadowReprojectionRatio p_ratio) {
+	ERR_MAIN_THREAD_GUARD;
+
+	if (area_shadow_reprojection_ratio == p_ratio) {
+		return;
+	}
+
+	area_shadow_reprojection_ratio = p_ratio;
+	static const int ratio[AREA_SHADOW_VP_REPROJECTION_RATIO_MAX] = { 1, 2, 4 };
+
+	RS::get_singleton()->viewport_set_area_shadow_reprojection_ratio(viewport, ratio[p_ratio]);
+}
+
+Viewport::AreaShadowReprojectionRatio Viewport::get_area_shadow_reprojection_ratio() const {
+	ERR_READ_THREAD_GUARD_V(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_1);
+	return area_shadow_reprojection_ratio;
+}
+
+
 Ref<InputEvent> Viewport::_make_input_local(const Ref<InputEvent> &ev) {
 	if (ev.is_null()) {
 		return ev; // No transformation defined for null event
@@ -4950,6 +4969,11 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_256);
 	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_1024);
 	BIND_ENUM_CONSTANT(AREA_SHADOW_ATLAS_SUBDIV_MAX);
+
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_1);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_2);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_4);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_MAX);
 
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BILINEAR);
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_FSR);

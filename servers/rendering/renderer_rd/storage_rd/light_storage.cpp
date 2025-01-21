@@ -2624,12 +2624,35 @@ void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atla
 
 void LightStorage::_update_area_shadow_reprojection(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) {
 	if (p_area_shadow_atlas->size > 0) {
+		if (p_depth_texture == RID()) {
+			// test if size needs to change
+			if (p_area_shadow_atlas->reprojection_depth_texture.is_valid()) {
+				RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_depth_texture);
+
+				if (p_reprojection_texture_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
+					RD::get_singleton()->free(p_area_shadow_atlas->reprojection_depth_texture);
+					p_area_shadow_atlas->reprojection_depth_texture = RID();
+				}
+			}
+
+			// recreate framebuffer and texture if necessary
+			if (p_area_shadow_atlas->reprojection_depth_texture.is_null()) {
+				RD::TextureFormat tf;
+				tf.format = RD::DATA_FORMAT_D16_UNORM;
+				tf.width = p_reprojection_texture_size.width;
+				tf.height = p_reprojection_texture_size.height;
+				tf.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+				p_area_shadow_atlas->reprojection_depth_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+				Vector<RID> fb_tex;
+				fb_tex.push_back(p_area_shadow_atlas->reprojection_depth_texture);
+				p_area_shadow_atlas->reprojection_depth_fb = RD::get_singleton()->framebuffer_create(fb_tex);
+			}
+		}
+
 		// test if size needs to change
 		if (p_area_shadow_atlas->reprojection_texture.is_valid()) {
 			RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_texture);
-
-			RD::TextureFormat depth_format = RD::get_singleton()->texture_get_format(p_depth_texture); // TODO: remove this eventually, consider just using the size of the depth buffer.
-			ERR_FAIL_COND(p_reprojection_texture_size != Vector2(depth_format.width, depth_format.height));
 
 			if (p_reprojection_texture_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
 				RD::get_singleton()->free(p_area_shadow_atlas->reprojection_texture);
@@ -2644,12 +2667,12 @@ void LightStorage::_update_area_shadow_reprojection(AreaShadowAtlas *p_area_shad
 			tf.format = RD::DATA_FORMAT_R16_UNORM; // single channel, range: [0.0; 1.0], 16 bit is probably sufficient
 			tf.width = p_reprojection_texture_size.width;
 			tf.height = p_reprojection_texture_size.height;
-			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT; // shadow does also | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT; TODO: This will depend on how we do the hardware occlusion query thing
+			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
 
 			p_area_shadow_atlas->reprojection_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
 			Vector<RID> fb_tex;
 			fb_tex.push_back(p_area_shadow_atlas->reprojection_texture);
-			fb_tex.push_back(p_depth_texture);
+			fb_tex.push_back(p_depth_texture != RID() ? p_depth_texture : p_area_shadow_atlas->reprojection_depth_texture);
 			p_area_shadow_atlas->reprojection_fb = RD::get_singleton()->framebuffer_create(fb_tex);
 			p_area_shadow_atlas->reprojection_texture_size = p_reprojection_texture_size;
 		}
@@ -2719,6 +2742,12 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 	shadow_atlas->shadows.clear();
 	shadow_atlas->shadows.resize(subdiv * subdiv);
 	shadow_atlas->subdivision = subdiv;
+}
+
+void LightStorage::area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) {
+	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_NULL(shadow_atlas);
+	shadow_atlas->reprojection_ratio = p_ratio;
 }
 
 bool LightStorage::_area_shadow_atlas_find_shadows(AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, int &r_shadow) {

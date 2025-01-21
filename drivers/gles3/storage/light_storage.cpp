@@ -1592,6 +1592,9 @@ void LightStorage::area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16
 void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) {
 }
 
+void LightStorage::area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) {
+}
+
 bool LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) {
 	return false;
 }

@@ -1546,6 +1546,25 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		RD::get_singleton()->buffer_update(area_light_shadow_banding.banding_flag_buffer, 0, sizeof(uint32_t) * zeros.size(), zeros.ptr());
 		RD::get_singleton()->set_resource_name(area_light_shadow_banding.banding_flag_buffer, "Area Shadow Banding Flag Buffer"); // TODO: move to initialization or smth
 
+		bool use_default_depth_buffer = light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas) == 1;
+
+		Vector2i reprojection_texture_size = viewport_size / light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas);
+		light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, use_default_depth_buffer ? rb->get_depth_texture() : RID()); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
+
+		if (!use_default_depth_buffer) {
+			// render smaller depth texture
+
+			RD::get_singleton()->draw_command_begin_label("Render Area Light Reprojection Depth Pre-Pass");
+
+			RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+			bool reverse_cull = false;
+			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_DEPTH, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0);
+			_render_list_with_draw_list(&render_list_params, light_storage->area_shadow_atlas_get_reprojection_depth_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, Vector<Color>());
+		}
+
+		
+		RD::get_singleton()->draw_command_end_label();
+
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) {
 			_render_shadow_begin(); // TODO: check if can merge with other shadow passes
 
@@ -1590,13 +1609,13 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RendererRD::LightStorage::AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
 			while (leaf_iterator.has_next()) {
 				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
-				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, rb->get_depth_texture(), lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), node->get_shadow_indices(), node->get_banding_index());
+				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), node->get_shadow_indices(), node->get_banding_index());
 			}
 
 			RendererRD::LightStorage::AreaLightQuadTree::IdleLeafParentIterator idle_leaf_parent_iterator = quad_tree->idle_leaf_parent_iterator();
 			while (idle_leaf_parent_iterator.has_next()) {
 				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();
-				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, rb->get_depth_texture(), lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), node->get_shadow_indices(), node->get_banding_index());
+				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), node->get_shadow_indices(), node->get_banding_index());
 			}
 
 			atlas_offset += area_shadow_samples.size();
@@ -2856,16 +2875,13 @@ void RenderForwardClustered::_render_shadow_end() {
 	RD::get_singleton()->draw_command_end_label();
 }
 
-void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_render_data, RID p_light, RID p_depth_texture, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size, const Rect2 &p_quad, const Vector<uint32_t> &p_shadow_map_indices, uint32_t p_banding_buffer_index) {
+void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_render_data, RID p_light, Vector2i p_reprojection_texture_size, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size, const Rect2 &p_quad, const Vector<uint32_t> &p_shadow_map_indices, uint32_t p_banding_buffer_index) {
 	// render only shadow values (PASS_MODE_AREA_SHADOW_REPROJECTION, custom resolution, greyscale)
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 
 	RENDER_TIMESTAMP("> Area Shadow Reprojection");
 	RD::get_singleton()->draw_command_begin_label("Area Shadow Reprojection");
-
-	Vector2i reprojection_texture_size = p_viewport_size;
-	light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, p_depth_texture); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
 
 	Vector<Vector2> points_in_quad = { Vector2(p_quad.get_position()), Vector2(p_quad.get_position().x + p_quad.get_size().x, p_quad.get_position().y), Vector2(p_quad.get_position().x, p_quad.get_position().y + p_quad.get_size().y), Vector2(p_quad.get_end()) };
 	light_storage->area_light_instance_set_shadow_samples(p_light, points_in_quad, p_shadow_map_indices, Vector<float>({0.25, 0.25, 0.25, 0.25}));
@@ -2936,7 +2952,7 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(push_constant));
 
 	
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, reprojection_texture_size.x-2, reprojection_texture_size.y-2, 1); // TODO: evaluate dispatch() vs dispatch_threads()
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_reprojection_texture_size.x - 2, p_reprojection_texture_size.y - 2, 1); // TODO: evaluate dispatch() vs dispatch_threads()
 	RD::get_singleton()->compute_list_end();
 
 	RD::get_singleton()->free(shadow_banding_uniform_set);

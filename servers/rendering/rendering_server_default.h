@@ -430,6 +430,7 @@ public:
 	FUNC0R(RID, area_shadow_atlas_create)
 	FUNC3(area_shadow_atlas_set_size, RID, int, bool)
 	FUNC2(area_shadow_atlas_set_subdivision, RID, int)
+	FUNC2(area_shadow_atlas_set_reprojection_ratio, RID, int)
 
 	FUNC2(directional_shadow_atlas_set_size, int, bool)
 
@@ -657,6 +658,7 @@ public:
 	FUNC3(viewport_set_sdf_oversize_and_scale, RID, ViewportSDFOversize, ViewportSDFScale)
 	FUNC3(viewport_set_positional_shadow_atlas_quadrant_subdivision, RID, int, int)
 	FUNC2(viewport_set_area_shadow_atlas_subdivision, RID, int)
+	FUNC2(viewport_set_area_shadow_reprojection_ratio, RID, int)
 	FUNC2(viewport_set_msaa_2d, RID, ViewportMSAA)
 	FUNC2(viewport_set_msaa_3d, RID, ViewportMSAA)
 	FUNC2(viewport_set_screen_space_aa, RID, ViewportScreenSpaceAA)

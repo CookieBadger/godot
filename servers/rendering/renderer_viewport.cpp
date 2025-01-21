@@ -1257,6 +1257,13 @@ void RendererViewport::viewport_set_area_shadow_atlas_subdivision(RID p_viewport
 	RSG::light_storage->area_shadow_atlas_set_subdivision(viewport->area_shadow_atlas, p_subdiv);
 }
 
+void RendererViewport::viewport_set_area_shadow_reprojection_ratio(RID p_viewport, int p_ratio) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+
+	RSG::light_storage->area_shadow_atlas_set_reprojection_ratio(viewport->area_shadow_atlas, p_ratio);
+}
+
 void RendererViewport::viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_msaa) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);

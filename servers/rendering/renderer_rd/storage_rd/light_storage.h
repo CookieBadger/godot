@@ -310,7 +310,6 @@ public:
 				}
 
 				memdelete(children[i]);
-				// TODO: how to remove from unique_points here?
 			}
 			p_node->prune();
 			node_count -= 4;
@@ -320,8 +319,7 @@ public:
 
 		Vector<float> get_sample_weights() {
 			if (!weights_dirty) {
-				weights_dirty = false;
-				//return sample_weights; // TODO: check if this cache works
+				return sample_weights;
 			}
 			sample_weights.clear();
 			float sum = 0;

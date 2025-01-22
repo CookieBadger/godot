@@ -1377,7 +1377,7 @@ void Viewport::set_area_shadow_reprojection_ratio(AreaShadowReprojectionRatio p_
 	}
 
 	area_shadow_reprojection_ratio = p_ratio;
-	static const int ratio[AREA_SHADOW_VP_REPROJECTION_RATIO_MAX] = { 1, 2, 4 };
+	static const int ratio[AREA_SHADOW_VP_REPROJECTION_RATIO_MAX] = { 1, 2, 4, 8, 16 };
 
 	RS::get_singleton()->viewport_set_area_shadow_reprojection_ratio(viewport, ratio[p_ratio]);
 }
@@ -4973,6 +4973,8 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_1);
 	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_2);
 	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_4);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_8);
+	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_16);
 	BIND_ENUM_CONSTANT(AREA_SHADOW_VP_REPROJECTION_RATIO_MAX);
 
 	BIND_ENUM_CONSTANT(SCALING_3D_MODE_BILINEAR);

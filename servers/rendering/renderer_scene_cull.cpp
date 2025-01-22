@@ -3416,6 +3416,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 						float screen_diameter = points[0].distance_to(points[1]) * 2;
 						coverage = screen_diameter / (vp_half_extents.x + vp_half_extents.y);
 
+						// An area light is almost always dirty, as the dynamic adjustment needs to happen every frame.
+						light->make_shadow_dirty();
+
 					} break;
 					default: {
 						ERR_PRINT("Invalid Light Type");

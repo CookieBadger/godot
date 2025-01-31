@@ -210,13 +210,14 @@ public:
 
 	virtual void shadow_atlas_update(RID p_atlas) override {}
 
+	virtual void area_shadow_set_banding_flags(Vector<uint8_t> p_buffer) override {};
 	virtual RID area_shadow_atlas_create() override { return RID(); };
 	virtual void area_shadow_atlas_free(RID p_atlas) override{};
 
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override{};
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override{};
 	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int ratio) override {};
-	virtual void area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, Vector<RendererSceneRender::RenderAreaShadowSampleData> &r_samples) override {};
+	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, uint32_t p_banding_buffer_offset) override { return 0; };
 	virtual void area_shadow_atlas_update(RID p_atlas) override {};
 	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) override{};
 

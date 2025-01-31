@@ -185,7 +185,7 @@ public:
 	virtual void lightmap_instance_set_transform(RID p_lightmap, const Transform3D &p_transform) = 0;
 
 	/* SHADOW ATLAS */
-
+	virtual void area_shadow_set_banding_flags(Vector<uint8_t> p_buffer) = 0;
 	virtual RID shadow_atlas_create() = 0;
 	virtual void shadow_atlas_free(RID p_atlas) = 0;
 
@@ -201,7 +201,7 @@ public:
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) = 0;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) = 0;
 	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) = 0;
-	virtual void area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, Vector<RendererSceneRender::RenderAreaShadowSampleData> &r_samples) = 0;
+	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, uint32_t p_banding_buffer_offset) = 0;
 	virtual void area_shadow_atlas_update(RID p_atlas) = 0;
 	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) = 0;
 

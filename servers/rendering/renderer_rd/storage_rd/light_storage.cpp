@@ -65,6 +65,8 @@ LightStorage::LightStorage() {
 	}
 
 	lightmap_probe_capture_update_speed = GLOBAL_GET("rendering/lightmapping/probe_capture/update_speed");
+
+	get_singleton()->banding_flags.resize_zeroed(RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE); // TODO: just resize should be enough
 }
 
 LightStorage::~LightStorage() {
@@ -2598,6 +2600,9 @@ void LightStorage::shadow_atlas_update(RID p_atlas) {
 }
 
 /* AREA SHADOW ATLAS */
+void LightStorage::area_shadow_set_banding_flags(Vector<uint8_t> p_buffer) {
+	memcpy(banding_flags.ptrw(), p_buffer.ptr(), sizeof(uint32_t) * RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE);
+}
 
 RID LightStorage::area_shadow_atlas_create() {
 	return area_shadow_atlas_owner.make_rid(AreaShadowAtlas());
@@ -2756,13 +2761,13 @@ void LightStorage::area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_r
 }
 
 bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices) {
+	if (p_needed_shadow_count == 0) {
+		return true;
+	}
 	Vector<AreaShadowAtlas::Shadow *> inactive_shadow_ptrs;
-	HashMap<AreaShadowAtlas::Shadow*, uint32_t> inactive_shadows;
+	HashMap<AreaShadowAtlas::Shadow *, uint32_t> inactive_shadows;
 
 	for (uint32_t i = 0; i < p_area_shadow_atlas->shadows.size(); i++) {
-		if (r_new_shadow_atlas_indices.size() == p_needed_shadow_count) {
-			return true;
-		}
 		AreaShadowAtlas::Shadow sh = p_area_shadow_atlas->shadows[i];
 		if (sh.active) {
 			continue;
@@ -2772,6 +2777,9 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 		} else {
 			inactive_shadows.insert(&sh, i);
 			inactive_shadow_ptrs.push_back(&sh);
+		}
+		if (r_new_shadow_atlas_indices.size() == p_needed_shadow_count) {
+			return true;
 		}
 	}
 
@@ -2792,31 +2800,31 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 
 	for (uint32_t i = 0; i < missing_shadows; i++) {
 		uint32_t shadow_idx = inactive_shadows[inactive_shadow_ptrs[i]];
-		_area_shadow_atlas_invalidate_shadow(inactive_shadow_ptrs[i], p_atlas, p_area_shadow_atlas, shadow_idx);
+		_area_shadow_atlas_invalidate_shadow(p_atlas, p_area_shadow_atlas, shadow_idx);
 		r_new_shadow_atlas_indices.push_back(shadow_idx);
 	}
 	return true;
 }
 
-void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, Vector<RendererSceneRender::RenderAreaShadowSampleData> &r_samples) {
+uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, uint32_t p_banding_buffer_offset) {
 	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
-	ERR_FAIL_NULL(shadow_atlas);
+	ERR_FAIL_NULL_V(shadow_atlas, 0);
 
 	LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
-	ERR_FAIL_NULL(li);
+	ERR_FAIL_NULL_V(li, 0);
 
 	if (shadow_atlas->size == 0 || shadow_atlas->subdivision == 0) {
-		return;
+		return 0;
 	}
 
-	AreaLightQuadTree *quad_tree = area_light_instance_get_quad_tree(p_light_instance);
+	AreaLightQuadTree *quad_tree = light_instance_get_area_shadow_quad_tree(p_light_instance);
 	uint32_t area_shadow_atlas_subdivision = area_shadow_atlas_get_subdivision(p_atlas); // TODO: for some reason, this returns 4 at initialization
-	uint32_t occupied_slots = quad_tree->get_unique_points().size(); //shadow_atlas->occupied_maps; // TODO: logic needs to be more complex, than this. Take into account that stealing maps from higher depth maps should be ok.
+	int32_t occupied_slots = quad_tree->get_unique_points().size(); //shadow_atlas->occupied_maps; // TODO: logic needs to be more complex, than this. Take into account that stealing maps from higher depth maps should be ok.
 	const uint32_t max_samples = 289; // 17*17 // TODO: should be a constant somewhere
-	uint32_t possible_samples = MIN(max_samples, area_shadow_atlas_subdivision * area_shadow_atlas_subdivision);
+	int32_t possible_samples = MIN(max_samples, area_shadow_atlas_subdivision * area_shadow_atlas_subdivision);
 	// update buffers
 	HashSet<Vector2> pruned_samples;
-	HashSet<Vector2> removed_samples; // samples that should free their occupied shadow atlas slot
+	HashMap<Vector2, uint32_t> removed_samples; // samples that should free their occupied shadow atlas slot
 	Vector<Vector2> added_samples; // samples that require new shadow atlas slots 
 
 	uint64_t tick = OS::get_singleton()->get_ticks_msec();
@@ -2828,12 +2836,12 @@ void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_insta
 		while (idle_leaf_parent_iterator.has_next()) {
 			AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();
 
-			if (!quad_tree->get_banding_flag(node->get_banding_index())) {
+			if (!get_banding_flag(node->get_banding_index())) {
 				node->set_idle_counter(0);
-				Vector<Vector2> samples = quad_tree->prune_node(node);
+				Vector<AreaShadowSample> samples = quad_tree->prune_node(node);
 				for (uint32_t i = 0; i < samples.size(); i++) {
-					pruned_samples.insert(samples[i]);
-					removed_samples.insert(samples[i]);
+					pruned_samples.insert(samples[i].position_on_light);
+					removed_samples.insert(samples[i].position_on_light, samples[i].atlas_index);
 				}
 				points_delta -= samples.size();
 			}
@@ -2843,7 +2851,7 @@ void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_insta
 		while (leaf_iterator.has_next()) {
 			AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
 			int32_t free_samples = possible_samples - occupied_slots - points_delta;
-			if (quad_tree->get_banding_flag(node->get_banding_index()) && (free_samples - 5 >= 0 // optimization, as 5 is the maximum number of samples to be added
+			if (get_banding_flag(node->get_banding_index()) && (free_samples - 5 >= 0 // optimization, as 5 is the maximum number of samples to be added
 																								|| free_samples - (int32_t)quad_tree->get_number_of_new_points_on_expansion(node) >= 0)) {
 				Vector<Vector2> samples = quad_tree->expand_node(node);
 				for (uint32_t i = 0; i < samples.size(); i++) {
@@ -2853,34 +2861,41 @@ void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_insta
 						removed_samples.erase(samples[i]);
 					}
 				}
-				points_delta -= samples.size();
+				points_delta += samples.size();
 			} else {
 				node->set_idle_counter(1);
 			}
 		}
 
 		//_area_shadow_atlas_free_shadows(shadow_atlas, removed_samples); // TODO: mark them as unused, but in a way that they can be reenabled again if the same light wants it again.
-		for (HashSet<Vector2>::Iterator S = removed_samples.begin(); S; ++S) {
+		for (HashMap<Vector2, uint32_t>::Iterator S = removed_samples.begin(); S; ++S) {
 			int shadow_count = shadow_atlas->shadows.size();
 			AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
-
-			sarr[quad_tree->get_atlas_index(*S)].active = false;
+			sarr[S->value].active = false;
 		}
 
 	} else {
 		// light is new, so we need slots for the first 4 samples
 		if (possible_samples - occupied_slots < 4) {
 			// tough luck, the shadow atlas is full. try next time.
-			return;
+			return 0;
 		}
 	}
 
 	int shadow_count = shadow_atlas->shadows.size();
 	AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
 	Vector<Vector2> dirty_samples;
+	li->area_shadow_dirty_samples.clear();
 
 	if (p_is_dirty || !quad_tree->is_initialized()) {
 		dirty_samples = quad_tree->get_unique_points(); // all are dirty
+		if (li->shadow_atlases.has(p_atlas)) {
+			const HashSet<uint32_t> &indices = *shadow_atlas->shadow_owners[p_light_instance];
+			for (const uint32_t idx : indices) {
+				_area_shadow_atlas_invalidate_shadow(p_atlas, shadow_atlas, idx);
+			}
+			
+		}
 	} else {
 		// only the new sample points might need to be rendered
 
@@ -2920,24 +2935,37 @@ void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_insta
 		sh->owner = p_light_instance;
 		sh->version = p_light_version; // TODO: probably not needed
 
-		RendererSceneRender::RenderAreaShadowSampleData shadow_data;
-		shadow_data.index_on_atlas = new_shadow_atlas_indices[i];
-		shadow_data.position_on_light = dirty_samples[i];
-		r_samples.push_back(shadow_data);
+		AreaShadowSample sample;
+		sample.atlas_index = new_shadow_atlas_indices[i];
+		sample.position_on_light = dirty_samples[i];
+		li->area_shadow_dirty_samples.push_back(sample);
+		quad_tree->set_atlas_index(dirty_samples[i], new_shadow_atlas_indices[i]);
+
 		shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
 	}
+
+	Vector<Vector2> positions = quad_tree->get_unique_points();
+	Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();
+	Vector<float> weights = quad_tree->get_point_weights();
+	quad_tree->update_banding_buffer_indices(p_banding_buffer_offset);
+	CRASH_COND(positions.size() != atlas_indices.size());
+	CRASH_COND(positions.size() != weights.size());
+
+	light_instance_set_area_shadow_samples(p_light_instance, positions, atlas_indices, weights);
+
+	return positions.size();
 }
 
-void LightStorage::_area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow *p_shadow, RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx) {
-	if (p_shadow->owner.is_valid()) {
-		LightInstance *sli = light_instance_owner.get_or_null(p_shadow->owner);
+void LightStorage::_area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx) {
+	ERR_FAIL_INDEX(p_shadow_idx, p_area_shadow_atlas->shadows.size());
+	AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx];
+	
+	if (shadow->owner.is_valid()) {
+		LightInstance *sli = light_instance_owner.get_or_null(shadow->owner);
 
-		
-		AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx];
-
-		if (p_area_shadow_atlas->shadow_owners[p_shadow->owner]->size() == 1) { // last shadow of this light
-			memdelete(p_area_shadow_atlas->shadow_owners[p_shadow->owner]); // delete hashset
-			p_area_shadow_atlas->shadow_owners.erase(p_shadow->owner);
+		if (p_area_shadow_atlas->shadow_owners[shadow->owner]->size() == 1) { // last shadow of this light
+			memdelete(p_area_shadow_atlas->shadow_owners[shadow->owner]); // delete hashset
+			p_area_shadow_atlas->shadow_owners.erase(shadow->owner);
 			sli->shadow_atlases.erase(p_atlas);
 		}
 

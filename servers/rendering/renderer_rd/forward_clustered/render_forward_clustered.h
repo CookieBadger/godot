@@ -646,7 +646,7 @@ protected:
 	virtual void sub_surface_scattering_set_scale(float p_scale, float p_depth_scale) override;
 
 	/* Rendering */
-	virtual void read_buffers() override;
+	virtual Vector<uint8_t> read_buffers() override;
 	virtual void _render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) override;
 	virtual void _render_buffers_debug_draw(const RenderDataRD *p_render_data) override;
 

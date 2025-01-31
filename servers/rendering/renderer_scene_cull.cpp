@@ -2314,7 +2314,8 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	}
 }
 
-bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_area_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers, const Vector<RendererSceneRender::RenderAreaShadowSampleData> &p_samples) {
+// TODO: is this any different from the default light one?
+bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_area_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
 	Transform3D light_transform = p_instance->transform;
@@ -2365,7 +2366,7 @@ bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance,
 		light_culler->cull_regular_light(instance_shadow_cull_result);
 	}
 
-	RendererSceneRender::RenderAreaShadowData &shadow_data = render_area_shadow_data[max_area_shadows_used++];
+	RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
 
 	for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
 		Instance *instance = instance_shadow_cull_result[j];
@@ -2387,7 +2388,6 @@ bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance,
 
 	RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, 0, 0);
 	shadow_data.light = light->instance;
-	shadow_data.samples = p_samples;
 
 	return animated_material_found;
 }
@@ -2628,7 +2628,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 }
 
 void RendererSceneCull::read_buffers() {
-	scene_render->read_buffers();
+	RSG::light_storage->area_shadow_set_banding_flags(scene_render->read_buffers());
 }
 
 void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, RID p_area_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
@@ -3292,6 +3292,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	//render shadows
 
 	max_shadows_used = 0;
+	uint32_t area_shadow_banding_buffer_offset = 0;
 
 	if (p_using_shadows) { //setup shadow maps
 
@@ -3421,9 +3422,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 						float screen_diameter = points[0].distance_to(points[1]) * 2;
 						coverage = screen_diameter / (vp_half_extents.x + vp_half_extents.y);
 
-						// An area light is almost always dirty, as the dynamic adjustment needs to happen every frame.
-						light->make_shadow_dirty(); // TODO: remove this
-
 					} break;
 					default: {
 						ERR_PRINT("Invalid Light Type");
@@ -3466,16 +3464,13 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// update the position of the shadow map on the atlas
 				// redraw is true if the position on the shadow map has to be reallocated or the light version is not equal to the shadow version (dirty)
 
-				if (max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
+				if (max_shadows_used < MAX_UPDATE_SHADOWS) {
 					
-					Vector<RendererSceneRender::RenderAreaShadowSampleData> samples;
-					RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty(), samples);
-
-					// area light always has to at least draw the reprojection test if it is not culled
-					uint32_t shadow_data_idx;
+					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty(), area_shadow_banding_buffer_offset);
+					area_shadow_banding_buffer_offset += sample_count;
 
 					// returns true if either there is an animated material among the instances, or if the light wasn't yet updated due to the excessive number of lights
-					bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers, samples);
+					bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers);
 
 					//if (redraw && max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
 					//	// TODO
@@ -3560,7 +3555,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, p_area_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_area_shadow_data, max_area_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, p_area_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
@@ -3570,12 +3565,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		render_shadow_data[i].instances.clear();
 	}
 	max_shadows_used = 0;
-
-	for (uint32_t i = 0; i < max_area_shadows_used; i++) {
-		render_area_shadow_data[i].instances.clear();
-		render_area_shadow_data[i].samples.clear();
-	}
-	max_area_shadows_used = 0;
 
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
@@ -3633,7 +3622,7 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), true, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, p_area_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, p_area_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
 #endif
 }
 
@@ -4410,9 +4399,7 @@ RendererSceneCull::RendererSceneCull() {
 	for (uint32_t i = 0; i < MAX_UPDATE_SHADOWS; i++) {
 		render_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}
-	for (uint32_t i = 0; i < MAX_UPDATE_AREA_SHADOWS; i++) {
-		render_area_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
-	}
+
 	for (uint32_t i = 0; i < SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE; i++) {
 		render_sdfgi_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}

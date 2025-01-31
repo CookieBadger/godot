@@ -56,6 +56,11 @@ public:
 		SHADOW_INVALID = 0xFFFFFFFF
 	};
 
+	struct AreaShadowSample {
+		uint32_t atlas_index;
+		Vector2 position_on_light;
+	};
+
 	class AreaLightQuadTree { // TODO: move this to where it makes sense
 	public:
 
@@ -106,7 +111,6 @@ public:
 			Rect2 rect;
 			uint32_t idle_counter = 0;
 			uint32_t banding_index = 0;
-			Vector<uint32_t> shadow_map_indices;
 			uint32_t depth;
 
 			Vector<AreaLightQuadTree::SampleNode *> children;
@@ -120,14 +124,6 @@ public:
 			Rect2 get_rect() { return rect; }
 			uint32_t get_idle_counter() { return idle_counter; }
 			void set_idle_counter(uint32_t p_counter) { idle_counter = p_counter; }
-			const Vector<uint32_t> get_shadow_indices() { return shadow_map_indices; }
-			void set_shadow_indices(uint32_t p_index1, uint32_t p_index2, uint32_t p_index3, uint32_t p_index4) {
-				shadow_map_indices.clear(); // TODO: could use a faster data structure (e.g. array)
-				shadow_map_indices.push_back(p_index1);
-				shadow_map_indices.push_back(p_index2);
-				shadow_map_indices.push_back(p_index3);
-				shadow_map_indices.push_back(p_index4);
-			}
 			uint32_t get_banding_index() { return banding_index; }
 			void set_banding_index(uint32_t p_index) { banding_index = p_index; }
 			bool is_leaf() { return children.size() == 0; }
@@ -288,11 +284,11 @@ public:
 			return points_to_add;
 		}
 
-		Vector<Vector2> prune_node(SampleNode* p_node) {
+		Vector<AreaShadowSample> prune_node(SampleNode *p_node) {
 			if (p_node == nullptr || p_node->is_leaf())
-				return Vector<Vector2>();
+				return Vector<AreaShadowSample>();
 			CRASH_COND(p_node->children.size() != 4);
-			Vector<Vector2> removed_points;
+			Vector<AreaShadowSample> removed_points;
 			Vector<SampleNode*> children = p_node->get_children();
 			uint32_t child_depth = p_node->depth + 1;
 			for (uint32_t i = 0; i < 4; i++) { // recursively prune children
@@ -306,8 +302,11 @@ public:
 					SamplePoint &multiplicities = points_map[point];
 					CRASH_COND(!multiplicities.depths.has(child_depth));
 					if (multiplicities.depths.size() == 1 && multiplicities.get(child_depth) == 1) {
+						AreaShadowSample sample;
+						sample.position_on_light = points[j];
+						sample.atlas_index = get_atlas_index(points[j]);
+						removed_points.push_back(sample);
 						points_map.erase(points[j]);
-						removed_points.push_back(points[j]);
 					} else {
 						multiplicities.decrement_at(child_depth);
 					}
@@ -371,27 +370,32 @@ public:
 			return points_map[p_light_sample_pos].atlas_index;
 		}
 
+		Vector<uint32_t> get_node_atlas_indices(SampleNode* p_node) {
+			Vector<uint32_t> atlas_indices;
+
+			atlas_indices.push_back(get_atlas_index(p_node->rect.position));
+			atlas_indices.push_back(get_atlas_index(p_node->rect.position + Vector2(p_node->rect.size.x, 0)));
+			atlas_indices.push_back(get_atlas_index(p_node->rect.position + Vector2(0, p_node->rect.size.y)));
+			atlas_indices.push_back(get_atlas_index(p_node->rect.position + p_node->rect.size));
+				
+			return atlas_indices;
+		}
+
 		Vector<uint32_t> get_point_atlas_indices() {
-			Vector<uint32_t> unique_samples;
+			Vector<uint32_t> atlas_indices;
 			HashSet<uint32_t> test_set;
 
 			for (HashMap<Vector2, SamplePoint>::Iterator &E = points_map.begin(); E; ++E) {
-				unique_samples.push_back(E->value.atlas_index);
+				atlas_indices.push_back(E->value.atlas_index);
+				if (test_set.has(E->value.atlas_index)) {
+					ERR_FAIL_COND_V(test_set.has(E->value.atlas_index), Vector<uint32_t>());
+				}
 				ERR_FAIL_COND_V(E->value.atlas_index < 0, Vector<uint32_t>());
 				ERR_FAIL_COND_V(test_set.has(E->value.atlas_index), Vector<uint32_t>());
 				test_set.insert(E->value.atlas_index);
 			}
 
-			return unique_samples;
-		}
-
-		void set_banding_flags(const Vector<uint8_t> &p_bytes) {
-			memcpy(banding_flags.ptrw(), p_bytes.ptr(), sizeof(uint32_t) * RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE);
-		}
-
-		bool get_banding_flag(uint32_t p_index) {
-			ERR_FAIL_INDEX_V(p_index, banding_flags.size(), false);
-			return banding_flags[p_index];
+			return atlas_indices;
 		}
 
 		void update_banding_buffer_indices(uint32_t p_offset) {
@@ -407,9 +411,7 @@ public:
 		bool is_initialized() { return initialized; }
 		void initialize() { initialized = true; }
 
-		AreaLightQuadTree(): initialized(false), node_count(1) {
-			banding_flags.resize_zeroed(RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE); // TODO: just resize should be enough
-
+		AreaLightQuadTree(): initialized(false), node_count(1), weights_dirty(false) {
 			points_map.insert(Vector2(0, 0), SamplePoint(0));
 			points_map.insert(Vector2(1, 0), SamplePoint(0));
 			points_map.insert(Vector2(0, 1), SamplePoint(0));
@@ -426,8 +428,6 @@ public:
 		uint32_t node_count;
 		HashMap<Vector2, SamplePoint> points_map;
 		bool weights_dirty;
-
-		Vector<uint32_t> banding_flags;
 	};
 
 private:
@@ -497,7 +497,7 @@ private:
 		uint32_t light_directional_index = 0;
 
 		Rect2 directional_rect;
-		AreaLightQuadTree sample_tree;
+		AreaLightQuadTree area_shadow_quad_tree;
 
 		HashSet<RID> shadow_atlases; //shadow atlases where this light is registered
 
@@ -505,6 +505,7 @@ private:
 
 		// TODO: extract these with an abstraction of LightInstance? Or move to LightStorage::Light (above)?
 		Vector<Vector2> area_shadow_samples;
+		Vector<AreaShadowSample> area_shadow_dirty_samples;
 		Vector<uint32_t> area_shadow_map_indices;
 		Vector<float> area_shadow_sample_weights;
 
@@ -520,6 +521,7 @@ private:
 			MAX_SHADOW_SAMPLES = 256,
 		};
 	};
+	Vector<uint32_t> banding_flags;
 
 	struct LightData {
 		float position[3];
@@ -847,7 +849,7 @@ private:
 	void _update_area_shadow_reprojection(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_viewport_size, RID p_depth_texture);
 
 	void _shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx);
-	void _area_shadow_atlas_invalidate_shadow(AreaShadowAtlas::Shadow *p_shadow, RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx);
+	void _area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx);
 
 	bool _shadow_atlas_find_shadow(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
 	bool _shadow_atlas_find_omni_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
@@ -894,6 +896,11 @@ public:
 	/* LIGHT */
 
 	bool owns_light(RID p_rid) { return light_owner.owns(p_rid); }
+
+	bool get_banding_flag(uint32_t p_index) {
+		ERR_FAIL_INDEX_V(p_index, get_singleton()->banding_flags.size(), false);
+		return get_singleton()->banding_flags[p_index];
+	}
 
 	void _light_initialize(RID p_rid, RS::LightType p_type);
 
@@ -1059,6 +1066,11 @@ public:
 		return true;
 	}
 
+	
+	void set_banding_flags(const Vector<uint8_t> &p_bytes) {
+		memcpy(banding_flags.ptrw(), p_bytes.ptr(), sizeof(uint32_t) * RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE);
+	}
+
 	_FORCE_INLINE_ RID light_instance_get_base_light(RID p_light_instance) {
 		LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
 		return li->light;
@@ -1179,11 +1191,18 @@ public:
 		return float(1.0) / shadow_size;
 	}
 
-	_FORCE_INLINE_ AreaLightQuadTree* area_light_instance_get_quad_tree(RID p_area_light_instance) {
+	_FORCE_INLINE_ AreaLightQuadTree* light_instance_get_area_shadow_quad_tree(RID p_area_light_instance) {
 		LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
 		ERR_FAIL_NULL_V(light_instance, nullptr);
 
-		return &light_instance->sample_tree;
+		return &light_instance->area_shadow_quad_tree;
+	}
+
+	_FORCE_INLINE_ Vector<AreaShadowSample> light_instance_get_area_shadow_dirty_samples(RID p_area_light_instance) {
+		LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
+		ERR_FAIL_NULL_V(light_instance, Vector<AreaShadowSample>());
+
+		return light_instance->area_shadow_dirty_samples;
 	}
 
 	_FORCE_INLINE_ Projection light_instance_get_shadow_camera(RID p_light_instance, int p_index) {
@@ -1570,6 +1589,7 @@ public:
 	virtual void shadow_atlas_update(RID p_atlas) override;
 
 	/* AREA SHADOW ATLAS API */
+	virtual void area_shadow_set_banding_flags(Vector<uint8_t> p_buffer) override;
 	bool owns_area_shadow_atlas(RID p_rid) { return area_shadow_atlas_owner.owns(p_rid); };
 	virtual RID area_shadow_atlas_create() override;
 	virtual void area_shadow_atlas_free(RID p_atlas) override;
@@ -1577,7 +1597,7 @@ public:
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
 	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) override;
-	virtual void area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool is_dirty, Vector<RendererSceneRender::RenderAreaShadowSampleData> &r_samples) override;
+	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool is_dirty, uint32_t p_banding_buffer_offset) override;
 
 	_FORCE_INLINE_ bool area_shadow_atlas_owns_light_instance(RID p_atlas, RID p_light_instance) {
 		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);

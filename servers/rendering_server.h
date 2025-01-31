@@ -108,7 +108,8 @@ public:
 		MAX_GLOW_LEVELS = 7,
 		MAX_CURSORS = 8,
 		MAX_2D_DIRECTIONAL_LIGHTS = 8,
-		MAX_MESH_SURFACES = 256
+		MAX_MESH_SURFACES = 256,
+		MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE = 32 * 341 // max_cluster_buffer_elements * max size at subdivision level 4. TODO: move to where both stats are accessible, and reduce it as far as possible (10KB is not good for a bunch of bools)
 	};
 
 	/* TEXTURE API */

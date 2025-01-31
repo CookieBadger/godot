@@ -2314,7 +2314,85 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 	}
 }
 
-bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, RID p_area_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
+bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_area_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers, const Vector<RendererSceneRender::RenderAreaShadowSampleData> &p_samples) {
+	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
+
+	Transform3D light_transform = p_instance->transform;
+	light_transform.orthonormalize(); //scale does not count on lights
+
+	bool animated_material_found = false;
+
+	// TODO: Replace with actual Area Light implementation
+	// 1. render shadows same as a point light does (single paraboloid)
+	RENDER_TIMESTAMP("Cull AreaLight3D Shadow");
+
+	real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
+	real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A);
+	real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B);
+	real_t area_diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
+
+	real_t z = -1; // TODO: verify that this is indeed the correct direction
+	Vector<Plane> planes;
+	planes.resize(6); // TODO: optimize this
+	planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + area_diagonal));
+	planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + area_diagonal));
+	planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + area_diagonal));
+	planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + area_diagonal));
+	planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + area_diagonal));
+	planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
+
+	instance_shadow_cull_result.clear();
+
+	// get a mesh from these planes (results in a frustum-like trapezoidal prism, looking into the z direction, that a hemisphere the size of the light radius fits in)
+	Vector<Vector3> points = Geometry3D::compute_convex_mesh_points(&planes[0], planes.size());
+
+	struct CullConvex {
+		PagedArray<Instance *> *result;
+		_FORCE_INLINE_ bool operator()(void *p_data) {
+			Instance *p_instance = (Instance *)p_data;
+			result->push_back(p_instance);
+			return false;
+		}
+	};
+
+	CullConvex cull_convex;
+	cull_convex.result = &instance_shadow_cull_result;
+
+	// cull all the visual instances in the scenario based on the convex geometry, in this case the light frustum
+	p_scenario->indexers[Scenario::INDEXER_GEOMETRY].convex_query(planes.ptr(), planes.size(), points.ptr(), points.size(), cull_convex);
+
+	if (!light->is_shadow_update_full()) {
+		light_culler->cull_regular_light(instance_shadow_cull_result);
+	}
+
+	RendererSceneRender::RenderAreaShadowData &shadow_data = render_area_shadow_data[max_area_shadows_used++];
+
+	for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
+		Instance *instance = instance_shadow_cull_result[j];
+		if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
+			continue;
+		} else {
+			if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
+				animated_material_found = true;
+			}
+
+			if (instance->mesh_instance.is_valid()) {
+				RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
+			}
+		}
+		shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
+	}
+
+	RSG::mesh_storage->update_mesh_instances();
+
+	RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, 0, 0);
+	shadow_data.light = light->instance;
+	shadow_data.samples = p_samples;
+
+	return animated_material_found;
+}
+
+bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers) {
 	InstanceLightData *light = static_cast<InstanceLightData *>(p_instance->base_data);
 
 	Transform3D light_transform = p_instance->transform;
@@ -2543,80 +2621,6 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 			shadow_data.light = light->instance;
 			shadow_data.pass = 0;
 
-		} break;
-		case RS::LIGHT_CUSTOM: {
-			// TODO: Replace with actual Area Light implementation
-			// 1. render shadows same as a point light does (single paraboloid)
-			RENDER_TIMESTAMP("Cull CustomLight3D Shadow");
-
-			// TODO: define an own maximum here for area lights
-			if (max_shadows_used + 1 > MAX_UPDATE_SHADOWS) {
-				return true;
-			}
-
-			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
-			real_t area_side_a = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_A);
-			real_t area_side_b = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_AREA_SIDE_B);
-			real_t area_diagonal = sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
-
-			real_t z = -1; // TODO: verify that this is indeed the correct direction
-			Vector<Plane> planes;
-			planes.resize(6); // TODO: optimize this
-			planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + area_diagonal));
-			planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + area_diagonal));
-			planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + area_diagonal));
-			planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + area_diagonal));
-			planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + area_diagonal));
-			planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
-
-			instance_shadow_cull_result.clear();
-
-			// get a mesh from these planes (results in a frustum-like trapezoidal prism, looking into the z direction, that a hemisphere the size of the light radius fits in)
-			Vector<Vector3> points = Geometry3D::compute_convex_mesh_points(&planes[0], planes.size());
-
-			struct CullConvex {
-				PagedArray<Instance *> *result;
-				_FORCE_INLINE_ bool operator()(void *p_data) {
-					Instance *p_instance = (Instance *)p_data;
-					result->push_back(p_instance);
-					return false;
-				}
-			};
-
-			CullConvex cull_convex;
-			cull_convex.result = &instance_shadow_cull_result;
-
-			// cull all the visual instances in the scenario based on the convex geometry, in this case the light frustum
-			p_scenario->indexers[Scenario::INDEXER_GEOMETRY].convex_query(planes.ptr(), planes.size(), points.ptr(), points.size(), cull_convex);
-
-			if (!light->is_shadow_update_full()) {
-				light_culler->cull_regular_light(instance_shadow_cull_result);
-			}
-
-			RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];
-
-			for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
-				Instance *instance = instance_shadow_cull_result[j];
-				if (!instance->visible || !((1 << instance->base_type) & RS::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask)) {
-					continue;
-				} else {
-					if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
-						animated_material_found = true;
-					}
-
-					if (instance->mesh_instance.is_valid()) {
-						RSG::mesh_storage->mesh_instance_check_for_update(instance->mesh_instance);
-					}
-				}
-				shadow_data.instances.push_back(static_cast<InstanceGeometryData *>(instance->base_data)->geometry_instance);
-			}
-
-			RSG::mesh_storage->update_mesh_instances();
-
-			RSG::light_storage->light_instance_set_shadow_transform(light->instance, Projection(), light_transform, radius + area_diagonal, 0, 0, 0);
-			shadow_data.light = light->instance;
-			shadow_data.pass = 0;
-			
 		} break;
 	}
 
@@ -3393,8 +3397,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 					} break;
 					case RS::LIGHT_CUSTOM: {
-						// TODO: REPLACE THIS WITH ACTUAL AREA LIGHT COVERAGE
-						float radius = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_RANGE);
+						// TODO: Do we actually even need a coverage value for our area lights? can we use length_squared, e.g. if we only ever compare it to other area lights?
+						float diagonal = Vector2(RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_AREA_SIDE_A), RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_AREA_SIDE_B)).length();
+						float radius = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_RANGE) + diagonal;
 
 						//get two points parallel to near plane
 						Vector3 points[2] = {
@@ -3417,7 +3422,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 						coverage = screen_diameter / (vp_half_extents.x + vp_half_extents.y);
 
 						// An area light is almost always dirty, as the dynamic adjustment needs to happen every frame.
-						light->make_shadow_dirty();
+						light->make_shadow_dirty(); // TODO: remove this
 
 					} break;
 					default: {
@@ -3453,23 +3458,44 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				}
 			}
 
-			bool redraw = false;
 			if (RSG::light_storage->light_get_type(ins->base) == RS::LIGHT_CUSTOM) {
-				redraw = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version);
-			} else {
-				redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
-			}
+				// How is it guaranteed for positional lights, that we never evict a shadow map of a light that isn't dirty but still valid?
 
-			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
-				//must redraw!
-				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
-				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
-					light->make_shadow_dirty();
+
+				// expand or prune the tree as the banding test indicates
+				// update the position of the shadow map on the atlas
+				// redraw is true if the position on the shadow map has to be reallocated or the light version is not equal to the shadow version (dirty)
+
+				if (max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
+					
+					Vector<RendererSceneRender::RenderAreaShadowSampleData> samples;
+					RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty(), samples);
+
+					// area light always has to at least draw the reprojection test if it is not culled
+					uint32_t shadow_data_idx;
+
+					// returns true if either there is an animated material among the instances, or if the light wasn't yet updated due to the excessive number of lights
+					bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers, samples);
+
+					//if (redraw && max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
+					//	// TODO
+					//}
 				}
-				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
+
 			} else {
-				if (redraw) {
-					light->make_shadow_dirty();
+				bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
+
+				if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
+					//must redraw!
+					RENDER_TIMESTAMP("> Render Light3D " + itos(i));
+					if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+						light->make_shadow_dirty();
+					}
+					RENDER_TIMESTAMP("< Render Light3D " + itos(i));
+				} else {
+					if (redraw) {
+						light->make_shadow_dirty();
+					}
 				}
 			}
 		}
@@ -3534,7 +3560,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, p_area_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, p_area_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_area_shadow_data, max_area_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
@@ -3544,6 +3570,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		render_shadow_data[i].instances.clear();
 	}
 	max_shadows_used = 0;
+
+	for (uint32_t i = 0; i < max_area_shadows_used; i++) {
+		render_area_shadow_data[i].instances.clear();
+		render_area_shadow_data[i].samples.clear();
+	}
+	max_area_shadows_used = 0;
 
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
@@ -3601,7 +3633,7 @@ void RendererSceneCull::render_empty_scene(const Ref<RenderSceneBuffers> &p_rend
 	RendererSceneRender::CameraData camera_data;
 	camera_data.set_camera(Transform3D(), Projection(), true, false);
 
-	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, p_area_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr);
+	scene_render->render_scene(p_render_buffers, &camera_data, &camera_data, PagedArray<RenderGeometryInstance *>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), PagedArray<RID>(), environment, RID(), compositor, p_shadow_atlas, p_area_shadow_atlas, RID(), scenario->reflection_atlas, RID(), 0, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr);
 #endif
 }
 
@@ -4377,6 +4409,9 @@ RendererSceneCull::RendererSceneCull() {
 
 	for (uint32_t i = 0; i < MAX_UPDATE_SHADOWS; i++) {
 		render_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
+	}
+	for (uint32_t i = 0; i < MAX_UPDATE_AREA_SHADOWS; i++) {
+		render_area_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}
 	for (uint32_t i = 0; i < SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE; i++) {
 		render_sdfgi_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);

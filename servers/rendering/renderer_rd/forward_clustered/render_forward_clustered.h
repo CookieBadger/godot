@@ -82,7 +82,6 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		MAX_LIGHTMAPS = 8,
 		MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE = 2,
 		INSTANCE_DATA_BUFFER_MIN_SIZE = 4096,
-		MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE = 32 * 341 // max_cluster_buffer_elements * max size at subdivision level 4. TODO: move to where both stats are accessible
 	};
 
 	enum RenderListType {
@@ -187,7 +186,6 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RID shader_pipeline;
 		RID banding_flag_buffer;
 		RID uniform_set;
-		Vector<uint32_t> banding_flags;
 
 		struct PushConstant {
 			uint32_t buffer_index;

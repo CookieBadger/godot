@@ -86,6 +86,9 @@ public:
 	const RendererSceneRender::RenderShadowData *render_shadows = nullptr;
 	int render_shadow_count = 0;
 
+	const RendererSceneRender::RenderAreaShadowData *render_area_shadows = nullptr;
+	int render_area_shadow_count = 0;
+
 	LocalVector<int> cube_shadows;
 	LocalVector<int> shadows;
 	LocalVector<int> area_shadows;

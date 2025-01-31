@@ -361,7 +361,7 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 	// OMNIS
 	if (p_light_source.type == LightSource::ST_OMNI) {
 		for (int n = 0; n < 6; n++) {
-			float dist = data.frustum_planes[n].distance_to(p_light_source.pos);
+			float dist = data.frustum_planes[n].distance_to(p_light_source.pos) ;
 			if (dist < 0.0f) {
 				lookup |= 1 << n;
 
@@ -378,7 +378,26 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 				}
 			}
 		}
-	} else { // TODO: add case for Area Lights (for now uses SpotLights implementation)
+	}
+	else if (p_light_source.type == LightSource::ST_CUSTOM) {
+		for (int n = 0; n < 6; n++) {
+			float dist = data.frustum_planes[n].distance_to(p_light_source.pos);
+			float diagonal = Vector2(p_light_source.custom_a, p_light_source.custom_b).length();
+			if (dist + diagonal < 0.0f) { // entire light on the back of the frustum plane
+				lookup |= 1 << n;
+
+				// Add backfacing camera frustum planes.
+				r_cull_planes.add_cull_plane(data.frustum_planes[n]);
+			} else {
+				// Is the light out of range?
+				if (dist >= p_light_source.range + diagonal) {
+					// If the light is out of range, no need to do anything else, everything will be culled.
+					data.out_of_range = true;
+					return false;
+				}
+			}
+		}
+	} else {
 		// SPOTLIGHTs, more complex to cull.
 		Vector3 pos_end = p_light_source.pos + (p_light_source.dir * p_light_source.range);
 

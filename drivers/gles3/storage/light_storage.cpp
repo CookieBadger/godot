@@ -1595,8 +1595,7 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 void LightStorage::area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) {
 }
 
-bool LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) {
-	return false;
+void LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, Vector<RendererSceneRender::RenderAreaShadowSampleData> &r_samples) {
 }
 
 void LightStorage::area_shadow_atlas_update(RID p_atlas) {

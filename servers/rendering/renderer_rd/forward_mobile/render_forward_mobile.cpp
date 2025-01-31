@@ -1212,20 +1212,15 @@ void RenderForwardMobile::_render_shadow_pass(RID p_light, RID p_shadow_atlas, R
 
 		RSG::light_storage->area_shadow_atlas_update(p_area_shadow_atlas);
 
-		uint32_t key = light_storage->area_shadow_atlas_get_light_instance_key(p_area_shadow_atlas, p_light);
-
-		uint32_t shadow = key & RendererRD::LightStorage::SHADOW_INDEX_MASK;
 		uint32_t subdivision = light_storage->area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
-
-		ERR_FAIL_INDEX((int)shadow, light_storage->area_shadow_atlas_get_shadow_size(p_area_shadow_atlas));
 
 		uint32_t shadow_atlas_size = light_storage->area_shadow_atlas_get_size(p_area_shadow_atlas);
 
 		uint32_t shadow_size = (shadow_atlas_size / subdivision);
 		atlas_rect.size.width = shadow_size;
 		atlas_rect.size.height = shadow_size;
-		atlas_rect.position.x = (shadow % subdivision) * shadow_size;
-		atlas_rect.position.y = (shadow / subdivision) * shadow_size;
+		atlas_rect.position.x = 0;
+		atlas_rect.position.y = 0;
 
 		atlas_rect.position.x += p_pass * atlas_rect.size.x;
 		if (atlas_rect.position.x >= shadow_atlas_size) { // can replace if with while

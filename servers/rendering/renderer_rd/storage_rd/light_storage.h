@@ -819,7 +819,7 @@ private:
 			//uint64_t fog_version = 0; // used for fog
 			uint64_t alloc_tick = 0;
 			Vector2 light_sample_pos;
-			bool active;
+			bool active = false;
 
 			Shadow() {}
 		};

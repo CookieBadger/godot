@@ -1464,21 +1464,31 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		RENDER_TIMESTAMP("Render GI");
 	}
 
+	Vector2i reprojection_texture_size;
 	//prepare shadow rendering
 	if (render_shadows) {
+		// render area shadows
+		if (p_render_data->area_shadows.size()) {
+			bool use_default_depth_buffer = light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas) == 1;
+
+			reprojection_texture_size = viewport_size / light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas);
+			light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, use_default_depth_buffer ? rb->get_depth_texture() : RID()); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
+
+			if (!use_default_depth_buffer) {
+				// render smaller depth texture
+
+				RD::get_singleton()->draw_command_begin_label("Render Area Light Reprojection Depth Pre-Pass");
+
+				RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+				bool reverse_cull = false;
+				RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_DEPTH, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0);
+				_render_list_with_draw_list(&render_list_params, light_storage->area_shadow_atlas_get_reprojection_depth_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, Vector<Color>());
+				RD::get_singleton()->draw_command_end_label();
+			}
+		}
+
 		_render_shadow_begin();
 
-		//render directional shadows
-		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
-		}
-		//render positional shadows
-		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
-		}
-
-		// render area shadows
-		Vector2i reprojection_texture_size;
 		if (p_render_data->area_shadows.size()) {
 			uint32_t rendered_area_shadow_maps = 0;
 
@@ -1499,22 +1509,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RD::get_singleton()->buffer_update(area_light_shadow_banding.banding_flag_buffer, 0, sizeof(uint32_t) * zeros.size(), zeros.ptr());
 			RD::get_singleton()->set_resource_name(area_light_shadow_banding.banding_flag_buffer, "Area Shadow Banding Flag Buffer"); // TODO: move to initialization or smth
 
-			bool use_default_depth_buffer = light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas) == 1;
-
-			reprojection_texture_size = viewport_size / light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas);
-			light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, use_default_depth_buffer ? rb->get_depth_texture() : RID()); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
-
-			if (!use_default_depth_buffer) {
-				// render smaller depth texture
-
-				RD::get_singleton()->draw_command_begin_label("Render Area Light Reprojection Depth Pre-Pass");
-
-				RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
-				bool reverse_cull = false;
-				RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_DEPTH, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0);
-				_render_list_with_draw_list(&render_list_params, light_storage->area_shadow_atlas_get_reprojection_depth_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, Vector<Color>());
-				RD::get_singleton()->draw_command_end_label();
-			}
+			_render_shadow_begin();
 
 			for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 
@@ -1528,10 +1523,27 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			}
 		}
 
+		//render directional shadows
+		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+		}
+		//render positional shadows
+		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+		}
+
 		// setup uniforms
 		_render_shadow_process();
+	}
 
-		// TODO: check if this can run before _render_shadow_end();
+	if (render_gi) {
+		gi.process_gi(rb, p_normal_roughness_slices, p_voxel_gi_buffer, p_render_data->environment, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances);
+	}
+
+	if (render_shadows) {
+		_render_shadow_end();
+
+		// Render area shadow reprojection
 		// TODO: try to also collect the reprojection passes in scene cull and access them via light_storage, like samples
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
@@ -1552,14 +1564,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 			quad_tree->initialize(); // TODO: this is not sound yet, because how do we guarantee, that when the next render pass is set up, the banding tests were actually completed, and aren't still on the cpu? (maybe barriers do so, but then they MUST be optional and not be put if no area lights are present.)
 		}
-	}
-
-	if (render_gi) {
-		gi.process_gi(rb, p_normal_roughness_slices, p_voxel_gi_buffer, p_render_data->environment, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances);
-	}
-
-	if (render_shadows) {
-		_render_shadow_end();
 	}
 
 	if (rb_data.is_valid() && ss_effects) {

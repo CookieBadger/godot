@@ -1563,6 +1563,14 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			}
 
 			quad_tree->initialize(); // TODO: this is not sound yet, because how do we guarantee, that when the next render pass is set up, the banding tests were actually completed, and aren't still on the cpu? (maybe barriers do so, but then they MUST be optional and not be put if no area lights are present.)
+
+			Vector<Vector2> positions = quad_tree->get_unique_points();
+			Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();
+			Vector<float> weights = quad_tree->get_point_weights();
+			CRASH_COND(positions.size() != atlas_indices.size());
+			CRASH_COND(positions.size() != weights.size());
+
+			light_storage->light_instance_set_area_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, positions, atlas_indices, weights);
 		}
 	}
 

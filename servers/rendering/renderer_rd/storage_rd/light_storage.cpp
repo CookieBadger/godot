@@ -2764,19 +2764,19 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 	if (p_needed_shadow_count == 0) {
 		return true;
 	}
-	Vector<AreaShadowAtlas::Shadow *> inactive_shadow_ptrs;
-	HashMap<AreaShadowAtlas::Shadow *, uint32_t> inactive_shadows;
+	Vector<const AreaShadowAtlas::Shadow *> inactive_shadow_ptrs;
+	HashMap<const AreaShadowAtlas::Shadow *, uint32_t> inactive_shadows;
 
 	for (uint32_t i = 0; i < p_area_shadow_atlas->shadows.size(); i++) {
-		AreaShadowAtlas::Shadow sh = p_area_shadow_atlas->shadows[i];
-		if (sh.active) {
+		const AreaShadowAtlas::Shadow* sh = &p_area_shadow_atlas->shadows[i];
+		if (sh->active) {
 			continue;
 		}
-		if (sh.owner == RID()) {
+		if (sh->owner == RID()) {
 			r_new_shadow_atlas_indices.push_back(i);
 		} else {
-			inactive_shadows.insert(&sh, i);
-			inactive_shadow_ptrs.push_back(&sh);
+			inactive_shadows.insert(sh, i);
+			inactive_shadow_ptrs.push_back(sh);
 		}
 		if (r_new_shadow_atlas_indices.size() == p_needed_shadow_count) {
 			return true;
@@ -2801,6 +2801,8 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 	for (uint32_t i = 0; i < missing_shadows; i++) {
 		uint32_t shadow_idx = inactive_shadows[inactive_shadow_ptrs[i]];
 		_area_shadow_atlas_invalidate_shadow(p_atlas, p_area_shadow_atlas, shadow_idx);
+		CRASH_COND(shadow_idx == (uint32_t)-1);
+		CRASH_COND(r_new_shadow_atlas_indices.has(shadow_idx));
 		r_new_shadow_atlas_indices.push_back(shadow_idx);
 	}
 	return true;
@@ -2841,6 +2843,7 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 				Vector<AreaShadowSample> samples = quad_tree->prune_node(node);
 				for (uint32_t i = 0; i < samples.size(); i++) {
 					pruned_samples.insert(samples[i].position_on_light);
+					CRASH_COND(samples[i].atlas_index == (uint32_t)-1);
 					removed_samples.insert(samples[i].position_on_light, samples[i].atlas_index);
 				}
 				points_delta -= samples.size();
@@ -2858,6 +2861,7 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 					if (!pruned_samples.has(samples[i])) {
 						added_samples.push_back(samples[i]);
 					} else {
+						quad_tree->set_atlas_index(samples[i], removed_samples[samples[i]]); // sample has been erased, need to set atlas index again.
 						removed_samples.erase(samples[i]);
 					}
 				}
@@ -2894,7 +2898,7 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 			for (const uint32_t idx : indices) {
 				_area_shadow_atlas_invalidate_shadow(p_atlas, shadow_atlas, idx);
 			}
-			
+			quad_tree->reset_atlas_indices();
 		}
 	} else {
 		// only the new sample points might need to be rendered
@@ -2943,11 +2947,14 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 
 		shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
 	}
+	quad_tree->verify_atlas_indices();
 
+	quad_tree->update_banding_buffer_indices(p_banding_buffer_offset);
+
+	// TODO: check if you can remove it from here
 	Vector<Vector2> positions = quad_tree->get_unique_points();
 	Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();
 	Vector<float> weights = quad_tree->get_point_weights();
-	quad_tree->update_banding_buffer_indices(p_banding_buffer_offset);
 	CRASH_COND(positions.size() != atlas_indices.size());
 	CRASH_COND(positions.size() != weights.size());
 

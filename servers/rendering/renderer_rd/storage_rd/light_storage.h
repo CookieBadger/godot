@@ -305,6 +305,7 @@ public:
 						AreaShadowSample sample;
 						sample.position_on_light = points[j];
 						sample.atlas_index = get_atlas_index(points[j]);
+						CRASH_COND(sample.atlas_index == (uint32_t)-1);
 						removed_points.push_back(sample);
 						points_map.erase(points[j]);
 					} else {
@@ -360,13 +361,32 @@ public:
 			return unique_samples;
 		}
 
+		void reset_atlas_indices() {
+			for (auto &E : points_map) {
+				E.value.atlas_index = -1;
+			}
+		}
+
 		void set_atlas_index(const Vector2 &p_light_sample_pos, uint32_t p_atlas_index) {
 			ERR_FAIL_COND(!points_map.has(p_light_sample_pos));
+			CRASH_COND(p_atlas_index == (uint32_t)-1);
+
 			points_map[p_light_sample_pos].atlas_index = p_atlas_index;
 		}
 
+		void verify_atlas_indices() {
+			HashSet<uint32_t> test_set;
+
+			for (HashMap<Vector2, SamplePoint>::Iterator &E = points_map.begin(); E; ++E) {
+				CRASH_COND(test_set.has(E->value.atlas_index));
+				CRASH_COND(E->value.atlas_index > 1023);
+				test_set.insert(E->value.atlas_index);
+			}
+		}
+
 		uint32_t get_atlas_index(const Vector2 &p_light_sample_pos) {
-			ERR_FAIL_COND_V(!points_map.has(p_light_sample_pos), -1);
+			CRASH_COND(!points_map.has(p_light_sample_pos));
+			CRASH_COND(points_map[p_light_sample_pos].atlas_index == (uint32_t)-1);
 			return points_map[p_light_sample_pos].atlas_index;
 		}
 
@@ -387,11 +407,8 @@ public:
 
 			for (HashMap<Vector2, SamplePoint>::Iterator &E = points_map.begin(); E; ++E) {
 				atlas_indices.push_back(E->value.atlas_index);
-				if (test_set.has(E->value.atlas_index)) {
-					ERR_FAIL_COND_V(test_set.has(E->value.atlas_index), Vector<uint32_t>());
-				}
-				ERR_FAIL_COND_V(E->value.atlas_index < 0, Vector<uint32_t>());
-				ERR_FAIL_COND_V(test_set.has(E->value.atlas_index), Vector<uint32_t>());
+				CRASH_COND(test_set.has(E->value.atlas_index));
+				CRASH_COND(E->value.atlas_index > 1024);
 				test_set.insert(E->value.atlas_index);
 			}
 

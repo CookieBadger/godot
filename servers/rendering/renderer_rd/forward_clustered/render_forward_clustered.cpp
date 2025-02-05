@@ -1543,7 +1543,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	if (render_shadows) {
 		_render_shadow_end();
 
-		// Render area shadow reprojection
+		// Render area shadow reprojection 
+		RENDER_TIMESTAMP("> Area Shadow Reprojection");
 		// TODO: try to also collect the reprojection passes in scene cull and access them via light_storage, like samples
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
@@ -1572,6 +1573,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 			light_storage->light_instance_set_area_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, positions, atlas_indices, weights);
 		}
+		RENDER_TIMESTAMP("< Area Shadow Reprojection");
 	}
 
 	if (rb_data.is_valid() && ss_effects) {
@@ -2819,7 +2821,7 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 
-	RENDER_TIMESTAMP("> Area Shadow Reprojection");
+	RENDER_TIMESTAMP("Area Shadow Reprojection Draw " + p_quad);
 	RD::get_singleton()->draw_command_begin_label("Area Shadow Reprojection");
 
 	Vector<Vector2> points_in_quad = { Vector2(p_quad.get_position()), Vector2(p_quad.get_position().x + p_quad.get_size().x, p_quad.get_position().y), Vector2(p_quad.get_position().x, p_quad.get_position().y + p_quad.get_size().y), Vector2(p_quad.get_end()) };
@@ -2862,7 +2864,7 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
 
 	
-	RENDER_TIMESTAMP("> Area Shadow Reprojection Compute Test");
+	RENDER_TIMESTAMP("Area Shadow Reprojection Compute Test " + p_quad);
 
 	Vector<RD::Uniform> shadow_banding_uniforms;
 	{
@@ -2897,8 +2899,6 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	RD::get_singleton()->free(shadow_banding_uniform_set);
 
 	RD::get_singleton()->draw_command_end_label();
-	RENDER_TIMESTAMP("< Area Shadow Reprojection Compute Test");
-	RENDER_TIMESTAMP("< Area Shadow Reprojection");
 }
 
 void RenderForwardClustered::_render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) {

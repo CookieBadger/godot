@@ -107,7 +107,8 @@ bool RenderingLightCuller::_prepare_light(const RendererSceneCull::Instance &p_i
 			lsource.type = LightSource::ST_CUSTOM;
 			lsource.custom_a = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_AREA_SIDE_A);
 			lsource.custom_b = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_AREA_SIDE_B);
-			lsource.range = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_RANGE);
+			float diagonal = Vector2(lsource.custom_a, lsource.custom_b).length();
+			lsource.range = RSG::light_storage->light_get_param(p_instance.base, RS::LIGHT_PARAM_RANGE) + diagonal;
 			float cone_rad = MAX(MIN(lsource.custom_a, lsource.custom_b), 0.001) / 2.0;
 			lsource.angle = Math::rad_to_deg(Math::atan(cone_rad / 0.5));
 			break;
@@ -387,7 +388,7 @@ bool RenderingLightCuller::_add_light_camera_planes(LightCullPlanes &r_cull_plan
 				lookup |= 1 << n;
 
 				// Add backfacing camera frustum planes.
-				r_cull_planes.add_cull_plane(data.frustum_planes[n]);
+				r_cull_planes.add_cull_plane(data.frustum_planes[n]); // Todo: add tolerance for light diagonal
 			} else {
 				// Is the light out of range?
 				if (dist >= p_light_source.range + diagonal) {

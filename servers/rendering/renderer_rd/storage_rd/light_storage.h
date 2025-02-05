@@ -427,6 +427,11 @@ public:
 
 		bool is_initialized() { return initialized; }
 		void initialize() { initialized = true; }
+		void reset() {
+			prune_node(&root);
+			reset_atlas_indices();
+			initialized = false;
+		}
 
 		AreaLightQuadTree(): initialized(false), node_count(1), weights_dirty(false) {
 			points_map.insert(Vector2(0, 0), SamplePoint(0));

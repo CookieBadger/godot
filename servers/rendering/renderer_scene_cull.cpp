@@ -2363,7 +2363,7 @@ bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance,
 	p_scenario->indexers[Scenario::INDEXER_GEOMETRY].convex_query(planes.ptr(), planes.size(), points.ptr(), points.size(), cull_convex);
 
 	if (!light->is_shadow_update_full()) {
-		light_culler->cull_regular_light(instance_shadow_cull_result);
+		//light_culler->cull_regular_light(instance_shadow_cull_result); // TODO: this culls lights incorrectly.
 	}
 
 	RendererSceneRender::RenderShadowData &shadow_data = render_shadow_data[max_shadows_used++];

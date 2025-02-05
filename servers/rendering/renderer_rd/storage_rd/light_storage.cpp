@@ -2741,11 +2741,16 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 	for (int i = 0; i < shadow_atlas->shadows.size(); i++) {
 		if (shadow_atlas->shadows[i].owner.is_valid()) {
 			RID li_rid = shadow_atlas->shadows[i].owner;
-			memdelete(shadow_atlas->shadow_owners[li_rid]); // delete hashset
-			shadow_atlas->shadow_owners.erase(li_rid);
-			LightInstance *li = light_instance_owner.get_or_null(li_rid);
-			ERR_CONTINUE(!li);
-			li->shadow_atlases.erase(p_atlas);
+			if (shadow_atlas->shadow_owners.has(li_rid)) {
+				HashSet<uint32_t> *owner_set = shadow_atlas->shadow_owners[li_rid];
+				memdelete(owner_set); // delete hashset
+				shadow_atlas->shadow_owners.erase(li_rid);
+				LightInstance *li = light_instance_owner.get_or_null(li_rid);
+				ERR_CONTINUE(!li);
+				li->shadow_atlases.erase(p_atlas);
+				li->area_shadow_quad_tree.reset();
+			}
+			
 		}
 	}
 

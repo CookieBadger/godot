@@ -1509,7 +1509,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RD::get_singleton()->buffer_update(area_light_shadow_banding.banding_flag_buffer, 0, sizeof(uint32_t) * zeros.size(), zeros.ptr());
 			RD::get_singleton()->set_resource_name(area_light_shadow_banding.banding_flag_buffer, "Area Shadow Banding Flag Buffer"); // TODO: move to initialization or smth
 
-			_render_shadow_begin();
+			
 
 			for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 

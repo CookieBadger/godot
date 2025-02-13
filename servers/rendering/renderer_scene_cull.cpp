@@ -2335,11 +2335,11 @@ bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance,
 	real_t z = -1; // TODO: verify that this is indeed the correct direction
 	Vector<Plane> planes;
 	planes.resize(6); // TODO: optimize this
-	planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + 2*area_diagonal));
-	planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + 2*area_diagonal));
-	planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + 2*area_diagonal));
-	planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + 2*area_diagonal));
-	planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + 2*area_diagonal));
+	planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius));
+	planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, 0).normalized(), radius + area_side_a/2));
+	planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, 0).normalized(), radius + area_side_a / 2));
+	planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, 0).normalized(), radius + area_side_b / 2));
+	planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, 0).normalized(), radius + area_side_b / 2));
 	planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
 
 	instance_shadow_cull_result.clear();

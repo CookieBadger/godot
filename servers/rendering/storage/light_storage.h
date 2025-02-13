@@ -204,6 +204,7 @@ public:
 	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, uint32_t p_banding_buffer_offset) = 0;
 	virtual void area_shadow_atlas_update(RID p_atlas) = 0;
 	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_viewport_size, RID p_depth_texture) = 0;
+	virtual void area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) = 0;
 
 	virtual void directional_shadow_atlas_set_size(int p_size, bool p_16_bits = true) = 0;
 	virtual int get_directional_light_shadow_size(RID p_light_intance) = 0;

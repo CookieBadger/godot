@@ -2335,11 +2335,11 @@ bool RendererSceneCull::_light_instance_update_area_shadow(Instance *p_instance,
 	real_t z = -1; // TODO: verify that this is indeed the correct direction
 	Vector<Plane> planes;
 	planes.resize(6); // TODO: optimize this
-	planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + area_diagonal));
-	planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + area_diagonal));
-	planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + area_diagonal));
-	planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + area_diagonal));
-	planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + area_diagonal));
+	planes.write[0] = light_transform.xform(Plane(Vector3(0, 0, z), radius + 2*area_diagonal));
+	planes.write[1] = light_transform.xform(Plane(Vector3(1, 0, z).normalized(), radius + 2*area_diagonal));
+	planes.write[2] = light_transform.xform(Plane(Vector3(-1, 0, z).normalized(), radius + 2*area_diagonal));
+	planes.write[3] = light_transform.xform(Plane(Vector3(0, 1, z).normalized(), radius + 2*area_diagonal));
+	planes.write[4] = light_transform.xform(Plane(Vector3(0, -1, z).normalized(), radius + 2*area_diagonal));
 	planes.write[5] = light_transform.xform(Plane(Vector3(0, 0, -z), 0));
 
 	instance_shadow_cull_result.clear();
@@ -3313,6 +3313,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 		}
 
+		HashSet<RID> active_area_lights;
+
 		// Positional Shadows
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
 			Instance *ins = scene_cull_result.lights[i];
@@ -3467,14 +3469,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				if (max_shadows_used < MAX_UPDATE_SHADOWS) {
 					
 					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty(), area_shadow_banding_buffer_offset);
-					area_shadow_banding_buffer_offset += sample_count;
 
-					// returns true if either there is an animated material among the instances, or if the light wasn't yet updated due to the excessive number of lights
-					bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers);
+					if (sample_count != 0) {
+						area_shadow_banding_buffer_offset += sample_count;
 
-					//if (redraw && max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
-					//	// TODO
-					//}
+						// returns true if either there is an animated material among the instances, or if the light wasn't yet updated due to the excessive number of lights
+						bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers);
+
+						active_area_lights.insert(light->instance);
+						//if (redraw && max_area_shadows_used < MAX_UPDATE_AREA_SHADOWS) {
+						//	// TODO
+						//}
+					}
 				}
 
 			} else {
@@ -3494,6 +3500,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				}
 			}
 		}
+
+		// deactivate all area shadow atlas slots that have not been used this frame
+		RSG::light_storage->area_shadow_atlas_update_active_lights(p_area_shadow_atlas, active_area_lights);
 	}
 
 	//render SDFGI

@@ -1550,6 +1550,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
 			RendererRD::LightStorage::AreaLightQuadTree *quad_tree = light_storage->light_instance_get_area_shadow_quad_tree(light);
 
+			// TODO: apply optimization to not render leafs when we can't expand further due to atlas constraints
+			
 			// render banding tests for all area lights
 			RendererRD::LightStorage::AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
 			while (leaf_iterator.has_next()) {
@@ -1562,8 +1564,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();
 				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), quad_tree->get_node_atlas_indices(node), node->get_banding_index());
 			}
-
-			quad_tree->initialize(); // TODO: this is not sound yet, because how do we guarantee, that when the next render pass is set up, the banding tests were actually completed, and aren't still on the cpu? (maybe barriers do so, but then they MUST be optional and not be put if no area lights are present.)
 
 			Vector<Vector2> positions = quad_tree->get_unique_points();
 			Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();

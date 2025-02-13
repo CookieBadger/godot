@@ -1599,6 +1599,9 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 	return 0;
 }
 
+void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) {
+}
+
 void LightStorage::area_shadow_atlas_update(RID p_atlas) {
 	// nothing, same as shadow_atlas_update
 }

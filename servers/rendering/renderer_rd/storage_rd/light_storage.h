@@ -442,7 +442,6 @@ public:
 		~AreaLightQuadTree() {
 			prune_node(&root);
 		}
-
 	private:
 
 		SampleNode root;
@@ -1698,8 +1697,21 @@ public:
 		return atlas->reprojection_texture_size;
 	}
 
+	_FORCE_INLINE_ uint32_t area_shadow_atlas_get_free_map_count(RID p_atlas) {
+		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, 0);
+		uint32_t count = 0;
+		for (uint32_t i = 0; i < atlas->shadows.size(); i++) {
+			if (!atlas->shadows[i].active) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	virtual void area_shadow_atlas_update(RID p_atlas) override;
 	virtual void area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) override;
+	virtual void area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) override;
 
 	/* DIRECTIONAL SHADOW */
 

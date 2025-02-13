@@ -2826,16 +2826,17 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 
 	AreaLightQuadTree *quad_tree = light_instance_get_area_shadow_quad_tree(p_light_instance);
 	uint32_t area_shadow_atlas_subdivision = area_shadow_atlas_get_subdivision(p_atlas); // TODO: for some reason, this returns 4 at initialization
-	int32_t occupied_slots = quad_tree->get_unique_points().size(); //shadow_atlas->occupied_maps; // TODO: logic needs to be more complex, than this. Take into account that stealing maps from higher depth maps should be ok.
+	int32_t free_slots = area_shadow_atlas_get_free_map_count(p_atlas);
+
 	const uint32_t max_samples = 289; // 17*17 // TODO: should be a constant somewhere
-	int32_t possible_samples = MIN(max_samples, area_shadow_atlas_subdivision * area_shadow_atlas_subdivision);
+	int32_t possible_samples = MIN(max_samples, free_slots);
 	// update buffers
 	HashSet<Vector2> pruned_samples;
 	HashMap<Vector2, uint32_t> removed_samples; // samples that should free their occupied shadow atlas slot
-	Vector<Vector2> added_samples; // samples that require new shadow atlas slots 
+	Vector<Vector2> added_samples; // samples that require new shadow atlas slots
 
 	uint64_t tick = OS::get_singleton()->get_ticks_msec();
-
+	
 	if (quad_tree->is_initialized()) { // banding was calculated once
 
 		int32_t points_delta = 0;
@@ -2858,9 +2859,9 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 		AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
 		while (leaf_iterator.has_next()) {
 			AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
-			int32_t free_samples = possible_samples - occupied_slots - points_delta;
+			int32_t free_samples = possible_samples - points_delta;
 			if (get_banding_flag(node->get_banding_index()) && (free_samples - 5 >= 0 // optimization, as 5 is the maximum number of samples to be added
-																								|| free_samples - (int32_t)quad_tree->get_number_of_new_points_on_expansion(node) >= 0)) {
+																	   || free_samples - (int32_t)quad_tree->get_number_of_new_points_on_expansion(node) >= 0)) {
 				Vector<Vector2> samples = quad_tree->expand_node(node);
 				for (uint32_t i = 0; i < samples.size(); i++) {
 					if (!pruned_samples.has(samples[i])) {
@@ -2878,14 +2879,13 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 
 		//_area_shadow_atlas_free_shadows(shadow_atlas, removed_samples); // TODO: mark them as unused, but in a way that they can be reenabled again if the same light wants it again.
 		for (HashMap<Vector2, uint32_t>::Iterator S = removed_samples.begin(); S; ++S) {
-			int shadow_count = shadow_atlas->shadows.size();
 			AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
 			sarr[S->value].active = false;
 		}
 
 	} else {
 		// light is new, so we need slots for the first 4 samples
-		if (possible_samples - occupied_slots < 4) {
+		if (free_slots < 4) {
 			// tough luck, the shadow atlas is full. try next time.
 			return 0;
 		}
@@ -2909,52 +2909,55 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 		// only the new sample points might need to be rendered
 
 		// check if any of them is still valid on the shadow atlas from a previous unsubdivision
+		if (added_samples.size() != 0) {
+			for (int j = 0; j < shadow_count - 1; j++) {
+				uint64_t pass = 0;
 
-		for (int j = 0; j < shadow_count - 1; j++) {
-			uint64_t pass = 0;
-
-			if (sarr[j].owner.is_valid() && sarr[j].owner == p_light_instance && sarr[j].version == p_light_version) {
-				if (added_samples.has(sarr[j].light_sample_pos)) {
-					ERR_CONTINUE_MSG(sarr[j].active, "somehow there was still an active atlas slot for a 'new' sample");
-					quad_tree->set_atlas_index(sarr[j].light_sample_pos, j);
-					sarr[j].active = true;
-					added_samples.erase(sarr[j].light_sample_pos);
+				if (sarr[j].owner.is_valid() && sarr[j].owner == p_light_instance && sarr[j].version == p_light_version) {
+					if (added_samples.has(sarr[j].light_sample_pos)) {
+						ERR_CONTINUE_MSG(sarr[j].active, "somehow there was still an active atlas slot for a 'new' sample");
+						quad_tree->set_atlas_index(sarr[j].light_sample_pos, j);
+						sarr[j].active = true;
+						added_samples.erase(sarr[j].light_sample_pos);
+					}
 				}
 			}
 		}
 		dirty_samples = added_samples;
 	}
+	if(dirty_samples.size() != 0) {
+		Vector<uint32_t> new_shadow_atlas_indices;
+		bool found_shadows = _area_shadow_atlas_find_shadows(p_atlas, shadow_atlas, tick, dirty_samples.size(), new_shadow_atlas_indices);
+		CRASH_COND(!found_shadows); // should never happen
 
-	Vector<uint32_t> new_shadow_atlas_indices;
-	bool found_shadows = _area_shadow_atlas_find_shadows(p_atlas, shadow_atlas, tick, dirty_samples.size(), new_shadow_atlas_indices);
-	CRASH_COND(!found_shadows); // should never happen, because we check above if enough slots are available
+		li->shadow_atlases.insert(p_atlas);
 
-	li->shadow_atlases.insert(p_atlas);
+		if (!shadow_atlas->shadow_owners.has(p_light_instance)) {
+			HashSet<uint32_t> *set = memnew(HashSet<uint32_t>);
+			shadow_atlas->shadow_owners.insert(p_light_instance, set); // TODO: needed? and does this even work without dynamic allocated memory?
+		}
 
-	if (!shadow_atlas->shadow_owners.has(p_light_instance)) {
-		HashSet<uint32_t> *set = memnew(HashSet<uint32_t>);
-		shadow_atlas->shadow_owners.insert(p_light_instance, set); // TODO: needed? and does this even work without dynamic allocated memory?
+		for (uint32_t i = 0; i < dirty_samples.size(); i++) {
+			AreaShadowAtlas::Shadow *sh = &sarr[new_shadow_atlas_indices[i]];
+
+			sh->active = true;
+			sh->alloc_tick = tick;
+			sh->owner = p_light_instance;
+			sh->version = p_light_version; // TODO: probably not needed
+
+			AreaShadowSample sample;
+			sample.atlas_index = new_shadow_atlas_indices[i];
+			sample.position_on_light = dirty_samples[i];
+			li->area_shadow_dirty_samples.push_back(sample);
+			quad_tree->set_atlas_index(dirty_samples[i], new_shadow_atlas_indices[i]);
+
+			shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
+		}
+		quad_tree->verify_atlas_indices();
 	}
-
-	for (uint32_t i = 0; i < dirty_samples.size(); i++) {
-		AreaShadowAtlas::Shadow *sh = &sarr[new_shadow_atlas_indices[i]];
-
-		sh->active = true;
-		sh->alloc_tick = tick;
-		sh->owner = p_light_instance;
-		sh->version = p_light_version; // TODO: probably not needed
-
-		AreaShadowSample sample;
-		sample.atlas_index = new_shadow_atlas_indices[i];
-		sample.position_on_light = dirty_samples[i];
-		li->area_shadow_dirty_samples.push_back(sample);
-		quad_tree->set_atlas_index(dirty_samples[i], new_shadow_atlas_indices[i]);
-
-		shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
-	}
-	quad_tree->verify_atlas_indices();
-
 	quad_tree->update_banding_buffer_indices(p_banding_buffer_offset);
+
+	quad_tree->initialize(); // TODO: this is not sound yet, because how do we guarantee, that when the next render pass is set up, the banding tests were actually completed, and aren't still on the cpu? (maybe barriers do so, but then they MUST be optional and not be put if no area lights are present.)
 
 	// TODO: check if you can remove it from here
 	Vector<Vector2> positions = quad_tree->get_unique_points();
@@ -2968,6 +2971,28 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 	return positions.size();
 }
 
+void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) {
+	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
+	ERR_FAIL_NULL(shadow_atlas);
+
+	int shadow_count = shadow_atlas->shadows.size();
+	AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
+	for (int j = 0; j < shadow_count - 1; j++) {
+		uint64_t pass = 0;
+
+		if (!sarr[j].owner.is_valid()) {
+			sarr[j].active = false;
+			sarr[j].owner = RID();
+		} else if (!p_lights.has(sarr[j].owner)) {
+			sarr[j].active = false;
+			AreaLightQuadTree *quad_tree = light_instance_get_area_shadow_quad_tree(sarr[j].owner);
+			if (quad_tree->is_initialized()) {
+				quad_tree->reset();
+			}
+		}
+	}
+}
+
 void LightStorage::_area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx) {
 	ERR_FAIL_INDEX(p_shadow_idx, p_area_shadow_atlas->shadows.size());
 	AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx];
@@ -2979,6 +3004,8 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowA
 			memdelete(p_area_shadow_atlas->shadow_owners[shadow->owner]); // delete hashset
 			p_area_shadow_atlas->shadow_owners.erase(shadow->owner);
 			sli->shadow_atlases.erase(p_atlas);
+		} else {
+			p_area_shadow_atlas->shadow_owners[shadow->owner]->erase(p_shadow_idx);
 		}
 
 		shadow->version = 0;

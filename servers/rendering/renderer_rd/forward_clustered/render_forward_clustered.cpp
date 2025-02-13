@@ -1550,15 +1550,25 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
 			RendererRD::LightStorage::AreaLightQuadTree *quad_tree = light_storage->light_instance_get_area_shadow_quad_tree(light);
 
-			// TODO: apply optimization to not render leafs when we can't expand further due to atlas constraints
-			
 			// render banding tests for all area lights
-			RendererRD::LightStorage::AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
-			while (leaf_iterator.has_next()) {
-				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
-				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), quad_tree->get_node_atlas_indices(node), node->get_banding_index());
-			}
+			uint32_t free_samples = light_storage->area_shadow_atlas_get_free_map_count(p_render_data->area_shadow_atlas);
 
+			// If we don't have enough free samples available, it's not worth rendering the test to subdivide.
+			// In case we end up pruning some points, we will take advantage of the freed points in the next frame.
+			// This should result in significant performance improvements.
+			if (free_samples > 0) {
+				RendererRD::LightStorage::AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
+				while (leaf_iterator.has_next()) {
+					RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
+					// if a new subdivision of a quad Q requires N new points, and M atlas slots are available, with M<N, subdivision will never work.
+					// If the subdivision of a neighboring quad ends up contributing a new point, it will require at least 2 new slots to do so,
+					// so the number of available slots for subdivision of quad Q will be even less after that subdivision,
+					// so the set of quads we test here will still include all quads that can possibly subdivide (and some more)
+					if (quad_tree->get_number_of_new_points_on_expansion(node) <= free_samples) { 
+						_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), quad_tree->get_node_atlas_indices(node), node->get_banding_index());
+					} 
+				}
+			}
 			RendererRD::LightStorage::AreaLightQuadTree::IdleLeafParentIterator idle_leaf_parent_iterator = quad_tree->idle_leaf_parent_iterator();
 			while (idle_leaf_parent_iterator.has_next()) {
 				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();

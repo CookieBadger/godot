@@ -109,7 +109,6 @@ public:
 		MAX_CURSORS = 8,
 		MAX_2D_DIRECTIONAL_LIGHTS = 8,
 		MAX_MESH_SURFACES = 256,
-		MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE = 32 * 341 // max_cluster_buffer_elements * max size at subdivision level 4. TODO: move to where both stats are accessible, and reduce it as far as possible (10KB is not good for a bunch of bools)
 	};
 
 	/* TEXTURE API */
@@ -498,6 +497,7 @@ public:
 		LIGHT_PARAM_AREA_SIDE_A,
 		LIGHT_PARAM_AREA_SIDE_B,
 		LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES,
+		LIGHT_PARAM_AREA_SHADOW_SAMPLE_DENSITY,
 		LIGHT_PARAM_MAX
 	};
 
@@ -558,7 +558,6 @@ public:
 	virtual RID area_shadow_atlas_create() = 0;
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_use_16_bits = true) = 0;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) = 0;
-	virtual void area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) = 0;
 
 	virtual void directional_shadow_atlas_set_size(int p_size, bool p_16_bits = true) = 0;
 
@@ -966,7 +965,6 @@ public:
 
 	virtual void viewport_set_area_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits = true) = 0;
 	virtual void viewport_set_area_shadow_atlas_subdivision(RID p_viewport, int p_subdiv) = 0;
-	virtual void viewport_set_area_shadow_reprojection_ratio(RID p_viewport, int p_ratio) = 0;
 
 	enum ViewportMSAA {
 		VIEWPORT_MSAA_DISABLED,
@@ -1033,7 +1031,6 @@ public:
 		VIEWPORT_DEBUG_DRAW_SHADOW_ATLAS,
 		VIEWPORT_DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS,
 		VIEWPORT_DEBUG_DRAW_AREA_SHADOW_ATLAS,
-		VIEWPORT_DEBUG_DRAW_AREA_SHADOW_REPROJECTION,
 		VIEWPORT_DEBUG_DRAW_SCENE_LUMINANCE,
 		VIEWPORT_DEBUG_DRAW_SSAO,
 		VIEWPORT_DEBUG_DRAW_SSIL,

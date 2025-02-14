@@ -792,7 +792,7 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_aa_inc.glsl"
 
-#if (!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)) || defined(AREA_SHADOW_REPROJECTION)
+#if (!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED))
 
 // Default to SPECULAR_SCHLICK_GGX.
 #if !defined(SPECULAR_DISABLED) && !defined(SPECULAR_SCHLICK_GGX) && !defined(SPECULAR_TOON)
@@ -800,15 +800,12 @@ layout(location = 2) out vec2 motion_vector;
 #endif
 
 #include "../scene_forward_lights_inc.glsl"
-
-#ifndef AREA_SHADOW_REPROJECTION
 #include "../scene_forward_gi_inc.glsl"
-#endif
 
-#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+
+#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 #ifndef MODE_RENDER_DEPTH
-#ifndef AREA_SHADOW_REPROJECTION
 
 vec4 volumetric_fog_process(vec2 screen_uv, float z) {
 	vec3 fog_pos = vec3(screen_uv, z * implementation_data.volumetric_fog_inv_length);
@@ -874,7 +871,6 @@ vec4 fog_process(vec3 vertex) {
 
 	return vec4(fog_color, fog_amount);
 }
-#endif //!AREA_SHADOW_REPROJECTION
 
 void cluster_get_item_range(uint p_offset, out uint item_min, out uint item_max, out uint item_from, out uint item_to) {
 	uint item_min_max = cluster_buffer.data[p_offset]; // 32 bit uint which encodes both min and max value
@@ -1082,7 +1078,7 @@ void fragment_shader(in SceneData scene_data) {
 	alpha = compute_alpha_antialiasing_edge(alpha, alpha_texture_coordinate, alpha_antialiasing_edge);
 #endif // ALPHA_ANTIALIASING_EDGE_USED
 
-#ifdef MODE_RENDER_DEPTH // TODO: also do this discard when using AREA_SHADOW_REPROJECTION?
+#ifdef MODE_RENDER_DEPTH
 #if defined(USE_OPAQUE_PREPASS) || defined(ALPHA_ANTIALIASING_EDGE_USED)
 	if (alpha < scene_data.opaque_prepass_threshold) {
 		discard;
@@ -1121,7 +1117,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 
 	/////////////////////// FOG //////////////////////
-#if !defined(MODE_RENDER_DEPTH) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH)
 
 #ifndef FOG_DISABLED
 #ifndef CUSTOM_FOG_USED
@@ -1160,11 +1156,11 @@ void fragment_shader(in SceneData scene_data) {
 	uint fog_ba = packHalf2x16(fog.ba);
 
 #endif //!FOG_DISABLED
-#endif //!MODE_RENDER_DEPTH && !AREA_SHADOW_REPROJECTION
+#endif //!MODE_RENDER_DEPTH
 
 	/////////////////////// DECALS ////////////////////////////////
 
-#if !defined(MODE_RENDER_DEPTH) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH)
 
 #ifdef USE_MULTIVIEW
 	uvec2 cluster_pos = uvec2(combined_uv.xy / scene_data.screen_pixel_size) >> implementation_data.cluster_shift;
@@ -1287,7 +1283,7 @@ void fragment_shader(in SceneData scene_data) {
 
 	//pack albedo until needed again, saves 2 VGPRs in the meantime
 
-#endif //!MODE_RENDER_DEPTH && !AREA_SHADOW_REPROJECTION
+#endif //!MODE_RENDER_DEPTH
 
 	/////////////////////// LIGHTING //////////////////////////////
 
@@ -1313,7 +1309,7 @@ void fragment_shader(in SceneData scene_data) {
 	emission *= scene_data.emissive_exposure_normalization;
 #endif
 
-#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 	if (scene_data.use_reflection_cubemap) {
 #ifdef LIGHT_ANISOTROPY_USED
@@ -1403,12 +1399,12 @@ void fragment_shader(in SceneData scene_data) {
 		specular_light += clearcoat_light * horizon * horizon * Fc * scene_data.ambient_light_color_energy.a;
 	}
 #endif
-#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 	//radiance
 
 /// GI ///
-#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
 #ifdef USE_LIGHTMAP
 
@@ -1748,15 +1744,15 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 	}
 
-#endif //GI !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#endif //GI !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
-#if !defined(MODE_RENDER_DEPTH) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH)
 	//this saves some VGPRs
 	uint orms = packUnorm4x8(vec4(ao, roughness, metallic, specular));
 #endif
 
 // LIGHTING
-#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 	{ // Directional light.
 
 		// Do shadow and lighting in two passes to reduce register pressure.
@@ -2329,18 +2325,8 @@ void fragment_shader(in SceneData scene_data) {
 #endif // !MODE_RENDER_DEPTH
 #endif // USE_SHADOW_TO_OPACITY
 
-#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(AREA_SHADOW_REPROJECTION)
+#endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
-#ifdef AREA_SHADOW_REPROJECTION
-	float shadow = 1.0; // full light
-#ifndef MODE_UNSHADED
-	if (bool(custom_lights.data[0].mask & instances.data[instance_index].layer_mask)) {
-		shadow = light_process_custom_shadow(0, vertex, normal);
-	}
-#endif
-	albedo = vec3(shadow, shadow, shadow);
-	frag_color = vec4(albedo, alpha);
-#else
 #ifdef MODE_RENDER_DEPTH
 
 #ifdef MODE_RENDER_SDF
@@ -2541,7 +2527,6 @@ void fragment_shader(in SceneData scene_data) {
 #endif //MODE_SEPARATE_SPECULAR
 
 #endif //MODE_RENDER_DEPTH
-#endif //!AREA_SHADOW_REPROJECTION
 
 #ifdef MOTION_VECTORS
 	vec2 position_clip = (screen_position.xy / screen_position.w) - scene_data.taa_jitter;
@@ -2553,7 +2538,7 @@ void fragment_shader(in SceneData scene_data) {
 	motion_vector = prev_position_uv - position_uv;
 #endif
 
-#if defined(PREMUL_ALPHA_USED) && !defined(MODE_RENDER_DEPTH) && !defined(AREA_SHADOW_REPROJECTION)
+#if defined(PREMUL_ALPHA_USED) && !defined(MODE_RENDER_DEPTH)
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
 }

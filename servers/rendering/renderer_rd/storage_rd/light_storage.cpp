@@ -65,8 +65,6 @@ LightStorage::LightStorage() {
 	}
 
 	lightmap_probe_capture_update_speed = GLOBAL_GET("rendering/lightmapping/probe_capture/update_speed");
-
-	get_singleton()->banding_flags.resize_zeroed(RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE); // TODO: just resize should be enough
 }
 
 LightStorage::~LightStorage() {
@@ -534,15 +532,6 @@ void LightStorage::light_instance_set_shadow_transform(RID p_light_instance, con
 	light_instance->shadow_transform[p_pass].uv_scale = p_uv_scale;
 }
 
-void LightStorage::light_instance_set_area_shadow_samples(RID p_area_light_instance, const Vector<Vector2> &p_area_shadow_samples, const Vector<uint32_t> &p_area_shadow_map_indices, const Vector<float> &p_area_shadow_sample_weights) {
-	LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
-	ERR_FAIL_NULL(light_instance);
-
-	light_instance->area_shadow_map_indices = p_area_shadow_map_indices;
-	light_instance->area_shadow_samples = p_area_shadow_samples;
-	light_instance->area_shadow_sample_weights = p_area_shadow_sample_weights;
-}
-
 void LightStorage::light_instance_mark_visible(RID p_light_instance) {
 	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
 	ERR_FAIL_NULL(light_instance);
@@ -739,18 +728,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 		light_data.area_side_b[1] = area_vec_b.y;
 		light_data.area_side_b[2] = area_vec_b.z;
 
-		light_data.area_shadow_samples = p_light_instance->area_shadow_samples.size();
-		ERR_FAIL_COND(p_light_instance->area_shadow_samples.size() != p_light_instance->area_shadow_sample_weights.size());
 		light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
-		for (uint32_t i = 0; i < p_light_instance->area_shadow_samples.size(); i++) {
-			uint32_t row = i / light_data.area_map_subdivision;
-			uint32_t col = i % light_data.area_map_subdivision;
-
-			light_data.map_idx[i] = p_light_instance->area_shadow_map_indices[i];
-			light_data.weights[i] = p_light_instance->area_shadow_sample_weights[i];
-			light_data.shadow_samples[i * 2] = p_light_instance->area_shadow_samples[i].x;
-			light_data.shadow_samples[i * 2 + 1] = p_light_instance->area_shadow_samples[i].y;
-		}
 	}
 
 	light_data.mask = light->cull_mask;
@@ -1211,21 +1189,6 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	if (r_directional_light_count) {
 		RD::get_singleton()->buffer_update(directional_light_buffer, 0, sizeof(DirectionalLightData) * r_directional_light_count, directional_lights);
 	}
-}
-
-void LightStorage::set_area_reprojection_buffer(RenderDataRD *p_render_data, const Transform3D &p_camera_transform, RID p_light_instance, RID p_shadow_atlas, RID p_area_shadow_atlas) {
-	LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
-	
-	ERR_FAIL_NULL(light_instance);
-
-	bool using_forward_ids = ForwardIDStorage::get_singleton()->uses_forward_ids();
-
-	Transform3D inverse_transform = p_camera_transform.affine_inverse();
-
-	LightData *custom_lights_data_ptr = &custom_lights[0];
-	_update_light_data(inverse_transform, using_forward_ids, true, custom_lights_data_ptr, RS::LIGHT_CUSTOM, light_instance, 0, 0, p_render_data, p_shadow_atlas, p_area_shadow_atlas);
-
-	RD::get_singleton()->buffer_update(custom_light_buffer, 0, sizeof(LightData) * 1, custom_lights);
 }
 
 /* REFLECTION PROBE */
@@ -2600,9 +2563,6 @@ void LightStorage::shadow_atlas_update(RID p_atlas) {
 }
 
 /* AREA SHADOW ATLAS */
-void LightStorage::area_shadow_set_banding_flags(Vector<uint8_t> p_buffer) {
-	memcpy(banding_flags.ptrw(), p_buffer.ptr(), sizeof(uint32_t) * RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE);
-}
 
 RID LightStorage::area_shadow_atlas_create() {
 	return area_shadow_atlas_owner.make_rid(AreaShadowAtlas());
@@ -2626,63 +2586,6 @@ void LightStorage::_update_area_shadow_atlas(AreaShadowAtlas *p_area_shadow_atla
 		Vector<RID> fb_tex;
 		fb_tex.push_back(p_area_shadow_atlas->depth);
 		p_area_shadow_atlas->fb = RD::get_singleton()->framebuffer_create(fb_tex);
-	}
-}
-
-void LightStorage::_update_area_shadow_reprojection(AreaShadowAtlas *p_area_shadow_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) {
-	if (p_area_shadow_atlas->size > 0) {
-		if (p_depth_texture == RID()) {
-			// test if size needs to change
-			if (p_area_shadow_atlas->reprojection_depth_texture.is_valid()) {
-				RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_depth_texture);
-
-				if (p_reprojection_texture_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
-					RD::get_singleton()->free(p_area_shadow_atlas->reprojection_depth_texture);
-					p_area_shadow_atlas->reprojection_depth_texture = RID();
-				}
-			}
-
-			// recreate framebuffer and texture if necessary
-			if (p_area_shadow_atlas->reprojection_depth_texture.is_null()) {
-				RD::TextureFormat tf;
-				tf.format = RD::DATA_FORMAT_D16_UNORM;
-				tf.width = p_reprojection_texture_size.width;
-				tf.height = p_reprojection_texture_size.height;
-				tf.usage_bits = RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-				p_area_shadow_atlas->reprojection_depth_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-				Vector<RID> fb_tex;
-				fb_tex.push_back(p_area_shadow_atlas->reprojection_depth_texture);
-				p_area_shadow_atlas->reprojection_depth_fb = RD::get_singleton()->framebuffer_create(fb_tex);
-			}
-		}
-
-		// test if size needs to change
-		if (p_area_shadow_atlas->reprojection_texture.is_valid()) {
-			RD::TextureFormat prev_format = RD::get_singleton()->texture_get_format(p_area_shadow_atlas->reprojection_texture);
-
-			if (p_reprojection_texture_size != Vector2(prev_format.width, prev_format.height)) { // TODO: test if viewport resize works
-				RD::get_singleton()->free(p_area_shadow_atlas->reprojection_texture);
-				p_area_shadow_atlas->reprojection_texture = RID();
-				p_area_shadow_atlas->reprojection_texture_size = Size2i();
-			}
-		}
-
-		// recreate framebuffer and texture if necessary
-		if (p_area_shadow_atlas->reprojection_texture.is_null()) {
-			RD::TextureFormat tf;
-			tf.format = RD::DATA_FORMAT_R16_UNORM; // single channel, range: [0.0; 1.0], 16 bit is probably sufficient
-			tf.width = p_reprojection_texture_size.width;
-			tf.height = p_reprojection_texture_size.height;
-			tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
-
-			p_area_shadow_atlas->reprojection_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-			Vector<RID> fb_tex;
-			fb_tex.push_back(p_area_shadow_atlas->reprojection_texture);
-			fb_tex.push_back(p_depth_texture != RID() ? p_depth_texture : p_area_shadow_atlas->reprojection_depth_texture);
-			p_area_shadow_atlas->reprojection_fb = RD::get_singleton()->framebuffer_create(fb_tex);
-			p_area_shadow_atlas->reprojection_texture_size = p_reprojection_texture_size;
-		}
 	}
 }
 
@@ -2748,7 +2651,6 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 				LightInstance *li = light_instance_owner.get_or_null(li_rid);
 				ERR_CONTINUE(!li);
 				li->shadow_atlases.erase(p_atlas);
-				li->area_shadow_quad_tree.reset();
 			}
 			
 		}
@@ -2757,12 +2659,6 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 	shadow_atlas->shadows.clear();
 	shadow_atlas->shadows.resize(subdiv * subdiv);
 	shadow_atlas->subdivision = subdiv;
-}
-
-void LightStorage::area_shadow_atlas_set_reprojection_ratio(RID p_atlas, int p_ratio) {
-	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
-	ERR_FAIL_NULL(shadow_atlas);
-	shadow_atlas->reprojection_ratio = p_ratio;
 }
 
 bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices) {
@@ -2813,7 +2709,7 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 	return true;
 }
 
-uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty, uint32_t p_banding_buffer_offset) {
+uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty) {
 	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 	ERR_FAIL_NULL_V(shadow_atlas, 0);
 
@@ -2824,107 +2720,37 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 		return 0;
 	}
 
-	AreaLightQuadTree *quad_tree = light_instance_get_area_shadow_quad_tree(p_light_instance);
 	uint32_t area_shadow_atlas_subdivision = area_shadow_atlas_get_subdivision(p_atlas); // TODO: for some reason, this returns 4 at initialization
 	int32_t free_slots = area_shadow_atlas_get_free_map_count(p_atlas);
 
 	const uint32_t max_samples = 289; // 17*17 // TODO: should be a constant somewhere
 	int32_t possible_samples = MIN(max_samples, free_slots);
 	// update buffers
-	HashSet<Vector2> pruned_samples;
-	HashMap<Vector2, uint32_t> removed_samples; // samples that should free their occupied shadow atlas slot
 	Vector<Vector2> added_samples; // samples that require new shadow atlas slots
 
 	uint64_t tick = OS::get_singleton()->get_ticks_msec();
-	
-	if (quad_tree->is_initialized()) { // banding was calculated once
-
-		int32_t points_delta = 0;
-		AreaLightQuadTree::IdleLeafParentIterator idle_leaf_parent_iterator = quad_tree->idle_leaf_parent_iterator();
-		while (idle_leaf_parent_iterator.has_next()) {
-			AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();
-
-			if (!get_banding_flag(node->get_banding_index())) {
-				node->set_idle_counter(0);
-				Vector<AreaShadowSample> samples = quad_tree->prune_node(node);
-				for (uint32_t i = 0; i < samples.size(); i++) {
-					pruned_samples.insert(samples[i].position_on_light);
-					CRASH_COND(samples[i].atlas_index == (uint32_t)-1);
-					removed_samples.insert(samples[i].position_on_light, samples[i].atlas_index);
-				}
-				points_delta -= samples.size();
-			}
-		}
-
-		AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
-		while (leaf_iterator.has_next()) {
-			AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
-			int32_t free_samples = possible_samples - points_delta;
-			if (get_banding_flag(node->get_banding_index()) && (free_samples - 5 >= 0 // optimization, as 5 is the maximum number of samples to be added
-																	   || free_samples - (int32_t)quad_tree->get_number_of_new_points_on_expansion(node) >= 0)) {
-				Vector<Vector2> samples = quad_tree->expand_node(node);
-				for (uint32_t i = 0; i < samples.size(); i++) {
-					if (!pruned_samples.has(samples[i])) {
-						added_samples.push_back(samples[i]);
-					} else {
-						quad_tree->set_atlas_index(samples[i], removed_samples[samples[i]]); // sample has been erased, need to set atlas index again.
-						removed_samples.erase(samples[i]);
-					}
-				}
-				points_delta += samples.size();
-			} else {
-				node->set_idle_counter(1);
-			}
-		}
-
-		//_area_shadow_atlas_free_shadows(shadow_atlas, removed_samples); // TODO: mark them as unused, but in a way that they can be reenabled again if the same light wants it again.
-		for (HashMap<Vector2, uint32_t>::Iterator S = removed_samples.begin(); S; ++S) {
-			AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
-			sarr[S->value].active = false;
-		}
-
-	} else {
-		// light is new, so we need slots for the first 4 samples
-		if (free_slots < 4) {
-			// tough luck, the shadow atlas is full. try next time.
-			return 0;
-		}
-	}
 
 	int shadow_count = shadow_atlas->shadows.size();
 	AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
-	Vector<Vector2> dirty_samples;
-	li->area_shadow_dirty_samples.clear();
 
-	if (p_is_dirty || !quad_tree->is_initialized()) {
-		dirty_samples = quad_tree->get_unique_points(); // all are dirty
-		if (li->shadow_atlases.has(p_atlas)) {
-			const HashSet<uint32_t> &indices = *shadow_atlas->shadow_owners[p_light_instance];
-			for (const uint32_t idx : indices) {
-				_area_shadow_atlas_invalidate_shadow(p_atlas, shadow_atlas, idx);
-			}
-			quad_tree->reset_atlas_indices();
-		}
-	} else {
-		// only the new sample points might need to be rendered
+	
+	// only the new sample points might need to be rendered
 
-		// check if any of them is still valid on the shadow atlas from a previous unsubdivision
-		if (added_samples.size() != 0) {
-			for (int j = 0; j < shadow_count - 1; j++) {
-				uint64_t pass = 0;
+	// check if any of them is still valid on the shadow atlas from a previous unsubdivision
+	if (added_samples.size() != 0) {
+		for (int j = 0; j < shadow_count - 1; j++) {
+			uint64_t pass = 0;
 
-				if (sarr[j].owner.is_valid() && sarr[j].owner == p_light_instance && sarr[j].version == p_light_version) {
-					if (added_samples.has(sarr[j].light_sample_pos)) {
-						ERR_CONTINUE_MSG(sarr[j].active, "somehow there was still an active atlas slot for a 'new' sample");
-						quad_tree->set_atlas_index(sarr[j].light_sample_pos, j);
-						sarr[j].active = true;
-						added_samples.erase(sarr[j].light_sample_pos);
-					}
+			if (sarr[j].owner.is_valid() && sarr[j].owner == p_light_instance && sarr[j].version == p_light_version) {
+				if (added_samples.has(sarr[j].light_sample_pos)) {
+					ERR_CONTINUE_MSG(sarr[j].active, "somehow there was still an active atlas slot for a 'new' sample");
+					sarr[j].active = true;
+					added_samples.erase(sarr[j].light_sample_pos);
 				}
 			}
 		}
-		dirty_samples = added_samples;
 	}
+	
 	if(dirty_samples.size() != 0) {
 		Vector<uint32_t> new_shadow_atlas_indices;
 		bool found_shadows = _area_shadow_atlas_find_shadows(p_atlas, shadow_atlas, tick, dirty_samples.size(), new_shadow_atlas_indices);
@@ -2945,30 +2771,11 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 			sh->owner = p_light_instance;
 			sh->version = p_light_version; // TODO: probably not needed
 
-			AreaShadowSample sample;
-			sample.atlas_index = new_shadow_atlas_indices[i];
-			sample.position_on_light = dirty_samples[i];
-			li->area_shadow_dirty_samples.push_back(sample);
-			quad_tree->set_atlas_index(dirty_samples[i], new_shadow_atlas_indices[i]);
-
 			shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
 		}
-		quad_tree->verify_atlas_indices();
 	}
-	quad_tree->update_banding_buffer_indices(p_banding_buffer_offset);
 
-	quad_tree->initialize(); // TODO: this is not sound yet, because how do we guarantee, that when the next render pass is set up, the banding tests were actually completed, and aren't still on the cpu? (maybe barriers do so, but then they MUST be optional and not be put if no area lights are present.)
-
-	// TODO: check if you can remove it from here
-	Vector<Vector2> positions = quad_tree->get_unique_points();
-	Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();
-	Vector<float> weights = quad_tree->get_point_weights();
-	CRASH_COND(positions.size() != atlas_indices.size());
-	CRASH_COND(positions.size() != weights.size());
-
-	light_instance_set_area_shadow_samples(p_light_instance, positions, atlas_indices, weights);
-
-	return positions.size();
+	return 0;
 }
 
 void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) {
@@ -2985,10 +2792,6 @@ void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<R
 			sarr[j].owner = RID();
 		} else if (!p_lights.has(sarr[j].owner)) {
 			sarr[j].active = false;
-			AreaLightQuadTree *quad_tree = light_instance_get_area_shadow_quad_tree(sarr[j].owner);
-			if (quad_tree->is_initialized()) {
-				quad_tree->reset();
-			}
 		}
 	}
 }
@@ -3019,13 +2822,6 @@ void LightStorage::area_shadow_atlas_update(RID p_atlas) {
 	ERR_FAIL_NULL(shadow_atlas);
 
 	_update_area_shadow_atlas(shadow_atlas);
-}
-
-void LightStorage::area_shadow_reprojection_update(RID p_atlas, const Vector2 &p_reprojection_texture_size, RID p_depth_texture) {
-	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
-	ERR_FAIL_NULL(shadow_atlas);
-
-	_update_area_shadow_reprojection(shadow_atlas, p_reprojection_texture_size, p_depth_texture);
 }
 
 /* DIRECTIONAL SHADOW */

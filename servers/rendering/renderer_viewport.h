@@ -276,7 +276,6 @@ public:
 
 	void viewport_set_area_shadow_atlas_size(RID p_viewport, int p_size, bool p_16_bits = true);
 	void viewport_set_area_shadow_atlas_subdivision(RID p_viewport, int p_subdiv);
-	void viewport_set_area_shadow_reprojection_ratio(RID p_viewport, int p_ratio);
 
 	void viewport_set_msaa_2d(RID p_viewport, RS::ViewportMSAA p_msaa);
 	void viewport_set_msaa_3d(RID p_viewport, RS::ViewportMSAA p_msaa);

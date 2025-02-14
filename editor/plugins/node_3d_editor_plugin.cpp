@@ -2736,8 +2736,7 @@ void Node3DEditorViewport::_project_settings_changed() {
 	int area_shadowmap_size = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_size");
 	bool area_shadowmap_16_bits = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_16_bits");
 	int area_atlas_subdivision = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/atlas_subdivision");
-	int area_reprojection_ratio = GLOBAL_GET("rendering/lights_and_shadows/area_shadow/viewport_reprojection_ratio");
-
+	
 	viewport->set_positional_shadow_atlas_size(shadowmap_size);
 	viewport->set_positional_shadow_atlas_16_bits(shadowmap_16_bits);
 	viewport->set_positional_shadow_atlas_quadrant_subdiv(0, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q0));
@@ -2748,8 +2747,7 @@ void Node3DEditorViewport::_project_settings_changed() {
 	viewport->set_area_shadow_atlas_size(area_shadowmap_size);
 	viewport->set_area_shadow_atlas_16_bits(area_shadowmap_size);
 	viewport->set_area_shadow_atlas_subdiv(Viewport::AreaShadowAtlasSubdiv(area_atlas_subdivision));
-	viewport->set_area_shadow_reprojection_ratio(Viewport::AreaShadowReprojectionRatio(area_reprojection_ratio));
-
+	
 	_update_shrink();
 
 	// Update MSAA, screen-space AA and debanding if changed
@@ -3577,7 +3575,6 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 		case VIEW_DISPLAY_DEBUG_SHADOW_ATLAS:
 		case VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS:
 		case VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS:
-		case VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_ALBEDO:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_LIGHTING:
 		case VIEW_DISPLAY_DEBUG_VOXEL_GI_EMISSION:
@@ -3608,7 +3605,6 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				VIEW_DISPLAY_DEBUG_SHADOW_ATLAS,
 				VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS,
 				VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS,
-				VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_ALBEDO,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_LIGHTING,
 				VIEW_DISPLAY_DEBUG_VOXEL_GI_EMISSION,
@@ -3641,7 +3637,6 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				Viewport::DEBUG_DRAW_SHADOW_ATLAS,
 				Viewport::DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS,
 				Viewport::DEBUG_DRAW_AREA_SHADOW_ATLAS,
-				Viewport::DEBUG_DRAW_AREA_SHADOW_REPROJECTION,
 				Viewport::DEBUG_DRAW_VOXEL_GI_ALBEDO,
 				Viewport::DEBUG_DRAW_VOXEL_GI_LIGHTING,
 				Viewport::DEBUG_DRAW_VOXEL_GI_EMISSION,
@@ -5290,7 +5285,6 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	display_submenu->add_radio_check_item(TTR("Shadow Atlas"), VIEW_DISPLAY_DEBUG_SHADOW_ATLAS);
 	display_submenu->add_radio_check_item(TTR("Directional Shadow Map"), VIEW_DISPLAY_DEBUG_DIRECTIONAL_SHADOW_ATLAS);
 	display_submenu->add_radio_check_item(TTR("Area Shadow Atlas"), VIEW_DISPLAY_DEBUG_AREA_SHADOW_ATLAS);
-	display_submenu->add_radio_check_item(TTR("Area Shadow Reprojection"), VIEW_DISPLAY_DEBUG_AREA_SHADOW_REPROJECTION);
 	display_submenu->add_separator();
 	display_submenu->add_radio_check_item(TTR("Decal Atlas"), VIEW_DISPLAY_DEBUG_DECAL_ATLAS);
 	display_submenu->add_separator();

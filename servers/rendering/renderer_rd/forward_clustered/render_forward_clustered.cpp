@@ -440,10 +440,6 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for SDF pass");
 				pipeline_version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF;
 			} break;
-			case PASS_MODE_AREA_SHADOW_REPROJECTION: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for Area Shadow Reprojection pass");
-				pipeline_version = SceneShaderForwardClustered::PIPELINE_VERSION_AREA_SHADOW_REPROJECTION;
-			} break;
 		}
 
 		PipelineCacheRD *pipeline = nullptr;
@@ -578,9 +574,6 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 		} break;
 		case PASS_MODE_SDF: {
 			_render_list_template<PASS_MODE_SDF>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-		} break;
-		case PASS_MODE_AREA_SHADOW_REPROJECTION: {
-			_render_list_template<PASS_MODE_AREA_SHADOW_REPROJECTION>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 		} break;
 	}
 }
@@ -1075,11 +1068,6 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
 					rl->add_element(surf);
 				}
-			} else if (p_pass_mode == PASS_MODE_AREA_SHADOW_REPROJECTION) {
-				// TODO: add exclusively for elements that receive shadows. need to find out how. exclude all gizmos.
-				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
-					rl->add_element(surf);
-				}
 			}
 			else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
@@ -1464,60 +1452,19 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		RENDER_TIMESTAMP("Render GI");
 	}
 
-	Vector2i reprojection_texture_size;
 	//prepare shadow rendering
 	if (render_shadows) {
-		// render area shadows
-		if (p_render_data->area_shadows.size()) {
-			bool use_default_depth_buffer = light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas) == 1;
-
-			reprojection_texture_size = viewport_size / light_storage->area_shadow_atlas_get_reprojection_ratio(p_render_data->area_shadow_atlas);
-			light_storage->area_shadow_reprojection_update(p_render_data->area_shadow_atlas, reprojection_texture_size, use_default_depth_buffer ? rb->get_depth_texture() : RID()); // TODO: can the depth texture change, and the reprojection texture stay the same, i.e. they go out of sync? should the reprojection framebuffer be managed in the render_buffers?
-
-			if (!use_default_depth_buffer) {
-				// render smaller depth texture
-
-				RD::get_singleton()->draw_command_begin_label("Render Area Light Reprojection Depth Pre-Pass");
-
-				RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
-				bool reverse_cull = false;
-				RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_DEPTH, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0);
-				_render_list_with_draw_list(&render_list_params, light_storage->area_shadow_atlas_get_reprojection_depth_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, Vector<Color>());
-				RD::get_singleton()->draw_command_end_label();
-			}
-		}
-
 		_render_shadow_begin();
 
 		if (p_render_data->area_shadows.size()) {
 			uint32_t rendered_area_shadow_maps = 0;
 
-			uint32_t atlas_offset = 0;
-			uint32_t banding_buffer_offset = 0;
-
-			uint32_t node_sum = 0;
-			for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // TODO: can we get rid of this here, and put it somewhere else (light storage or scene cull?)
-				RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
-				RendererRD::LightStorage::AreaLightQuadTree *quad_tree = light_storage->light_instance_get_area_shadow_quad_tree(light);
-				node_sum += quad_tree->size();
-			}
-
-			// Set the banding flag buffer back to all zeroes.
-			Vector<uint32_t> zeros;
-			zeros.resize_zeroed(node_sum);
-
-			RD::get_singleton()->buffer_update(area_light_shadow_banding.banding_flag_buffer, 0, sizeof(uint32_t) * zeros.size(), zeros.ptr());
-			RD::get_singleton()->set_resource_name(area_light_shadow_banding.banding_flag_buffer, "Area Shadow Banding Flag Buffer"); // TODO: move to initialization or smth
-
-			
 
 			for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 
 				RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
 
-				Vector<RendererRD::LightStorage::AreaShadowSample> dirty_samples = light_storage->light_instance_get_area_shadow_dirty_samples(light);
-
-				for (uint32_t j = 0; j < dirty_samples.size(); j++) {
+				for (uint32_t j = 0; j < samples.size(); j++) {
 					_render_shadow_pass(light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, dirty_samples[j].atlas_index, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, j == 0 && atlas_offset == 0, false, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, dirty_samples[j].position_on_light);
 				}
 			}
@@ -1542,48 +1489,6 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	if (render_shadows) {
 		_render_shadow_end();
-
-		// Render area shadow reprojection 
-		RENDER_TIMESTAMP("> Area Shadow Reprojection");
-		// TODO: try to also collect the reprojection passes in scene cull and access them via light_storage, like samples
-		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
-			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
-			RendererRD::LightStorage::AreaLightQuadTree *quad_tree = light_storage->light_instance_get_area_shadow_quad_tree(light);
-
-			// render banding tests for all area lights
-			uint32_t free_samples = light_storage->area_shadow_atlas_get_free_map_count(p_render_data->area_shadow_atlas);
-
-			// If we don't have enough free samples available, it's not worth rendering the test to subdivide.
-			// In case we end up pruning some points, we will take advantage of the freed points in the next frame.
-			// This should result in significant performance improvements.
-			if (free_samples > 0) {
-				RendererRD::LightStorage::AreaLightQuadTree::LeafIterator leaf_iterator = quad_tree->leaf_iterator();
-				while (leaf_iterator.has_next()) {
-					RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = leaf_iterator.next();
-					// if a new subdivision of a quad Q requires N new points, and M atlas slots are available, with M<N, subdivision will never work.
-					// If the subdivision of a neighboring quad ends up contributing a new point, it will require at least 2 new slots to do so,
-					// so the number of available slots for subdivision of quad Q will be even less after that subdivision,
-					// so the set of quads we test here will still include all quads that can possibly subdivide (and some more)
-					if (quad_tree->get_number_of_new_points_on_expansion(node) <= free_samples) { 
-						_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), quad_tree->get_node_atlas_indices(node), node->get_banding_index());
-					} 
-				}
-			}
-			RendererRD::LightStorage::AreaLightQuadTree::IdleLeafParentIterator idle_leaf_parent_iterator = quad_tree->idle_leaf_parent_iterator();
-			while (idle_leaf_parent_iterator.has_next()) {
-				RendererRD::LightStorage::AreaLightQuadTree::SampleNode *node = idle_leaf_parent_iterator.next();
-				_render_area_shadow_banding_test(p_render_data, p_render_data->render_shadows[p_render_data->area_shadows[i]].light, reprojection_texture_size, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, viewport_size, node->get_rect(), quad_tree->get_node_atlas_indices(node), node->get_banding_index());
-			}
-
-			Vector<Vector2> positions = quad_tree->get_unique_points();
-			Vector<uint32_t> atlas_indices = quad_tree->get_point_atlas_indices();
-			Vector<float> weights = quad_tree->get_point_weights();
-			CRASH_COND(positions.size() != atlas_indices.size());
-			CRASH_COND(positions.size() != weights.size());
-
-			light_storage->light_instance_set_area_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, positions, atlas_indices, weights);
-		}
-		RENDER_TIMESTAMP("< Area Shadow Reprojection");
 	}
 
 	if (rb_data.is_valid() && ss_effects) {
@@ -1693,10 +1598,6 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 		RID depth_texture = p_render_buffers->get_depth_texture(v);
 		ss_effects->sub_surface_scattering(p_render_buffers, internal_texture, depth_texture, p_camera, internal_size);
 	}
-}
-
-Vector<uint8_t> RenderForwardClustered::read_buffers() { // TODO: might be best to encapsulate return value in an object
-	return RD::get_singleton()->buffer_get_data(area_light_shadow_banding.banding_flag_buffer);
 }
 
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
@@ -2822,91 +2723,6 @@ void RenderForwardClustered::_render_shadow_end() {
 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
 		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, RD::INITIAL_ACTION_DISCARD, RD::FINAL_ACTION_DISCARD, shadow_pass.initial_depth_action, RD::FINAL_ACTION_STORE, Vector<Color>(), 0.0, 0, shadow_pass.rect);
 	}
-
-	RD::get_singleton()->draw_command_end_label();
-}
-
-void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_render_data, RID p_light, Vector2i p_reprojection_texture_size, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size, const Rect2 &p_quad, const Vector<uint32_t> &p_shadow_map_indices, uint32_t p_banding_buffer_index) {
-	// render only shadow values (PASS_MODE_AREA_SHADOW_REPROJECTION, custom resolution, greyscale)
-	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
-	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
-
-	RENDER_TIMESTAMP("Area Shadow Reprojection Draw " + p_quad);
-	RD::get_singleton()->draw_command_begin_label("Area Shadow Reprojection");
-
-	Vector<Vector2> points_in_quad = { Vector2(p_quad.get_position()), Vector2(p_quad.get_position().x + p_quad.get_size().x, p_quad.get_position().y), Vector2(p_quad.get_position().x, p_quad.get_position().y + p_quad.get_size().y), Vector2(p_quad.get_end()) };
-	light_storage->light_instance_set_area_shadow_samples(p_light, points_in_quad, p_shadow_map_indices, Vector<float>({ 0.25, 0.25, 0.25, 0.25 }));
-
-	render_list[RENDER_LIST_SECONDARY].clear();
-	scene_state.instance_data[RENDER_LIST_SECONDARY].clear();
-	light_storage->set_area_reprojection_buffer(p_render_data, p_render_data->scene_data->cam_transform, p_light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas);
-	_update_render_base_uniform_set(); // just in case one of the passes changed something, e.g. a sampler. TODO: if this was actually needed, then base_uniforms_changed() would be needed.
-
-	{
-		Size2i rp_tex_size = light_storage->area_shadow_atlas_get_reprojection_size(p_render_data->area_shadow_atlas); // TODO: why is x != y when debugging this?
-
-		bool opaque_render_buffers = true; // TODO
-		_setup_environment(p_render_data, true, rp_tex_size, Color(), opaque_render_buffers, false);
-	}
-
-	uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
-	_fill_render_list(RENDER_LIST_SECONDARY, p_render_data, PASS_MODE_AREA_SHADOW_REPROJECTION); // TODO. maybe render lists can be pre-assembled once before the entire light loop?
-	uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
-	render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
-	_fill_instance_data(RENDER_LIST_SECONDARY, p_render_data->render_info ? p_render_data->render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size);
-
-	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, p_render_data, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false); // TODO: could also use rb->samplers. Not sure what that would imply.
-
-	// TODO, since I don't know what they do.
-	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0; // TODO: does this make sense? test it
-	RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + render_list_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + render_list_from, render_list_size, reverse_cull, PASS_MODE_AREA_SHADOW_REPROJECTION, 0, true, false, rp_uniform_set, false, Vector2(), p_lod_distance_multiplier, p_screen_mesh_lod_threshold, 1, render_list_from);
-	Vector<Color> clear_colors;
-	clear_colors.push_back(Color(1, 1, 1));
-	_render_list_with_draw_list(&render_list_parameters, light_storage->area_shadow_atlas_get_reprojection_fb(p_render_data->area_shadow_atlas), RD::INITIAL_ACTION_CLEAR, RD::FINAL_ACTION_STORE, RD::INITIAL_ACTION_LOAD, RD::FINAL_ACTION_STORE, clear_colors, 0.0, 0);
-
-	// "
-	// The comparison of four neighboring shadow maps in camera space is done in a pixel shader by applying a 2 - pass strategy :
-	// In the first pass, the reprojected depth values of the four shadow maps are evaluated as in the original shadow map algorithm :
-	// For each screen space fragment, the 4 corresponding shadow values are calculated and summed up(i.e.each fragment obtains an integer value between 0 and 4), and stored in the comparison render target.
-	// "
-	//         in fragment shader:
-	//             get the 8-ring neighborhood and output pixels only where all 8 are the same value as the current one.
-	//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
-
-	
-	RENDER_TIMESTAMP("Area Shadow Reprojection Compute Test " + p_quad);
-
-	Vector<RD::Uniform> shadow_banding_uniforms;
-	{
-		RD::Uniform u;
-		u.binding = 0;
-		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		RID texture = light_storage->area_shadow_atlas_get_reprojection_texture(p_render_data->area_shadow_atlas); // TODO: move reprojection texture buffer to renderbuffers
-		u.append_id(texture);
-		shadow_banding_uniforms.push_back(u);
-	}
-	{
-		RD::Uniform u;
-		u.binding = 1;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u.append_id(area_light_shadow_banding.banding_flag_buffer);
-		shadow_banding_uniforms.push_back(u);
-	}
-	RID shadow_banding_uniform_set = RD::get_singleton()->uniform_set_create(shadow_banding_uniforms, area_light_shadow_banding.shader, 0);
-
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, area_light_shadow_banding.shader_pipeline);
-
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, shadow_banding_uniform_set, 0);
-	AreaLightShadowBanding::PushConstant push_constant;
-	push_constant.buffer_index = p_banding_buffer_index;
-	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(push_constant));
-
-	
-	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_reprojection_texture_size.x - 2, p_reprojection_texture_size.y - 2, 1); // TODO: evaluate dispatch() vs dispatch_threads()
-	RD::get_singleton()->compute_list_end();
-
-	RD::get_singleton()->free(shadow_banding_uniform_set);
 
 	RD::get_singleton()->draw_command_end_label();
 }
@@ -4612,17 +4428,6 @@ RenderForwardClustered::RenderForwardClustered() {
 
 		best_fit_normal.shader.version_free(best_fit_normal.shader_version);
 	}
-
-	{
-		Vector<String> versions;
-		versions.push_back("");
-		area_light_shadow_banding.area_light_shadow_banding_shader.initialize(versions);
-		area_light_shadow_banding.shader_version = area_light_shadow_banding.area_light_shadow_banding_shader.version_create();
-		area_light_shadow_banding.shader = area_light_shadow_banding.area_light_shadow_banding_shader.version_get_shader(area_light_shadow_banding.shader_version, 0);
-		area_light_shadow_banding.shader_pipeline = RD::get_singleton()->compute_pipeline_create(area_light_shadow_banding.shader);
-
-		area_light_shadow_banding.banding_flag_buffer = RD::get_singleton()->storage_buffer_create(sizeof(uint32_t) * RS::MAXIMUM_REPROJECTION_DATA_BUFFER_SIZE);
-	}
 	_update_shader_quality_settings();
 
 	resolve_effects = memnew(RendererRD::Resolve());
@@ -4652,16 +4457,9 @@ RenderForwardClustered::~RenderForwardClustered() {
 		resolve_effects = nullptr;
 	}
 
-	if (!area_light_shadow_banding.banding_flag_buffer.is_null()) {
-		RD::get_singleton()->free(area_light_shadow_banding.banding_flag_buffer);
-		area_light_shadow_banding.area_light_shadow_banding_shader.version_free(area_light_shadow_banding.shader_version);
-		RD::get_singleton()->free(area_light_shadow_banding.uniform_set);
-	}
-
 	RD::get_singleton()->free(shadow_sampler);
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
 	RD::get_singleton()->free(best_fit_normal.texture);
-	RD::get_singleton()->free(area_light_shadow_banding.banding_flag_buffer);
 
 	{
 		for (const RID &rid : scene_state.uniform_buffers) {

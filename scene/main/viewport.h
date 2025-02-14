@@ -123,15 +123,6 @@ public:
 		AREA_SHADOW_ATLAS_SUBDIV_MAX,
 	};
 
-	enum AreaShadowReprojectionRatio {
-		AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_1,
-		AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_2,
-		AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_4,
-		AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_8,
-		AREA_SHADOW_VP_REPROJECTION_RATIO_1_TO_16,
-		AREA_SHADOW_VP_REPROJECTION_RATIO_MAX,
-	};
-
 	enum MSAA {
 		MSAA_DISABLED,
 		MSAA_2X,
@@ -174,7 +165,6 @@ public:
 		DEBUG_DRAW_SHADOW_ATLAS,
 		DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS,
 		DEBUG_DRAW_AREA_SHADOW_ATLAS,
-		DEBUG_DRAW_AREA_SHADOW_REPROJECTION,
 		DEBUG_DRAW_SCENE_LUMINANCE,
 		DEBUG_DRAW_SSAO,
 		DEBUG_DRAW_SSIL,
@@ -318,7 +308,6 @@ private:
 	int area_shadow_atlas_size = 2048;
 	bool area_shadow_atlas_16_bits = true;
 	AreaShadowAtlasSubdiv area_shadow_atlas_subdiv;
-	AreaShadowReprojectionRatio area_shadow_reprojection_ratio;
 
 	MSAA msaa_2d = MSAA_DISABLED;
 	MSAA msaa_3d = MSAA_DISABLED;
@@ -570,9 +559,6 @@ public:
 
 	void set_area_shadow_atlas_subdiv(AreaShadowAtlasSubdiv p_subdiv);
 	AreaShadowAtlasSubdiv get_area_shadow_atlas_subdiv() const;
-
-	void set_area_shadow_reprojection_ratio(AreaShadowReprojectionRatio p_ratio);
-	AreaShadowReprojectionRatio get_area_shadow_reprojection_ratio() const;
 
 	void set_msaa_2d(MSAA p_msaa);
 	MSAA get_msaa_2d() const;
@@ -890,7 +876,6 @@ VARIANT_ENUM_CAST(Viewport::Scaling3DMode);
 VARIANT_ENUM_CAST(SubViewport::UpdateMode);
 VARIANT_ENUM_CAST(Viewport::PositionalShadowAtlasQuadrantSubdiv);
 VARIANT_ENUM_CAST(Viewport::AreaShadowAtlasSubdiv);
-VARIANT_ENUM_CAST(Viewport::AreaShadowReprojectionRatio);
 VARIANT_ENUM_CAST(Viewport::MSAA);
 VARIANT_ENUM_CAST(Viewport::ScreenSpaceAA);
 VARIANT_ENUM_CAST(Viewport::DebugDraw);

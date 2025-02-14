@@ -2812,7 +2812,6 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("viewport_set_positional_shadow_atlas_quadrant_subdivision", "viewport", "quadrant", "subdivision"), &RenderingServer::viewport_set_positional_shadow_atlas_quadrant_subdivision);
 	ClassDB::bind_method(D_METHOD("viewport_set_area_shadow_atlas_size", "viewport", "size", "use_16_bits"), &RenderingServer::viewport_set_area_shadow_atlas_size, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("viewport_set_area_shadow_atlas_subdivision", "viewport", "subdivision"), &RenderingServer::viewport_set_area_shadow_atlas_subdivision);
-	ClassDB::bind_method(D_METHOD("viewport_set_area_shadow_reprojection_ratio", "viewport", "ratio"), &RenderingServer::viewport_set_area_shadow_reprojection_ratio);
 	ClassDB::bind_method(D_METHOD("viewport_set_msaa_3d", "viewport", "msaa"), &RenderingServer::viewport_set_msaa_3d);
 	ClassDB::bind_method(D_METHOD("viewport_set_msaa_2d", "viewport", "msaa"), &RenderingServer::viewport_set_msaa_2d);
 	ClassDB::bind_method(D_METHOD("viewport_set_use_hdr_2d", "viewport", "enabled"), &RenderingServer::viewport_set_use_hdr_2d);
@@ -2902,7 +2901,6 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_SHADOW_ATLAS);
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_DIRECTIONAL_SHADOW_ATLAS);
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_AREA_SHADOW_ATLAS);
-	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_AREA_SHADOW_REPROJECTION);
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_SCENE_LUMINANCE);
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_SSAO);
 	BIND_ENUM_CONSTANT(VIEWPORT_DEBUG_DRAW_SSIL);

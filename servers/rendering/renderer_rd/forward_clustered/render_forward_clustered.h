@@ -42,7 +42,6 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl.gen.h"
-#include "servers/rendering/renderer_rd/shaders/area_light_shadow_banding.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/utilities.h"
 
 #define RB_SCOPE_FORWARD_CLUSTERED SNAME("forward_clustered")
@@ -179,25 +178,10 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RID texture;
 	} best_fit_normal;
 
-	struct AreaLightShadowBanding { // TODO: what happens with multiple viewports? Should each vp have its own banding flags buffer?
-		AreaLightShadowBandingShaderRD area_light_shadow_banding_shader;
-		RID shader_version;
-		RID shader;
-		RID shader_pipeline;
-		RID banding_flag_buffer;
-		RID uniform_set;
-
-		struct PushConstant {
-			uint32_t buffer_index;
-			uint32_t pad[3];
-		};
-	} area_light_shadow_banding;
-
 	enum PassMode {
 		PASS_MODE_COLOR,
 		PASS_MODE_SHADOW,
 		PASS_MODE_SHADOW_DP,
-		PASS_MODE_AREA_SHADOW_REPROJECTION,
 		PASS_MODE_DEPTH,
 		PASS_MODE_DEPTH_NORMAL_ROUGHNESS,
 		PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI,
@@ -619,7 +603,6 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 	void _render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, const Rect2i &p_rect = Rect2i(), bool p_flip_y = false, bool p_clear_region = true, bool p_begin = true, bool p_end = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
 	void _render_shadow_process();
 	void _render_shadow_end();
-	void _render_area_shadow_banding_test(RenderDataRD *p_render_data, RID p_light, Vector2i p_reprojection_texture_size, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Size2i &p_viewport_size, const Rect2 &p_quad, const Vector<uint32_t> &p_shadow_map_indices, uint32_t p_banding_buffer_index);
 
 	/* Render Scene */
 	void _process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections);
@@ -646,7 +629,6 @@ protected:
 	virtual void sub_surface_scattering_set_scale(float p_scale, float p_depth_scale) override;
 
 	/* Rendering */
-	virtual Vector<uint8_t> read_buffers() override;
 	virtual void _render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) override;
 	virtual void _render_buffers_debug_draw(const RenderDataRD *p_render_data) override;
 

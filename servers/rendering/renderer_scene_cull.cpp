@@ -2627,10 +2627,6 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::read_buffers() {
-	RSG::light_storage->area_shadow_set_banding_flags(scene_render->read_buffers());
-}
-
 void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, RID p_area_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
 #ifndef _3D_DISABLED
 
@@ -3292,7 +3288,6 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	//render shadows
 
 	max_shadows_used = 0;
-	uint32_t area_shadow_banding_buffer_offset = 0;
 
 	if (p_using_shadows) { //setup shadow maps
 
@@ -3468,10 +3463,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 				if (max_shadows_used < MAX_UPDATE_SHADOWS) {
 					
-					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty(), area_shadow_banding_buffer_offset);
+					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty());
 
 					if (sample_count != 0) {
-						area_shadow_banding_buffer_offset += sample_count;
 
 						// returns true if either there is an animated material among the instances, or if the light wasn't yet updated due to the excessive number of lights
 						bool needs_update_next_frame = _light_instance_update_area_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_area_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers);

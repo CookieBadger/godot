@@ -138,6 +138,10 @@ void LightStorage::_light_initialize(RID p_light, RS::LightType p_type) {
 	light.param[RS::LIGHT_PARAM_SHADOW_PANCAKE_SIZE] = 20.0;
 	light.param[RS::LIGHT_PARAM_TRANSMITTANCE_BIAS] = 0.05;
 	light.param[RS::LIGHT_PARAM_INTENSITY] = p_type == RS::LIGHT_DIRECTIONAL ? 100000.0 : 1000.0;
+	light.param[RS::LIGHT_PARAM_AREA_SIDE_A] = 1.0;
+	light.param[RS::LIGHT_PARAM_AREA_SIDE_B] = 1.0;
+	light.param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES] = 1;
+	light.param[RS::LIGHT_PARAM_AREA_SHADOW_SAMPLE_RESOLUTION] = 1;
 
 	light_owner.initialize_rid(p_light, light);
 }
@@ -471,8 +475,9 @@ void LightStorage::light_instance_free(RID p_light) {
 		if (light_instance->light_type == RS::LIGHT_CUSTOM) {
 			AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(E);
 			ERR_CONTINUE(!shadow_atlas->shadow_owners.has(p_light));
-			const HashSet<uint32_t> &indices = *shadow_atlas->shadow_owners[p_light];
-			for (const uint32_t idx : indices) {
+			const HashMap<uint32_t, Vector2> &owner_map = *shadow_atlas->shadow_owners[p_light];
+			for (const KeyValue<uint32_t, Vector2> sample : owner_map) {
+				uint32_t idx = sample.key;
 				shadow_atlas->shadows.write[idx].active = false;
 				shadow_atlas->shadows.write[idx].owner = RID();
 			}
@@ -728,7 +733,14 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 		light_data.area_side_b[1] = area_vec_b.y;
 		light_data.area_side_b[2] = area_vec_b.z;
 
+		light_data.area_shadow_sample_resolution = (uint32_t) sqrt(p_light_instance->area_shadow_map_indices.size());
+		CRASH_COND(light_data.area_shadow_sample_resolution * light_data.area_shadow_sample_resolution != p_light_instance->area_shadow_map_indices.size());
 		light_data.area_map_subdivision = area_shadow_atlas_get_subdivision(p_area_shadow_atlas);
+		for (uint32_t i = 0; i < p_light_instance->area_shadow_map_indices.size(); i++) {
+			uint32_t row = i / light_data.area_map_subdivision;
+			uint32_t col = i % light_data.area_map_subdivision;
+			light_data.map_indices[i] = p_light_instance->area_shadow_map_indices[i];
+		}
 	}
 
 	light_data.mask = light->cull_mask;
@@ -2608,11 +2620,11 @@ void LightStorage::area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16
 	shadow_atlas->shadows.resize(int64_t(shadow_atlas->subdivision * shadow_atlas->subdivision));
 
 	//erase shadow atlas reference from lights
-	for (const KeyValue<RID, HashSet<uint32_t>*> &E : shadow_atlas->shadow_owners) {
+	for (const KeyValue<RID, HashMap<uint32_t, Vector2>*> &E : shadow_atlas->shadow_owners) {
 		LightInstance *li = light_instance_owner.get_or_null(E.key);
 		ERR_CONTINUE(!li);
 		li->shadow_atlases.erase(p_atlas);
-		memdelete(E.value); // delete hashset
+		memdelete(E.value); // delete hashmap
 	}
 
 	//clear owners
@@ -2642,29 +2654,30 @@ void LightStorage::area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivis
 
 	//erase all data from atlas
 	for (int i = 0; i < shadow_atlas->shadows.size(); i++) {
+		AreaShadowAtlas::Shadow *shadow = &shadow_atlas->shadows.write[i];
 		if (shadow_atlas->shadows[i].owner.is_valid()) {
 			RID li_rid = shadow_atlas->shadows[i].owner;
 			if (shadow_atlas->shadow_owners.has(li_rid)) {
-				HashSet<uint32_t> *owner_set = shadow_atlas->shadow_owners[li_rid];
-				memdelete(owner_set); // delete hashset
+				HashMap<uint32_t, Vector2> *owner_map = shadow_atlas->shadow_owners[li_rid];
+				memdelete(owner_map); // delete hashset
 				shadow_atlas->shadow_owners.erase(li_rid);
 				LightInstance *li = light_instance_owner.get_or_null(li_rid);
 				ERR_CONTINUE(!li);
 				li->shadow_atlases.erase(p_atlas);
 			}
-			
 		}
 	}
 
 	shadow_atlas->shadows.clear();
-	shadow_atlas->shadows.resize(subdiv * subdiv);
+	shadow_atlas->shadows.resize(subdiv * subdiv); // TODO: does this initialize values?
 	shadow_atlas->subdivision = subdiv;
 }
 
-bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices) {
+bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, RID p_light_instance, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices) {
 	if (p_needed_shadow_count == 0) {
 		return true;
 	}
+	Vector<uint32_t> free_shadows;
 	Vector<const AreaShadowAtlas::Shadow *> inactive_shadow_ptrs;
 	HashMap<const AreaShadowAtlas::Shadow *, uint32_t> inactive_shadows;
 
@@ -2673,8 +2686,10 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 		if (sh->active) {
 			continue;
 		}
-		if (sh->owner == RID()) {
+		if (sh->owner == p_light_instance) { // prefer already owned shadows
 			r_new_shadow_atlas_indices.push_back(i);
+		} else if (sh->owner == RID()) {
+			free_shadows.push_back(i);
 		} else {
 			inactive_shadows.insert(sh, i);
 			inactive_shadow_ptrs.push_back(sh);
@@ -2684,59 +2699,129 @@ bool LightStorage::_area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas 
 		}
 	}
 
+	uint32_t missing_shadows = p_needed_shadow_count - r_new_shadow_atlas_indices.size();
+
+	for (uint32_t i = 0; i < MIN(missing_shadows, free_shadows.size()); i++) {
+		r_new_shadow_atlas_indices.push_back(free_shadows[i]);
+	}
+
+	missing_shadows = p_needed_shadow_count - r_new_shadow_atlas_indices.size();
+
+	if (missing_shadows == 0) {
+		return true;
+	}
+
 	struct ShadowAgeSort {
 		_FORCE_INLINE_ bool operator()(const AreaShadowAtlas::Shadow *l, const AreaShadowAtlas::Shadow *r) const {
 			return l->alloc_tick < r->alloc_tick;
 		}
 	};
 
-	uint32_t missing_shadows = p_needed_shadow_count - r_new_shadow_atlas_indices.size();
-
-	if (inactive_shadow_ptrs.size() < missing_shadows) {
-		return false; // not enough unused shadows left
-	}
-
 	// with a max-heap, this could be sped up a little.
 	inactive_shadow_ptrs.sort_custom<ShadowAgeSort>();
 
-	for (uint32_t i = 0; i < missing_shadows; i++) {
+	for (uint32_t i = 0; i < MIN(missing_shadows, inactive_shadow_ptrs.size()); i++) {
 		uint32_t shadow_idx = inactive_shadows[inactive_shadow_ptrs[i]];
 		_area_shadow_atlas_invalidate_shadow(p_atlas, p_area_shadow_atlas, shadow_idx);
-		CRASH_COND(shadow_idx == (uint32_t)-1);
-		CRASH_COND(r_new_shadow_atlas_indices.has(shadow_idx));
 		r_new_shadow_atlas_indices.push_back(shadow_idx);
 	}
-	return true;
+	return r_new_shadow_atlas_indices.size() == p_needed_shadow_count;
 }
 
-uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty) {
+uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) {
+	// This method needs to set the samples of the LightInstance (light_instance_set_area_shadow_samples), as well as define which samples are dirty and which are not.
+	// We need to compare the current subdivision set on the light node to the number of samples the light currently occupies. If possible, we find free shadow atlas slots for the required number of samples
+	// If we don't find enough samples, we use the next lowest subdivision for which we have enough slots.
+
+	// TODO reduce complexity of loops, helpers, etc., instead of hashmap use shadow[idx].light_sample_pos
+
 	AreaShadowAtlas *shadow_atlas = area_shadow_atlas_owner.get_or_null(p_atlas);
 	ERR_FAIL_NULL_V(shadow_atlas, 0);
 
 	LightInstance *li = light_instance_owner.get_or_null(p_light_instance);
 	ERR_FAIL_NULL_V(li, 0);
 
+	li->area_shadow_dirty_samples.clear();
+
+	Light *light = light_owner.get_or_null(li->light);
+	ERR_FAIL_NULL_V(light, 0);
+
 	if (shadow_atlas->size == 0 || shadow_atlas->subdivision == 0) {
 		return 0;
 	}
 
-	uint32_t area_shadow_atlas_subdivision = area_shadow_atlas_get_subdivision(p_atlas); // TODO: for some reason, this returns 4 at initialization
+	uint32_t target_resolution_level = light->param[RS::LIGHT_PARAM_AREA_SHADOW_SAMPLE_RESOLUTION];
+	uint32_t target_resolution = 0;
+	if (target_resolution_level == 1) {
+		target_resolution = 2;
+	} else if (target_resolution_level == 2) {
+		target_resolution = 3;
+	} else if (target_resolution_level == 3) {
+		target_resolution = 5;
+	} else if (target_resolution_level == 4) {
+		target_resolution = 9;
+	} else if (target_resolution_level >= 5) {
+		target_resolution = 17;
+	}
 	int32_t free_slots = area_shadow_atlas_get_free_map_count(p_atlas);
+	int32_t held_slots = 0;
+	HashSet<Vector2> held_samples; // utility
 
-	const uint32_t max_samples = 289; // 17*17 // TODO: should be a constant somewhere
-	int32_t possible_samples = MIN(max_samples, free_slots);
-	// update buffers
-	Vector<Vector2> added_samples; // samples that require new shadow atlas slots
-
-	uint64_t tick = OS::get_singleton()->get_ticks_msec();
-
+	HashMap<Vector2, uint32_t> index_map;
+	Vector<uint32_t> atlas_indices;
+	bool is_dirty = false;
 	int shadow_count = shadow_atlas->shadows.size();
 	AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
 
-	
+	if (shadow_atlas->shadow_owners.has(p_light_instance)) {
+		HashMap<uint32_t, Vector2> &sample_map = *shadow_atlas->shadow_owners[p_light_instance];
+		held_slots = shadow_atlas->shadow_owners[p_light_instance]->size();
+
+		for (KeyValue<uint32_t, Vector2> sample : sample_map) {
+			is_dirty |= sarr[sample.key].version != p_light_version;
+			held_samples.insert(sample.value);
+			index_map.insert(sample.value, sample.key);
+		}
+	}
+
+	uint32_t max_resolution = 0;
+
+	if (free_slots >= 289 - held_slots) {
+		max_resolution = 17;
+	} else if (free_slots >= 81 - held_slots) {
+		max_resolution = 9;
+	} else if (free_slots >= 25 - held_slots) {
+		max_resolution = 5;
+	} else if (free_slots >= 9 - held_slots) {
+		max_resolution = 3;
+	} else if (free_slots >= 4 - held_slots) {
+		max_resolution = 2;
+	}
+	uint32_t current_resolution = MIN(target_resolution, max_resolution);
+
+	if (current_resolution == 0) {
+		return 0;
+	}
+
+	uint32_t current_sample_count = current_resolution * current_resolution;
+	Vector<Vector2> samples;
+	Vector<Vector2> added_samples; // samples that require new shadow atlas slots
+
+	// acquire new slots
+	for (uint32_t i = 0; i < current_resolution; i++) {
+		for (uint32_t j = 0; j < current_resolution; j++) {
+			Vector2 sample_pos = Vector2(1.0 / (current_resolution - 1) * j, 1.0 / (current_resolution - 1) * i);
+			samples.push_back(sample_pos);
+			if (!held_samples.has(sample_pos)) {
+				added_samples.push_back(sample_pos);
+			}
+		}
+	}
+
+
 	// only the new sample points might need to be rendered
 
-	// check if any of them is still valid on the shadow atlas from a previous unsubdivision
+	// check if any of them is still valid on the shadow atlas (because it might have been written there previously)
 	if (added_samples.size() != 0) {
 		for (int j = 0; j < shadow_count - 1; j++) {
 			uint64_t pass = 0;
@@ -2745,22 +2830,55 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 				if (added_samples.has(sarr[j].light_sample_pos)) {
 					ERR_CONTINUE_MSG(sarr[j].active, "somehow there was still an active atlas slot for a 'new' sample");
 					sarr[j].active = true;
+					index_map.insert(sarr[j].light_sample_pos, j);
 					added_samples.erase(sarr[j].light_sample_pos);
+					held_slots++;
+					if (!shadow_atlas->shadow_owners.has(p_light_instance)) {
+						HashMap<uint32_t, Vector2> *map = _post_initialize(new ("") HashMap<uint32_t, Vector2>); // TODO: can we do this without dynamic allocation?
+						shadow_atlas->shadow_owners.insert(p_light_instance, map);
+					}
+					li->shadow_atlases.insert(p_atlas);
+					
+					shadow_atlas->shadow_owners[p_light_instance]->insert(j, sarr[j].light_sample_pos);
 				}
 			}
 		}
 	}
-	
-	if(dirty_samples.size() != 0) {
+
+	if (current_sample_count < held_slots) {
+		// release slots
+		HashMap<uint32_t, Vector2> sample_map = *shadow_atlas->shadow_owners[p_light_instance]; // copy
+		for (KeyValue<uint32_t, Vector2> sample : sample_map) {
+			if (!samples.has(sample.value)) {
+				_area_shadow_atlas_deactivate_shadow(p_atlas, shadow_atlas, sample.key);
+			}
+		}
+	}
+
+	Vector<Vector2> dirty_samples;
+
+	if (is_dirty) {
+		HashMap<uint32_t, Vector2> sample_map = *shadow_atlas->shadow_owners[p_light_instance]; // copy
+		for (KeyValue<uint32_t, Vector2> sample : sample_map) {
+			_area_shadow_atlas_deactivate_shadow(p_atlas, shadow_atlas, sample.key);
+			dirty_samples.push_back(sample.value);
+		}
+		dirty_samples = samples;
+	} else {
+		dirty_samples = added_samples;
+	}
+
+	if (dirty_samples.size() != 0) {
+		uint64_t tick = OS::get_singleton()->get_ticks_msec();
 		Vector<uint32_t> new_shadow_atlas_indices;
-		bool found_shadows = _area_shadow_atlas_find_shadows(p_atlas, shadow_atlas, tick, dirty_samples.size(), new_shadow_atlas_indices);
+		bool found_shadows = _area_shadow_atlas_find_shadows(p_atlas, shadow_atlas, p_light_instance, tick, dirty_samples.size(), new_shadow_atlas_indices);
 		CRASH_COND(!found_shadows); // should never happen
 
 		li->shadow_atlases.insert(p_atlas);
 
 		if (!shadow_atlas->shadow_owners.has(p_light_instance)) {
-			HashSet<uint32_t> *set = memnew(HashSet<uint32_t>);
-			shadow_atlas->shadow_owners.insert(p_light_instance, set); // TODO: needed? and does this even work without dynamic allocated memory?
+			HashMap<uint32_t, Vector2> *map = _post_initialize(new ("") HashMap<uint32_t, Vector2>); // TODO: can we do this without dynamic allocation?
+			shadow_atlas->shadow_owners.insert(p_light_instance, map);
 		}
 
 		for (uint32_t i = 0; i < dirty_samples.size(); i++) {
@@ -2769,13 +2887,26 @@ uint32_t LightStorage::area_shadow_atlas_update_light(RID p_atlas, RID p_light_i
 			sh->active = true;
 			sh->alloc_tick = tick;
 			sh->owner = p_light_instance;
-			sh->version = p_light_version; // TODO: probably not needed
+			sh->version = p_light_version;
+			sh->light_sample_pos = dirty_samples[i];
 
-			shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i]);
+			shadow_atlas->shadow_owners[p_light_instance]->insert(new_shadow_atlas_indices[i], dirty_samples[i]);
+			AreaShadowSample sample;
+			sample.position_on_light = dirty_samples[i];
+			sample.atlas_index = new_shadow_atlas_indices[i];
+			li->area_shadow_dirty_samples.push_back(sample);
+			index_map.insert(sample.position_on_light, sample.atlas_index);
 		}
+		auto size = shadow_atlas->shadow_owners[p_light_instance]->size();
+	}
+	for (Vector2 sample : samples) {
+		CRASH_COND(!index_map.has(sample));
+		atlas_indices.push_back(index_map[sample]);
 	}
 
-	return 0;
+	li->area_shadow_map_indices = atlas_indices; // TODO: does this assignment do a copy? (COW)
+
+	return atlas_indices.size();
 }
 
 void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) {
@@ -2784,14 +2915,14 @@ void LightStorage::area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<R
 
 	int shadow_count = shadow_atlas->shadows.size();
 	AreaShadowAtlas::Shadow *sarr = shadow_atlas->shadows.ptrw();
-	for (int j = 0; j < shadow_count - 1; j++) {
+	for (int i = 0; i < shadow_count - 1; i++) {
 		uint64_t pass = 0;
 
-		if (!sarr[j].owner.is_valid()) {
-			sarr[j].active = false;
-			sarr[j].owner = RID();
-		} else if (!p_lights.has(sarr[j].owner)) {
-			sarr[j].active = false;
+		if (!p_lights.has(sarr[i].owner)) {
+			_area_shadow_atlas_deactivate_shadow(p_atlas, shadow_atlas, i);
+			if (!sarr[i].owner.is_valid()) {
+				sarr[i].owner = RID();
+			}
 		}
 	}
 }
@@ -2800,9 +2931,18 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowA
 	ERR_FAIL_INDEX(p_shadow_idx, p_area_shadow_atlas->shadows.size());
 	AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx];
 	
-	if (shadow->owner.is_valid()) {
-		LightInstance *sli = light_instance_owner.get_or_null(shadow->owner);
+	_area_shadow_atlas_deactivate_shadow(p_atlas, p_area_shadow_atlas, p_shadow_idx);
 
+	shadow->version = 0;
+	shadow->owner = RID();
+}
+
+void LightStorage::_area_shadow_atlas_deactivate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx) {
+	ERR_FAIL_INDEX(p_shadow_idx, p_area_shadow_atlas->shadows.size());
+	AreaShadowAtlas::Shadow *shadow = &p_area_shadow_atlas->shadows.write[p_shadow_idx];
+
+	if (shadow->owner.is_valid() && p_area_shadow_atlas->shadow_owners.has(shadow->owner)) {
+		LightInstance *sli = light_instance_owner.get_or_null(shadow->owner);
 		if (p_area_shadow_atlas->shadow_owners[shadow->owner]->size() == 1) { // last shadow of this light
 			memdelete(p_area_shadow_atlas->shadow_owners[shadow->owner]); // delete hashset
 			p_area_shadow_atlas->shadow_owners.erase(shadow->owner);
@@ -2810,11 +2950,9 @@ void LightStorage::_area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowA
 		} else {
 			p_area_shadow_atlas->shadow_owners[shadow->owner]->erase(p_shadow_idx);
 		}
-
-		shadow->version = 0;
-		shadow->owner = RID();
-		shadow->active = false;
 	}
+
+	shadow->active = false;
 }
 
 void LightStorage::area_shadow_atlas_update(RID p_atlas) {

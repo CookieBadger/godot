@@ -1459,13 +1459,13 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		if (p_render_data->area_shadows.size()) {
 			uint32_t rendered_area_shadow_maps = 0;
 
-
 			for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 
 				RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
+				Vector<RendererRD::LightStorage::AreaShadowSample> dirty_samples = light_storage->light_instance_get_area_shadow_dirty_samples(light);
 
-				for (uint32_t j = 0; j < samples.size(); j++) {
-					_render_shadow_pass(light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, dirty_samples[j].atlas_index, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, j == 0 && atlas_offset == 0, false, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, dirty_samples[j].position_on_light);
+				for (uint32_t j = 0; j < dirty_samples.size(); j++) {
+					_render_shadow_pass(light, p_render_data->shadow_atlas, p_render_data->area_shadow_atlas, dirty_samples[j].atlas_index, p_render_data->render_shadows[p_render_data->area_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, j == 0, false, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, dirty_samples[j].position_on_light);
 				}
 			}
 		}

@@ -56,6 +56,11 @@ public:
 		SHADOW_INVALID = 0xFFFFFFFF
 	};
 
+	struct AreaShadowSample {
+		Vector2 position_on_light;
+		uint32_t atlas_index;
+	};
+
 private:
 	static LightStorage *singleton;
 	uint32_t max_cluster_elements = 512;
@@ -128,12 +133,20 @@ private:
 
 		ForwardID forward_id = -1;
 
+		Vector<AreaShadowSample> area_shadow_dirty_samples;
+		Vector<uint32_t> area_shadow_map_indices;
+
 		LightInstance() {}
 	};
 
 	mutable RID_Owner<LightInstance> light_instance_owner;
 
 	/* OMNI/SPOT LIGHT DATA */
+	struct AreaLightParams {
+		enum {
+			MAX_SHADOW_SAMPLES = 289,
+		};
+	};
 
 	struct LightData {
 		float position[3];
@@ -154,7 +167,7 @@ private:
 		float specular_amount;
 		float shadow_opacity;
 		uint32_t area_stochastic_samples;
-		uint32_t area_shadow_samples;
+		uint32_t area_shadow_sample_resolution;
 		// 8 bytes are missing to complete this block, so ensure alignment in the next block
 		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
@@ -168,6 +181,7 @@ private:
 		uint32_t bake_mode;
 		float projector_rect[4];
 
+		uint32_t map_indices[AreaLightParams::MAX_SHADOW_SAMPLES];
 		uint32_t area_map_subdivision;
 	};
 
@@ -439,7 +453,7 @@ private:
 		RID fb; //for copying: TODO: check if this and ShadowAtlas::fb are needed
 
 		Vector<Shadow> shadows;
-		HashMap<RID, HashSet<uint32_t>*> shadow_owners; // TODO: needed?
+		HashMap<RID, HashMap<uint32_t, Vector2> *> shadow_owners; // TODO: needed? instead of map, we could just access array.
 	};
 
 	RID_Owner<ShadowAtlas> shadow_atlas_owner;
@@ -450,10 +464,11 @@ private:
 
 	void _shadow_atlas_invalidate_shadow(ShadowAtlas::Quadrant::Shadow *p_shadow, RID p_atlas, ShadowAtlas *p_shadow_atlas, uint32_t p_quadrant, uint32_t p_shadow_idx);
 	void _area_shadow_atlas_invalidate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx);
+	void _area_shadow_atlas_deactivate_shadow(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint32_t p_shadow_idx);
 
 	bool _shadow_atlas_find_shadow(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
 	bool _shadow_atlas_find_omni_shadows(ShadowAtlas *shadow_atlas, int *p_in_quadrants, int p_quadrant_count, int p_current_subdiv, uint64_t p_tick, int &r_quadrant, int &r_shadow);
-	bool _area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices);
+	bool _area_shadow_atlas_find_shadows(RID p_atlas, AreaShadowAtlas *p_area_shadow_atlas, RID p_light_instance, uint64_t p_tick, uint32_t p_needed_shadow_count, Vector<uint32_t> &r_new_shadow_atlas_indices);
 
 	/* DIRECTIONAL SHADOW */
 
@@ -636,7 +651,6 @@ public:
 	virtual void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override;
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override;
 	virtual void light_instance_mark_visible(RID p_light_instance) override;
-	
 	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override {
 		const LightInstance *light_instance = light_instance_owner.get_or_null(p_light_instance);
 		ERR_FAIL_NULL_V(light_instance, false);
@@ -778,6 +792,12 @@ public:
 		uint32_t shadow_size = (shadow_atlas->size / shadow_atlas->subdivision);
 
 		return float(1.0) / shadow_size;
+	}
+
+	_FORCE_INLINE_ Vector<AreaShadowSample> light_instance_get_area_shadow_dirty_samples(RID p_area_light_instance) {
+		LightInstance *light_instance = light_instance_owner.get_or_null(p_area_light_instance);
+		ERR_FAIL_NULL_V(light_instance, Vector<AreaShadowSample>());
+		return light_instance->area_shadow_dirty_samples;
 	}
 
 	_FORCE_INLINE_ Projection light_instance_get_shadow_camera(RID p_light_instance, int p_index) {
@@ -1168,7 +1188,7 @@ public:
 
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
-	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool is_dirty) override;
+	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) override;
 
 	_FORCE_INLINE_ bool area_shadow_atlas_owns_light_instance(RID p_atlas, RID p_light_instance) {
 		AreaShadowAtlas *atlas = area_shadow_atlas_owner.get_or_null(p_atlas);

@@ -3463,7 +3463,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 				if (max_shadows_used < MAX_UPDATE_SHADOWS) {
 					
-					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version, light->is_shadow_dirty());
+					uint32_t sample_count = RSG::light_storage->area_shadow_atlas_update_light(p_area_shadow_atlas, light->instance, coverage, light->last_version);
 
 					if (sample_count != 0) {
 

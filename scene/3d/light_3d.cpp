@@ -486,6 +486,9 @@ Light3D::Light3D(RenderingServer::LightType p_type) {
 	set_param(PARAM_INTENSITY, 1000.0);
 	set_param(PARAM_AREA_SIDE_A, 1);
 	set_param(PARAM_AREA_SIDE_B, 1);
+	set_param(PARAM_AREA_STOCHASTIC_SAMPLES, 1);
+	set_param(PARAM_AREA_SHADOW_SAMPLE_RESOLUTION, 1);
+	set_param(PARAM_AREA_SIDE_B, 1);
 	set_temperature(6500.0); // Nearly white.
 	set_disable_scale(true);
 }
@@ -685,7 +688,7 @@ void CustomLight3D::_bind_methods() {
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "area_side_a", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_AREA_SIDE_A);
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "area_side_b", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,exp,suffix:m"), "set_param", "get_param", PARAM_AREA_SIDE_B);
 	ADD_PROPERTYI(PropertyInfo(Variant::INT, "area_stochastic_samples", PROPERTY_HINT_RANGE, "1,128"), "set_param", "get_param", PARAM_AREA_STOCHASTIC_SAMPLES);
-	ADD_PROPERTYI(PropertyInfo(Variant::INT, "area_shadow_sample_density", PROPERTY_HINT_RANGE, "1,32"), "set_param", "get_param", PARAM_AREA_SHADOW_SAMPLE_DENSITY);
+	ADD_PROPERTYI(PropertyInfo(Variant::INT, "area_shadow_sample_resolution", PROPERTY_HINT_RANGE, "1,32"), "set_param", "get_param", PARAM_AREA_SHADOW_SAMPLE_RESOLUTION);
 }
 
 PackedStringArray CustomLight3D::get_configuration_warnings() const {

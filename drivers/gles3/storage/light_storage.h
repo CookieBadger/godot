@@ -905,8 +905,9 @@ public:
 	virtual void area_shadow_atlas_set_size(RID p_atlas, int p_size, bool p_16_bits = true) override;
 	virtual void area_shadow_atlas_set_subdivision(RID p_atlas, int p_subdivision) override;
 	virtual void area_shadow_atlas_update_active_lights(RID p_atlas, HashSet<RID> p_lights) override;
-	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version, bool p_is_dirty) override;
+	virtual uint32_t area_shadow_atlas_update_light(RID p_atlas, RID p_light_instance, float p_coverage, uint64_t p_light_version) override;
 	virtual void area_shadow_atlas_update(RID p_atlas) override;
+};
 
 } // namespace GLES3
 

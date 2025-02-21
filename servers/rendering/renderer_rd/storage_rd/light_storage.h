@@ -453,7 +453,7 @@ private:
 		RID fb; //for copying: TODO: check if this and ShadowAtlas::fb are needed
 
 		Vector<Shadow> shadows;
-		HashMap<RID, HashSet<uint32_t> *> shadow_owners; // TODO: needed? instead of map, we could just access array.
+		HashMap<RID, HashSet<uint32_t>> shadow_owners; // TODO: needed? instead of map, we could just access array.
 	};
 
 	RID_Owner<ShadowAtlas> shadow_atlas_owner;

@@ -1122,6 +1122,123 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	return 1.0;
 }
 
+float integrate_edge(vec3 p0, vec3 p1) {
+
+	// to integrate over an edge, we take the two vertices at the ends and calculate the angle between them.
+	// then we take the z-coordinate of the cross product, which equals the signed area of the parallelogram formed by p0 and p1 and multiply it by theta/sin(theta)
+    float cosTheta = dot(p0, p1);
+    float theta = acos(cosTheta);    
+    float res = cross(p0, p1).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
+
+    return res;
+}
+
+float ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
+    // construct the orthonormal basis around the normal vector
+    vec3 x, y;
+    x = normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. in that case, we have a problem.
+    y = cross(normal, x);
+
+    // rotate area light in (T1, T2, normal) basis
+    M_inv = M_inv * transpose(mat3(x, y, normal));
+
+	vec3 L[4];
+	L[0] = M_inv * points[0];
+	L[1] = M_inv * points[1];
+	L[2] = M_inv * points[2];
+	L[3] = M_inv * points[3];
+
+	// project onto unit sphere 
+	L[0] = normalize(L[0]);
+	L[1] = normalize(L[1]);
+	L[2] = normalize(L[2]);
+	L[3] = normalize(L[3]);
+
+	float I; // default case of 4 edges, need to adjust for case where light cuts view plane.
+	I = integrate_edge(L[0], L[1]);
+	I += integrate_edge(L[1], L[2]);
+	I += integrate_edge(L[2], L[3]);
+	I += integrate_edge(L[3], L[0]);
+
+	return max(0, I);
+}
+
+// implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
+void light_process_area_ltc(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+		vec3 backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+		vec4 transmittance_color,
+		float transmittance_depth,
+		float transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+		float rim, float rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+		float clearcoat, float clearcoat_roughness, vec3 vertex_normal,
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+		vec3 binormal, vec3 tangent, float anisotropy,
+#endif
+		inout vec3 diffuse_light,
+		inout vec3 specular_light) {
+
+	float EPSILON = 1e-4f;
+	vec3 area_side_a = custom_lights.data[idx].area_side_a;
+	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+
+	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
+		return;
+	}
+
+	vec4 orms_unpacked = unpackUnorm4x8(orms);
+	float roughness = orms_unpacked.y;
+	float metallic = orms_unpacked.z;
+
+	float theta = acos(dot(normal, eye_vec)); // normal better be normalized
+
+	vec2 lut_uv = 64.0*vec2(roughness, theta/(0.5*M_PI));
+	vec4 brdf = texture(ltc_lut, lut_uv);
+	mat3 M_inv = mat3( // verify row/column order (y and w might switch)
+		vec3(brdf.x, 0, brdf.w),
+		vec3(0, brdf.z, 0),
+		vec3(brdf.y, 0, 1)
+	);
+
+	vec3 points[4];
+	points[0] = custom_lights.data[idx].position - vertex;
+	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
+	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
+
+	mat3 identity = mat3(
+		vec3(1, 0, 0),
+		vec3(0, 1, 0),
+		vec3(0, 0, 1));
+
+	float ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, identity, points); // afaik mat3(1) is not an identity matrix...
+	float ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
+	
+	float norm = texture(ltc_norm_lut, lut_uv).w; // is this really w?
+
+	vec3 norm_color = custom_lights.data[idx].color * norm / (2*M_PI); // this needs to change for textured lights
+	
+	// TODO: should take distance to closest point on light at least, or find an actually realistic measure for the attenuation.
+	//vec3 light_rel_vec = custom_lights.data[idx].position - vertex + (area_side_a + area_side_b)/2;
+	//float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
+	//float light_length = max(0, length(light_rel_vec) - len_diagonal);
+	//float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
+	//light_attenuation = clamp(light_attenuation*shadow, 0, 1);
+
+	diffuse_light += ltc_diffuse * norm_color;// * light_attenuation;
+	
+	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm_color;// * light_attenuation;
+
+	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
+}
+
 void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 		vec3 backlight,

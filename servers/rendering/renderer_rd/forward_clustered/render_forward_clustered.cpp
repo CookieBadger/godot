@@ -40,6 +40,7 @@
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/storage/ltc_lut.gen.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -3116,6 +3117,64 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			uniforms.push_back(u);
 		}
 
+		{
+			if (ltc.lut_texture.is_null() || ltc.lut_norm_texture.is_null()) {
+				// TODO: init LTC LUT
+				//Vector<uint8_t> decompressed_lut;
+				//int compressed_size = LTC_LUT_COMPRESSED_SIZE;
+				//int decompressed_size = LTC_LUT_DECOMPRESSED_SIZE;
+
+				// The LTC LUT is embedded in the "ltc_lut.gen.h" header file.
+				//??It is DEFLATE compressed to decrease binary size, so it first needs to be decompressed.
+				//decompressed_lut.resize(decompressed_size);
+				//Compression::decompress(decompressed_lut.ptrw(), decompressed_size, TONY_MC_MAPFACE_LUT, compressed_size, Compression::Mode::MODE_DEFLATE);
+
+				Ref<Image> lut_image;
+				int dimensions = LTC_LUT_DIMENSIONS;
+				int image_bytes = 4 * dimensions * dimensions;
+				size_t image_size = image_bytes * 4; // float
+
+				// Copy the pixel data into an image so that a 2d texture can be created.
+				Vector<uint8_t> lut_data;
+				lut_data.resize(image_size);
+
+				memcpy(lut_data.ptrw(), LTC_LUT, image_size);
+				lut_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut_data);
+
+				ltc.lut_texture = RS::get_singleton()->texture_2d_create(lut_image);
+
+				image_bytes = 2 * dimensions * dimensions;
+				image_size = image_bytes * 4;
+
+				Ref<Image> lut_norm_image;
+				Vector<uint8_t> lut_norm_data;
+				lut_norm_data.resize(image_size);
+
+				memcpy(lut_norm_data.ptrw(), LTC_NORM_LUT, image_size);
+				lut_norm_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGF, lut_norm_data);
+
+				ltc.lut_norm_texture = RS::get_singleton()->texture_2d_create(lut_norm_image);
+			}
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 17;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut_texture));
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 18;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut_norm_texture));
+			uniforms.push_back(u);
+		}
+
 		render_base_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, scene_shader.default_shader_rd, SCENE_UNIFORM_SET);
 	}
 }
@@ -4460,6 +4519,13 @@ RenderForwardClustered::~RenderForwardClustered() {
 	RD::get_singleton()->free(shadow_sampler);
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
 	RD::get_singleton()->free(best_fit_normal.texture);
+
+	if (ltc.lut_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut_texture);
+	}
+	if (ltc.lut_norm_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut_norm_texture);
+	}
 
 	{
 		for (const RID &rid : scene_state.uniform_buffers) {

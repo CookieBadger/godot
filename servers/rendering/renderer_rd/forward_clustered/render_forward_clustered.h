@@ -178,6 +178,11 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RID texture;
 	} best_fit_normal;
 
+	struct LTC {
+		RID lut_texture;
+		RID lut_norm_texture;
+	} ltc;
+
 	enum PassMode {
 		PASS_MODE_COLOR,
 		PASS_MODE_SHADOW,

@@ -171,6 +171,10 @@ layout(set = 0, binding = 14) uniform sampler DEFAULT_SAMPLER_LINEAR_WITH_MIPMAP
 
 layout(set = 0, binding = 15) uniform texture2D best_fit_normal_texture;
 
+layout(set = 0, binding = 17) uniform sampler2D ltc_lut;
+
+layout(set = 0, binding = 18) uniform sampler2D ltc_norm_lut;
+
 /* Set 1: Render Pass (changes per render pass) */
 
 layout(set = 1, binding = 0, std140) uniform SceneDataBlock {

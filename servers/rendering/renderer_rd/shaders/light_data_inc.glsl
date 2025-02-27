@@ -39,6 +39,7 @@ struct LightData { //this structure needs to be as packed as possible
 	
 	uint map_idx[MAX_AREA_LIGHT_SHADOW_SAMPLES];
 	uint area_map_subdivision; // TODO: this could be a constant for the scene, but only once we decide that all area lights actually need only 1 map total.
+	uint light_mode;
 };
 
 #define REFLECTION_AMBIENT_DISABLED 0

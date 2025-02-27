@@ -717,6 +717,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 	light_data.inv_spot_attenuation = 1.0f / light->param[RS::LIGHT_PARAM_SPOT_ATTENUATION];
 	float spot_angle = light->param[RS::LIGHT_PARAM_SPOT_ANGLE];
 	light_data.area_stochastic_samples = light->param[RS::LIGHT_PARAM_AREA_STOCHASTIC_SAMPLES];
+	light_data.light_mode = light->param[RS::LIGHT_PARAM_AREA_LIGHT_MODE];
 	light_data.cos_spot_angle = Math::cos(Math::deg_to_rad(spot_angle));
 
 	if (p_type == RS::LIGHT_CUSTOM) {

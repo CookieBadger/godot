@@ -183,6 +183,7 @@ private:
 
 		uint32_t map_indices[AreaLightParams::MAX_SHADOW_SAMPLES];
 		uint32_t area_map_subdivision;
+		uint32_t light_mode;
 	};
 
 	void _update_light_data(const Transform3D &p_inverse_transform, bool p_using_forward_ids, bool p_using_shadow, LightData *p_light_data_ptr, RS::LightType p_type, LightInstance *p_light_instance, uint32_t p_index, real_t p_distance, RenderDataRD *p_render_data, RID p_shadow_atlas, RID p_area_shadow_atlas);

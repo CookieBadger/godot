@@ -4,7 +4,7 @@ def write_zlib_bytes(file, source):
 	with open(source.path, mode="rb") as binary:
 		buffer = binary.read()
 		buffer = buffer[148:]  # skip .dds header
-		buffer = zlib.compress(buffer, zlib.Z_BEST_COMPRESSION)
+		#buffer = zlib.compress(buffer, zlib.Z_BEST_COMPRESSION)
 
 		file.write("0x{:02x}".format(buffer[0]))
 		for byte in range(1, len(buffer)):
@@ -25,4 +25,3 @@ def run(target, source, env):
 		file.write("static const uint8_t LTC_NORM_LUT[] = {")
 		write_zlib_bytes(file, source[2])
 		file.write("};\n\n")
-		

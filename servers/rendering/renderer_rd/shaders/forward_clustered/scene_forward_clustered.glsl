@@ -2310,7 +2310,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 						diffuse_light, specular_light);
 				} else {
-					light_process_area_ltc(light_index, vertex, vertex_world, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

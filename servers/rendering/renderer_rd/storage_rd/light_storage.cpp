@@ -672,7 +672,8 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 			// We make this assumption to keep them easy to control.
 			energy *= 1.0 / Math_PI;
 		} else { // type == RS::LIGHT_CUSTOM
-			energy *= 1.0 / Math_PI;
+			// area lights only illuminate the hemisphere
+			energy *= 1.0 / (Math_PI * 2.0);
 		}
 	} else {
 		energy *= Math_PI;

@@ -1,5 +1,4 @@
 // Functions related to lighting
-
 float D_GGX(float cos_theta_m, float alpha) {
 	float a = cos_theta_m * alpha;
 	float k = alpha / (1.0 - cos_theta_m * cos_theta_m + a * a);
@@ -1133,38 +1132,163 @@ float integrate_edge(vec3 p0, vec3 p1) {
     return res;
 }
 
-float ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
+void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
+{
+    // detect clipping config
+    int config = 0;
+    if (L[0].z > 0.0) config += 1;
+    if (L[1].z > 0.0) config += 2;
+    if (L[2].z > 0.0) config += 4;
+    if (L[3].z > 0.0) config += 8;
+
+    // clip
+    vertex_count = 0;
+
+    if (config == 0)
+    {
+        // clip all
+    }
+    else if (config == 1) // V1 clip V2 V3 V4
+    {
+        vertex_count = 3;
+        L[1] = -L[1].z * L[0] + L[0].z * L[1];
+        L[2] = -L[3].z * L[0] + L[0].z * L[3];
+    }
+    else if (config == 2) // V2 clip V1 V3 V4
+    {
+        vertex_count = 3;
+        L[0] = -L[0].z * L[1] + L[1].z * L[0];
+        L[2] = -L[2].z * L[1] + L[1].z * L[2];
+    }
+    else if (config == 3) // V1 V2 clip V3 V4
+    {
+        vertex_count = 4;
+        L[2] = -L[2].z * L[1] + L[1].z * L[2];
+        L[3] = -L[3].z * L[0] + L[0].z * L[3];
+    }
+    else if (config == 4) // V3 clip V1 V2 V4
+    {
+        vertex_count = 3;
+        L[0] = -L[3].z * L[2] + L[2].z * L[3];
+        L[1] = -L[1].z * L[2] + L[2].z * L[1];
+    }
+    else if (config == 5) // V1 V3 clip V2 V4) impossible
+    {
+        vertex_count = 0;
+    }
+    else if (config == 6) // V2 V3 clip V1 V4
+    {
+        vertex_count = 4;
+        L[0] = -L[0].z * L[1] + L[1].z * L[0];
+        L[3] = -L[3].z * L[2] + L[2].z * L[3];
+    }
+    else if (config == 7) // V1 V2 V3 clip V4
+    {
+        vertex_count = 5;
+        L[4] = -L[3].z * L[0] + L[0].z * L[3];
+        L[3] = -L[3].z * L[2] + L[2].z * L[3];
+    }
+    else if (config == 8) // V4 clip V1 V2 V3
+    {
+        vertex_count = 3;
+        L[0] = -L[0].z * L[3] + L[3].z * L[0];
+        L[1] = -L[2].z * L[3] + L[3].z * L[2];
+        L[2] =  L[3];
+    }
+    else if (config == 9) // V1 V4 clip V2 V3
+    {
+        vertex_count = 4;
+        L[1] = -L[1].z * L[0] + L[0].z * L[1];
+        L[2] = -L[2].z * L[3] + L[3].z * L[2];
+    }
+    else if (config == 10) // V2 V4 clip V1 V3) impossible
+    {
+        vertex_count = 0;
+    }
+    else if (config == 11) // V1 V2 V4 clip V3
+    {
+        vertex_count = 5;
+        L[4] = L[3];
+        L[3] = -L[2].z * L[3] + L[3].z * L[2];
+        L[2] = -L[2].z * L[1] + L[1].z * L[2];
+    }
+    else if (config == 12) // V3 V4 clip V1 V2
+    {
+        vertex_count = 4;
+        L[1] = -L[1].z * L[2] + L[2].z * L[1];
+        L[0] = -L[0].z * L[3] + L[3].z * L[0];
+    }
+    else if (config == 13) // V1 V3 V4 clip V2
+    {
+        vertex_count = 5;
+        L[4] = L[3];
+        L[3] = L[2];
+        L[2] = -L[1].z * L[2] + L[2].z * L[1];
+        L[1] = -L[1].z * L[0] + L[0].z * L[1];
+    }
+    else if (config == 14) // V2 V3 V4 clip V1
+    {
+        vertex_count = 5;
+        L[4] = -L[0].z * L[3] + L[3].z * L[0];
+        L[0] = -L[0].z * L[1] + L[1].z * L[0];
+    }
+    else if (config == 15) // V1 V2 V3 V4
+    {
+        vertex_count = 4;
+    }
+    
+    if (vertex_count == 3)
+        L[3] = L[0];
+    if (vertex_count == 4)
+        L[4] = L[0];
+}
+
+vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
     // construct the orthonormal basis around the normal vector
-    vec3 x, y;
-    x = normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. in that case, we have a problem.
-    y = cross(normal, x);
+    vec3 x, z;
+	vec3 world_normal = (scene_data_block.data.inv_view_matrix * vec4(normal, 0)).xyz;
+	vec3 world_eye = (scene_data_block.data.inv_view_matrix * vec4(-normalize(vertex), 0)).xyz;
+    x = normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. in that case, we have a problem.
+    z = cross(world_normal, x);
 
+
+	//return y;
     // rotate area light in (T1, T2, normal) basis
-    M_inv = M_inv * transpose(mat3(x, y, normal));
+    M_inv = M_inv * transpose(mat3(x, world_normal, z));
 
-	vec3 L[4];
+	vec3 L[5];
 	L[0] = M_inv * points[0];
 	L[1] = M_inv * points[1];
 	L[2] = M_inv * points[2];
 	L[3] = M_inv * points[3];
+
+    int n = 0;
+    clip_quad_to_horizon(L, n);
+    if (n == 0)
+        return vec3(0, 0, 0);
 
 	// project onto unit sphere 
 	L[0] = normalize(L[0]);
 	L[1] = normalize(L[1]);
 	L[2] = normalize(L[2]);
 	L[3] = normalize(L[3]);
+	L[4] = normalize(L[4]);
 
 	float I; // default case of 4 edges, need to adjust for case where light cuts view plane.
 	I = integrate_edge(L[0], L[1]);
 	I += integrate_edge(L[1], L[2]);
 	I += integrate_edge(L[2], L[3]);
-	I += integrate_edge(L[3], L[0]);
+	//I += integrate_edge(L[3], L[0]);
+    if (n >= 4)
+        I += integrate_edge(L[3], L[4]);
+    if (n == 5)
+        I += integrate_edge(L[4], L[0]);
 
-	return max(0, I);
+	return vec3(max(0, I));
 }
 
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
-void light_process_area_ltc(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 		vec3 backlight,
 #endif
@@ -1199,31 +1323,35 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_v
 
 	float theta = acos(dot(normal, eye_vec)); // normal better be normalized
 
-	vec2 lut_uv = 64.0*vec2(roughness, theta/(0.5*M_PI));
+	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI));
 	vec4 brdf = texture(ltc_lut, lut_uv);
-	mat3 M_inv = mat3( // verify row/column order (y and w might switch)
-		vec3(brdf.x, 0, brdf.w),
-		vec3(0, brdf.z, 0),
-		vec3(brdf.y, 0, 1)
+
+	// actually, M_inv is the inverse of the cosine transformation matrix scaled by a factor of (x-yw), 
+	// but since we normalize the light's vertex positions, this scale cancels out
+	mat3 M_inv = mat3( // verify row/column order (y and w might switch), verify if y and z should change (2nd and 3rd row might switch)
+		vec3(1, 0, brdf.y),
+		vec3(brdf.w, 0, brdf.x),
+		vec3(0, brdf.z, 0)
 	);
 
+	vec3 vertex_world = (scene_data_block.data.inv_view_matrix * vec4(vertex, 1)).xyz;
+
+	// the algorithm actually needs the points in world space. hence, we could reconsider if we want to transmit position and area_a and area_b in world space, too.
 	vec3 points[4];
-	points[0] = custom_lights.data[idx].position - vertex;
-	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
-	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
-	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
+	points[0] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position, 1)).xyz - vertex_world;
+	points[1] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_a, 1)).xyz - vertex_world;
+	points[2] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_a + area_side_b, 1)).xyz - vertex_world;
+	points[3] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_b, 1)).xyz - vertex_world;
 
 	mat3 identity = mat3(
 		vec3(1, 0, 0),
-		vec3(0, 1, 0),
-		vec3(0, 0, 1));
+		vec3(0, 0, 1),
+		vec3(0, 1, 0));
 
-	float ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, identity, points); // afaik mat3(1) is not an identity matrix...
-	float ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
+	vec3 ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, identity, points); // afaik mat3(1) is not an identity matrix...
+	vec3 ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
 	
 	float norm = texture(ltc_norm_lut, lut_uv).w; // is this really w?
-
-	vec3 norm_color = custom_lights.data[idx].color * norm / (2*M_PI); // this needs to change for textured lights
 	
 	// TODO: should take distance to closest point on light at least, or find an actually realistic measure for the attenuation.
 	//vec3 light_rel_vec = custom_lights.data[idx].position - vertex + (area_side_a + area_side_b)/2;
@@ -1232,10 +1360,10 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_v
 	//float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
 	//light_attenuation = clamp(light_attenuation*shadow, 0, 1);
 
-	diffuse_light += ltc_diffuse * norm_color;// * light_attenuation;
+	diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI);// * light_attenuation;
 	
-	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm_color;// * light_attenuation;
-
+	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm * custom_lights.data[idx].color / (2*M_PI);// * light_attenuation;
+	//specular_light = abs(M_inv[1]) / (2*M_PI);
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 

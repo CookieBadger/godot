@@ -86,7 +86,7 @@ float bilinear_PDF(float u, float v, vec4 w) {
 	if (w[0] + w[1] + w[2] + w[3] == 0.0) {
 		return 1;
 	}
-	return 4.0 * ((1.0 - u) * (1.0 - v) * w[0] + u * (1.0 - v) * w[1] + (1.0 - u) * v * w[2] + u * v * w[3]) / (w[0] + w[1] + w[2] + w[3]);
+	return 2.0 * ((1.0 - u) * (1.0 - v) * w[0] + u * (1.0 - v) * w[1] + (1.0 - u) * v * w[2] + u * v * w[3]) / (w[0] + w[1] + w[2] + w[3]);
 }
 
 vec2 sample_bilinear(float u, float v, vec4 w) {
@@ -1125,9 +1125,14 @@ float integrate_edge(vec3 p0, vec3 p1) {
 
 	// to integrate over an edge, we take the two vertices at the ends and calculate the angle between them.
 	// then we take the z-coordinate of the cross product, which equals the signed area of the parallelogram formed by p0 and p1 and multiply it by theta/sin(theta)
-    float cosTheta = dot(p0, p1);
-    float theta = acos(cosTheta);    
-    float res = cross(p0, p1).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
+    float EPSILON = 1e-6f;
+	float cosTheta = dot(p0, p1);
+	if(cosTheta + 1.0 < EPSILON) {
+		return 0; // avoid singularities
+	}
+
+    float theta = acos(cosTheta);
+	float res = cross(p0, p1).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
 
     return res;
 }
@@ -1248,11 +1253,16 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
     vec3 x, z;
 	vec3 world_normal = (scene_data_block.data.inv_view_matrix * vec4(normal, 0)).xyz;
 	vec3 world_eye = (scene_data_block.data.inv_view_matrix * vec4(-normalize(vertex), 0)).xyz;
-    x = normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. in that case, we have a problem.
+	/*if(dot(world_normal -  world_eye, world_normal -  world_eye) < 0.001) {
+		if(dot(world_eye, vec3(0,1,0)) < 0.99) {
+			world_eye = normalize(world_eye + 0.01 * vec3(0, 1, 0));
+		} else {
+			world_eye = normalize(world_eye + 0.01 * vec3(1, 0, 0));
+		}
+	}*/
+    x = normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
     z = cross(world_normal, x);
 
-
-	//return y;
     // rotate area light in (T1, T2, normal) basis
     M_inv = M_inv * transpose(mat3(x, world_normal, z));
 
@@ -1278,7 +1288,6 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
 	I = integrate_edge(L[0], L[1]);
 	I += integrate_edge(L[1], L[2]);
 	I += integrate_edge(L[2], L[3]);
-	//I += integrate_edge(L[3], L[0]);
     if (n >= 4)
         I += integrate_edge(L[3], L[4]);
     if (n == 5)
@@ -1315,6 +1324,9 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
+	}
+	if (dot(-cross(area_side_a, area_side_b), vertex - custom_lights.data[idx].position) <= 0) {
+		return; // vertex is behind light
 	}
 
 	vec4 orms_unpacked = unpackUnorm4x8(orms);
@@ -1355,15 +1367,29 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	
 	// TODO: should take distance to closest point on light at least, or find an actually realistic measure for the attenuation.
 	//vec3 light_rel_vec = custom_lights.data[idx].position - vertex + (area_side_a + area_side_b)/2;
-	//float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
-	//float light_length = max(0, length(light_rel_vec) - len_diagonal);
-	//float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
-	//light_attenuation = clamp(light_attenuation*shadow, 0, 1);
+	float a_half_len = length(area_side_a) / 2.0;
+	float b_half_len = length(area_side_b) / 2.0;
+	mat4 light_mat = mat4(
+		vec4(normalize(area_side_a), 0),
+		vec4(normalize(area_side_b), 0),
+		vec4(normalize(cross(area_side_a, area_side_b)), 0),
+		vec4(custom_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
+	);
+	mat4 light_mat_inv = inverse(light_mat);
+	vec3 pos_local_to_light = (light_mat_inv * vec4(vertex, 1)).xyz;
+	vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0);
+	//vec3 closest_point = light_mat * vec4(closest_point_local_to_light, 1); // ?
+	//vec3 light_rel_vec = closest_point - vertex;
+	float dist = length(closest_point_local_to_light - pos_local_to_light);
 
-	diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI);// * light_attenuation;
+	//float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
+	float light_length = max(0, dist);
+	float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
+	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
+
+	diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	
-	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm * custom_lights.data[idx].color / (2*M_PI);// * light_attenuation;
-	//specular_light = abs(M_inv[1]) / (2*M_PI);
+	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 
@@ -1406,7 +1432,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	vec3 sampling_vertex = vertex;
 	vec3 vert_to_light = sampling_vertex - custom_lights.data[idx].position;
 
-	if (dot(cross(area_side_a, area_side_b), -vert_to_light) <= 0) {
+	if (dot(-cross(area_side_a, area_side_b), vert_to_light) <= 0) {
 		return; // vertex is behind light
 	}
 

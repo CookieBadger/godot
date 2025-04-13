@@ -1012,6 +1012,11 @@ void ScriptEditorDebugger::start(Ref<RemoteDebuggerPeer> p_peer) {
 	_set_reason_text(TTR("Debug session started."), MESSAGE_SUCCESS);
 	_update_buttons_state();
 	emit_signal(SNAME("started"));
+
+	// AUTOSTART PROFILER
+	profiler->set_pressed(true);
+
+	visual_profiler->set_pressed(true);
 }
 
 void ScriptEditorDebugger::_update_buttons_state() {

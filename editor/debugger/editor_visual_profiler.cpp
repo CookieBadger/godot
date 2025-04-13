@@ -146,8 +146,8 @@ void EditorVisualProfiler::_item_selected() {
 }
 
 void EditorVisualProfiler::_update_plot() {
-	const int w = graph->get_size().width;
-	const int h = graph->get_size().height;
+	const int w = graph->get_size().width + 1; // `+1` is to prevent from crashing when visual profiler is auto started.
+	const int h = graph->get_size().height + 1;
 
 	bool reset_texture = false;
 
@@ -669,6 +669,7 @@ void EditorVisualProfiler::set_enabled(bool p_enable) {
 void EditorVisualProfiler::set_pressed(bool p_pressed) {
 	activate->set_pressed(p_pressed);
 	_update_button_text();
+	emit_signal(SNAME("enable_profiling"), activate->is_pressed());
 }
 
 bool EditorVisualProfiler::is_profiling() {

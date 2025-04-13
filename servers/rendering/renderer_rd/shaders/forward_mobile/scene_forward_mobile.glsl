@@ -1636,7 +1636,7 @@ void main() {
 			shadow = 1.0;
 #endif
 
-			light_compute(normal, directional_lights.data[i].direction, normalize(view), 0.0,
+			light_compute(normal, directional_lights.data[i].direction, directional_lights.data[i].direction, normalize(view), 0.0,
 #ifndef DEBUG_DRAW_PSSM_SPLITS
 					directional_lights.data[i].color * directional_lights.data[i].energy,
 #else

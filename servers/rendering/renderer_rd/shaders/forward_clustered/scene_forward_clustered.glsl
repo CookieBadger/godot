@@ -2062,7 +2062,7 @@ void fragment_shader(in SceneData scene_data) {
 
 			float size_A = sc_use_directional_soft_shadows ? directional_lights.data[i].size : 0.0;
 
-			light_compute(normal, directional_lights.data[i].direction, normalize(view), size_A,
+			light_compute(normal, directional_lights.data[i].direction, directional_lights.data[i].direction, normalize(view), size_A,
 #ifndef DEBUG_DRAW_PSSM_SPLITS
 					directional_lights.data[i].color * directional_lights.data[i].energy,
 #else
@@ -2309,8 +2309,30 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
-				} else {
+				} else if (custom_lights.data[light_index].light_mode == 1) {
 					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+						transmittance_color,
+						transmittance_depth,
+						transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim,
+						rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, normalize(normal_interp),
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+						tangent,
+						binormal, anisotropy,
+#endif
+						diffuse_light, specular_light);
+				} else {
+					light_process_area_nearest_point(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

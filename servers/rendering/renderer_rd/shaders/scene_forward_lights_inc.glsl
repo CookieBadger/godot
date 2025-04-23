@@ -1472,16 +1472,16 @@ float polygon_solid_angle(vec3 vertex, vec3 L[5], int vertex_count)
 {
 	// The solid angle of a spherical rectangle is the difference of the sum of its angles
 	// and the sum of the angles of a plane rectangle (2*PI)
-	vec3 v0 = L[0] - vertex;
-	vec3 v1 = L[1] - vertex;
-	vec3 v2 = L[2] - vertex;
+	vec3 v0 = L[0];
+	vec3 v1 = L[1];
+	vec3 v2 = L[2];
 	vec3 v3 = v0;
 	vec3 v4 = v0; 
 	if(vertex_count >= 4) {
-		v3 = L[3] - vertex;
+		v3 = L[3];
 	}
 	if(vertex_count == 5) {
-		v4 = L[4] - vertex;
+		v4 = L[4];
 	}
 
 	vec3 n0 = normalize(cross(v0, v1));
@@ -1546,6 +1546,28 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	// float a_half_len = length(area_side_a) / 2.0;
 	// float b_half_len = length(area_side_b) / 2.0;
 	vec3 area_norm = normalize(cross(area_side_b, area_side_a));
+	// calculate area of light above horizon of current pixel:
+	
+	vec3 points[4];
+	points[0] = custom_lights.data[idx].position - vertex;
+	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
+	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
+    vec3 x, z;
+    z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
+    x = cross(normal, z);
+    // rotate area light in (T1, normal, T2) basis
+    mat3 M_vert = transpose(mat3(x, normal, z));
+
+	vec3 L[5];
+	L[0] = M_vert * points[0];
+	L[1] = M_vert * points[1];
+	L[2] = M_vert * points[2];
+	L[3] = M_vert * points[3];
+    int vertex_count = 0;
+	clip_quad_to_horizon(L, vertex_count);
+	float solid_angle = polygon_solid_angle(vertex, L, vertex_count);
+
 	// for diffuse light, we take the nearest point on the light to the intersection of the light-plane 
 	// with the half-vector between the nearest point above horizon on the light and the point with the least angle to the surface normal
 
@@ -1565,6 +1587,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	float clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
 	vec3 closest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 	
+	// TODO: steepest point creates a rectangular angled artifact
 	vec3 steepest_point_diff = vec3(0);
 	if(dot(normal, area_norm) > 0) { // light is pointing away from the vertex normal
 		float sa = max(sign(dot(normal, area_side_a)), 0);
@@ -1594,7 +1617,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	vec3 halfway_vec = (closest_point_diff - vertex + steepest_point_diff - vertex) / length(closest_point_diff - vertex + steepest_point_diff - vertex);
 	float d = d_light_norm / dot(halfway_vec, -area_norm);
 	vec3 most_representative_point_diff = vertex + d * halfway_vec;
-	//vec3 most_representative_point_diff = steepest_point_diff;
+	most_representative_point_diff = closest_point_diff;
 
 	vec3 light_rel_vec_diff = most_representative_point_diff - vertex;
 	vec3 light_rel_vec_spec;
@@ -1650,18 +1673,18 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	float light_length = light_length_diff;
 
 	float omni_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
-	float light_attenuation = omni_attenuation * dot(-area_norm, light_rel_vec_diff); // cosine term for falloff at 90 degrees to light normal
+	float light_attenuation = omni_attenuation * dot(-area_norm, light_rel_vec_diff) * solid_angle; // cosine term for falloff at 90 degrees to light normal
 	vec3 color = custom_lights.data[idx].color;
 
 	float size_A = 0.0;
 
 	light_attenuation *= shadow;
 	
-	float specular_amount= custom_lights.data[idx].specular_amount;
+	float specular_amount = custom_lights.data[idx].specular_amount;
 
-	if(dot(specular_light, specular_light) > EPSILON && spec_size > EPSILON) {
+	if(spec_size > EPSILON) { // dot(specular_light, specular_light) > EPSILON && 
 		//specular_light /= spec_size; // doesn't seem to work that well...
-		specular_amount /= spec_size;
+		//specular_amount /= spec_size;
 	}
 
 	light_compute(normal, normalize(light_rel_vec_diff), normalize(light_rel_vec_spec), eye_vec, size_A, color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,

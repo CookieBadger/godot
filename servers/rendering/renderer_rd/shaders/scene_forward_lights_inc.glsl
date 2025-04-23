@@ -1148,7 +1148,7 @@ float integrate_edge_hill(vec3 p0, vec3 p1) {
 	if (x < 0.0) {
 		theta_sintheta = M_PI * inversesqrt(1.0-x * x) - theta_sintheta;
 	}
-	return theta_sintheta*cross(p0, p1).z;
+	return theta_sintheta*cross(p0, p1).y;
 }
 
 float integrate_edge_acos(vec3 p0, vec3 p1) {
@@ -1173,7 +1173,7 @@ float integrate_edge_acos(vec3 p0, vec3 p1) {
 	return theta_sintheta*cross(p0, p1).z; */
 
     float theta = acos(cosTheta);
-	float res = cross(p0, p1).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
+	float res = cross(p0, p1).y * ((theta > 0.001) ? theta/sin(theta) : 1.0);
     return res;
 }
 
@@ -1185,10 +1185,10 @@ void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
 {
     // detect clipping config
     int config = 0;
-    if (L[0].z > 0.0) config += 1;
-    if (L[1].z > 0.0) config += 2;
-    if (L[2].z > 0.0) config += 4;
-    if (L[3].z > 0.0) config += 8;
+    if (L[0].y > 0.0) config += 1;
+    if (L[1].y > 0.0) config += 2;
+    if (L[2].y > 0.0) config += 4;
+    if (L[3].y > 0.0) config += 8;
 
     // clip
     vertex_count = 0;
@@ -1200,26 +1200,26 @@ void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
     else if (config == 1) // V1 clip V2 V3 V4
     {
         vertex_count = 3;
-        L[1] = -L[1].z * L[0] + L[0].z * L[1];
-        L[2] = -L[3].z * L[0] + L[0].z * L[3];
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
+        L[2] = -L[3].y * L[0] + L[0].y * L[3];
     }
     else if (config == 2) // V2 clip V1 V3 V4
     {
         vertex_count = 3;
-        L[0] = -L[0].z * L[1] + L[1].z * L[0];
-        L[2] = -L[2].z * L[1] + L[1].z * L[2];
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
     }
     else if (config == 3) // V1 V2 clip V3 V4
     {
         vertex_count = 4;
-        L[2] = -L[2].z * L[1] + L[1].z * L[2];
-        L[3] = -L[3].z * L[0] + L[0].z * L[3];
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
+        L[3] = -L[3].y * L[0] + L[0].y * L[3];
     }
     else if (config == 4) // V3 clip V1 V2 V4
     {
         vertex_count = 3;
-        L[0] = -L[3].z * L[2] + L[2].z * L[3];
-        L[1] = -L[1].z * L[2] + L[2].z * L[1];
+        L[0] = -L[3].y * L[2] + L[2].y * L[3];
+        L[1] = -L[1].y * L[2] + L[2].y * L[1];
     }
     else if (config == 5) // V1 V3 clip V2 V4) impossible
     {
@@ -1228,27 +1228,27 @@ void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
     else if (config == 6) // V2 V3 clip V1 V4
     {
         vertex_count = 4;
-        L[0] = -L[0].z * L[1] + L[1].z * L[0];
-        L[3] = -L[3].z * L[2] + L[2].z * L[3];
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
+        L[3] = -L[3].y * L[2] + L[2].y * L[3];
     }
     else if (config == 7) // V1 V2 V3 clip V4
     {
         vertex_count = 5;
-        L[4] = -L[3].z * L[0] + L[0].z * L[3];
-        L[3] = -L[3].z * L[2] + L[2].z * L[3];
+        L[4] = -L[3].y * L[0] + L[0].y * L[3];
+        L[3] = -L[3].y * L[2] + L[2].y * L[3];
     }
     else if (config == 8) // V4 clip V1 V2 V3
     {
         vertex_count = 3;
-        L[0] = -L[0].z * L[3] + L[3].z * L[0];
-        L[1] = -L[2].z * L[3] + L[3].z * L[2];
+        L[0] = -L[0].y * L[3] + L[3].y * L[0];
+        L[1] = -L[2].y * L[3] + L[3].y * L[2];
         L[2] =  L[3];
     }
     else if (config == 9) // V1 V4 clip V2 V3
     {
         vertex_count = 4;
-        L[1] = -L[1].z * L[0] + L[0].z * L[1];
-        L[2] = -L[2].z * L[3] + L[3].z * L[2];
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
+        L[2] = -L[2].y * L[3] + L[3].y * L[2];
     }
     else if (config == 10) // V2 V4 clip V1 V3) impossible
     {
@@ -1258,28 +1258,28 @@ void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
     {
         vertex_count = 5;
         L[4] = L[3];
-        L[3] = -L[2].z * L[3] + L[3].z * L[2];
-        L[2] = -L[2].z * L[1] + L[1].z * L[2];
+        L[3] = -L[2].y * L[3] + L[3].y * L[2];
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
     }
     else if (config == 12) // V3 V4 clip V1 V2
     {
         vertex_count = 4;
-        L[1] = -L[1].z * L[2] + L[2].z * L[1];
-        L[0] = -L[0].z * L[3] + L[3].z * L[0];
+        L[1] = -L[1].y * L[2] + L[2].y * L[1];
+        L[0] = -L[0].y * L[3] + L[3].y * L[0];
     }
     else if (config == 13) // V1 V3 V4 clip V2
     {
         vertex_count = 5;
         L[4] = L[3];
         L[3] = L[2];
-        L[2] = -L[1].z * L[2] + L[2].z * L[1];
-        L[1] = -L[1].z * L[0] + L[0].z * L[1];
+        L[2] = -L[1].y * L[2] + L[2].y * L[1];
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
     }
     else if (config == 14) // V2 V3 V4 clip V1
     {
         vertex_count = 5;
-        L[4] = -L[0].z * L[3] + L[3].z * L[0];
-        L[0] = -L[0].z * L[1] + L[1].z * L[0];
+        L[4] = -L[0].y * L[3] + L[3].y * L[0];
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
     }
     else if (config == 15) // V1 V2 V3 V4
     {
@@ -1304,14 +1304,11 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
 			world_eye = normalize(world_eye + 0.01 * vec3(1, 0, 0));
 		}
 	}*/
-    x = normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
-    z = cross(world_normal, x);
+    z = -normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
+    x = cross(world_normal, z);
 
-    // rotate area light in (T1, T2, normal) basis
+    // rotate area light in (T1, normal, T2) basis
     M_inv = M_inv * transpose(mat3(x, world_normal, z));
-
-	//mat3 permute = mat3(vec3(1,0,0), vec3(0,0,-1), vec3(0,1,0));
-	//M_inv = permute*M_inv;
 
 	vec3 L[5];
 	L[0] = M_inv * points[0];
@@ -1354,7 +1351,7 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
 	L[3] = normalize(L[3]);
 	L[4] = normalize(L[4]);
 
-		// Prevent abnormal values when the light goes through (or close to) the fragment
+	// Prevent abnormal values when the light goes through (or close to) the fragment
 	// get the normal of this spherical polygon:
 	vec3 pnorm = normalize(cross(L[0] - L[1], L[2] - L[1]));
 	if(abs(dot(pnorm, L[0])) < 1e-10) {
@@ -1432,12 +1429,11 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 
 	// actually, M_inv is the inverse of the cosine transformation matrix scaled by a factor of (x-yw), 
 	// but since we normalize the light's vertex positions, this scale cancels out
-	mat3 M_inv = mat3( // verify row/column order (y and w might switch), verify if y and z should change (2nd and 3rd row might switch)
-		vec3(1, 0, brdf.y),
-		vec3(brdf.w, 0, comp_a(roughness, theta)),//vec3(brdf.w, 0, brdf.x),
-		vec3(0, brdf.z, 0)
+	mat3 M_inv = mat3(
+		vec3(0, 0, brdf.z),
+		vec3(brdf.w, brdf.x, 0),
+		vec3(-1, -brdf.y, 0)
 	);
-
 	vec3 vertex_world = (scene_data_block.data.inv_view_matrix * vec4(vertex, 1)).xyz;
 
 	// the algorithm actually needs the points in world space. hence, we could reconsider if we want to transmit position and area_a and area_b in world space, too.
@@ -1447,12 +1443,7 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	points[2] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_a + area_side_b, 1)).xyz - vertex_world;
 	points[3] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_b, 1)).xyz - vertex_world;
 
-	mat3 identity = mat3(
-		vec3(1, 0, 0),
-		vec3(0, 0, 1),
-		vec3(0, 1, 0));
-
-	vec3 ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, identity, points); // afaik mat3(1) is not an identity matrix...
+	vec3 ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, mat3(1), points);
 	vec3 ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
 	
 	float norm = texture(ltc_norm_lut, lut_uv).w; // is this really w?

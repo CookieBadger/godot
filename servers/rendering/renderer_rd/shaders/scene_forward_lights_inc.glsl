@@ -1295,20 +1295,18 @@ void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
 vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
     // construct the orthonormal basis around the normal vector
     vec3 x, z;
-	vec3 world_normal = (scene_data_block.data.inv_view_matrix * vec4(normal, 0)).xyz;
-	vec3 world_eye = (scene_data_block.data.inv_view_matrix * vec4(-normalize(vertex), 0)).xyz;
-	/*if(dot(world_normal -  world_eye, world_normal -  world_eye) < 0.001) {
-		if(dot(world_eye, vec3(0,1,0)) < 0.99) {
-			world_eye = normalize(world_eye + 0.01 * vec3(0, 1, 0));
+	/*if(dot(normal -  eye_vec, normal -  eye_vec) < 0.001) {
+		if(dot(eye_vec, vec3(0,1,0)) < 0.99) {
+			eye_vec = normalize(eye_vec + 0.01 * vec3(0, 1, 0));
 		} else {
-			world_eye = normalize(world_eye + 0.01 * vec3(1, 0, 0));
+			eye_vec = normalize(eye_vec + 0.01 * vec3(1, 0, 0));
 		}
 	}*/
-    z = -normalize(world_eye - world_normal*dot(world_eye, world_normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
-    x = cross(world_normal, z);
+    z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
+    x = cross(normal, z);
 
     // rotate area light in (T1, normal, T2) basis
-    M_inv = M_inv * transpose(mat3(x, world_normal, z));
+    M_inv = M_inv * transpose(mat3(x, normal, z));
 
 	vec3 L[5];
 	L[0] = M_inv * points[0];
@@ -1421,7 +1419,7 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float roughness = orms_unpacked.y;
 	float metallic = orms_unpacked.z;
 
-	float theta = acos(dot(normal, eye_vec)); // normal better be normalized
+	float theta = acos(dot(normal, eye_vec));
 
 	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI));
 	lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
@@ -1434,22 +1432,18 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		vec3(brdf.w, brdf.x, 0),
 		vec3(-1, -brdf.y, 0)
 	);
-	vec3 vertex_world = (scene_data_block.data.inv_view_matrix * vec4(vertex, 1)).xyz;
 
-	// the algorithm actually needs the points in world space. hence, we could reconsider if we want to transmit position and area_a and area_b in world space, too.
 	vec3 points[4];
-	points[0] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position, 1)).xyz - vertex_world;
-	points[1] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_a, 1)).xyz - vertex_world;
-	points[2] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_a + area_side_b, 1)).xyz - vertex_world;
-	points[3] = (scene_data_block.data.inv_view_matrix * vec4(custom_lights.data[idx].position + area_side_b, 1)).xyz - vertex_world;
+	points[0] = custom_lights.data[idx].position - vertex;
+	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
+	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
 
 	vec3 ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, mat3(1), points);
 	vec3 ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
 	
 	float norm = texture(ltc_norm_lut, lut_uv).w; // is this really w?
 	
-	// TODO: should take distance to closest point on light at least, or find an actually realistic measure for the attenuation.
-	//vec3 light_rel_vec = custom_lights.data[idx].position - vertex + (area_side_a + area_side_b)/2;
 	float a_half_len = length(area_side_a) / 2.0;
 	float b_half_len = length(area_side_b) / 2.0;
 	mat4 light_mat = mat4(
@@ -1461,11 +1455,8 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	mat4 light_mat_inv = inverse(light_mat);
 	vec3 pos_local_to_light = (light_mat_inv * vec4(vertex, 1)).xyz;
 	vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0);
-	//vec3 closest_point = light_mat * vec4(closest_point_local_to_light, 1); // ?
-	//vec3 light_rel_vec = closest_point - vertex;
 	float dist = length(closest_point_local_to_light - pos_local_to_light);
 
-	//float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
 	float light_length = max(0, dist);
 	float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
 	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
@@ -1474,6 +1465,53 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	
 	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
+}
+
+// Functions for form factors
+float polygon_solid_angle(vec3 vertex, vec3 L[5], int vertex_count)
+{
+	// The solid angle of a spherical rectangle is the difference of the sum of its angles
+	// and the sum of the angles of a plane rectangle (2*PI)
+	vec3 v0 = L[0] - vertex;
+	vec3 v1 = L[1] - vertex;
+	vec3 v2 = L[2] - vertex;
+	vec3 v3 = v0;
+	vec3 v4 = v0; 
+	if(vertex_count >= 4) {
+		v3 = L[3] - vertex;
+	}
+	if(vertex_count == 5) {
+		v4 = L[4] - vertex;
+	}
+
+	vec3 n0 = normalize(cross(v0, v1));
+	vec3 n1 = normalize(cross(v1, v2));
+	vec3 n2 = normalize(cross(v2, v3));
+	vec3 n3 = n0;
+	vec3 n4 = n0;
+	if(vertex_count >= 4) {
+		n3 = normalize(cross(v3, v4));
+	}
+	if(vertex_count == 5) {
+		n4 = normalize(cross(v4, v0));
+	}
+
+	float g0 = acos(dot(-n0, n1));
+	float g1 = acos(dot(-n1, n2));
+	float g2 = acos(dot(-n2, n3));
+	float g3 = 0;
+	if(vertex_count >= 4) {
+		g3 = acos(dot(-n3, n4));
+	}
+	float g4 = 0; 
+	if(vertex_count == 5) {
+		g4 = acos(dot(-n4, n0));
+	}
+
+	float angle_sum = g0 + g1 + g2 + g3 + g4;
+	float plane_polygon_angle_sum = (vertex_count-2) * M_PI; // triangle: pi, quad: 2pi, pentagon: 3pi
+	
+	return angle_sum - plane_polygon_angle_sum;
 }
 
 void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,

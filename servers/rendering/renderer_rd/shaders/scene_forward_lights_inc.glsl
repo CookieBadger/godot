@@ -37,31 +37,30 @@ vec3 F0(float metallic, float specular, vec3 albedo) {
 	// see https://google.github.io/filament/Filament.md.html
 	return mix(vec3(dielectric), albedo, vec3(metallic));
 }
-uint hash1(uint value) { // TODO: check if this can be named "hash" (function name exists elsewhere)
+uint hash(uint value) {
 	uint state = value * 747796405u + 2891336453u;
 	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
 	return (word >> 22u) ^ word;
 }
-uint random_seed1(vec3 seed) { // TODO: check if this can be named "random seed" (function name exists elsewhere)
-	seed *= 1e3;
+uint random_seed(vec3 seed) {
 	uint x = uint(abs(seed.x));
 	if (seed.x < 0.0) {
-		x = hash1(x);
+		x = hash(x);
 	}
 	uint y = uint(abs(seed.y));
 	if (seed.y < 0.0) {
-		y = hash1(y);
+		y = hash(y);
 	}
 	uint z = uint(abs(seed.z));
 	if (seed.z < 0.0) {
-		z = hash1(z);
+		z = hash(z);
 	}
 
-	return hash1(uint(x ^ hash1(y) ^ hash1(z)));
+	return hash(uint(x ^ hash(y) ^ hash(z)));
 }
 // generates a random value in range [0.0, 1.0)
-float randomize1(uint value) { // TODO: check if this can be named "randomize" (function name exists elsewhere)
-	value = hash1(value);
+float randomize(uint value) {
+	value = hash(value);
 	return float(value / 4294967296.0);
 }
 
@@ -1775,8 +1774,8 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	for (uint i = 0; i < sample_nr; i++) {
 		// sampling of diffuse is based on a world position, so flickering is reduced
 		float pdf = inv_S;
-		float u = randomize1(random_seed1(vertex_world) + i);
-		float v = randomize1(hash1(random_seed1(vertex_world) + i));
+		float u = randomize(random_seed(vertex_world * 1e3) + i);
+		float v = randomize(hash(random_seed(vertex_world * 1e3) + i));
 
 		vec2 uv = sample_bilinear(u, v, w);
 		u = uv[0];
@@ -1784,8 +1783,9 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		pdf *= bilinear_PDF(u, v, w);
 
 		// sampling for specular depends on the view
-		float s_u = randomize1(random_seed1(vertex) + i);
-		float s_v = randomize1(hash1(random_seed1(vertex) + i));
+		vec3 screen_uvw = gl_FragCoord.xyz * vec3(scene_data_block.data.screen_pixel_size, 1.0);
+		float s_u = randomize(random_seed(screen_uvw) + i);
+		float s_v = randomize(hash(random_seed(screen_uvw) + i));
 
 		vec2 s_uv = sample_bilinear(s_u, s_v, w);
 		s_u = s_uv[0];

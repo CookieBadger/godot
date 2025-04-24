@@ -1563,10 +1563,9 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	L[1] = M_vert * points[1];
 	L[2] = M_vert * points[2];
 	L[3] = M_vert * points[3];
-	vec3 clippedL[5] = {L[0], L[1], L[2], L[3], vec3(0)};
     int vertex_count = 0;
 	clip_quad_to_horizon(clippedL, vertex_count);
-	float solid_angle = polygon_solid_angle(vertex, clippedL, vertex_count);
+	float solid_angle = polygon_solid_angle(vertex, L, vertex_count);
 
 	// for diffuse light, we take the nearest point on the light to the intersection of the light-plane 
 	// with the half-vector between the nearest point above horizon on the light and the point with the least angle to the surface normal
@@ -1591,58 +1590,20 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	// we get the point with the lowest angle to the vertex normal.
 	vec3 steepest_point_diff = custom_lights.data[idx].position;
 	if(dot(normal, area_norm) >= 0) { // light is pointing away from the vertex normal
-		// light norm in local space
-		vec3 local_area_norm = normalize(cross(L[3]-L[0], L[1]-L[0])); // b x a
-
-		// get plane on light normal and vertex normal
-		vec3 isect_plane_norm = normalize(cross(vec3(0,1,0), local_area_norm));
-
-		// isect line
-		float c = dot(local_area_norm, L[0]);
-		vec3 p_isect_line = c * local_area_norm;
-		vec3 v_isect_line = cross(isect_plane_norm, local_area_norm);
-
-		// calculate area sides in vertex local coordinates
-		// rnorm is vector divided by square length, so projecting another vector gives 1 if length of that vector equals the length of the local vector it is projected on
-		vec3 local_a = L[1]-L[0];
-		vec3 local_b = L[3]-L[0];
-		vec3 local_a_rnorm = local_a/dot(local_a, local_a); 
-		vec3 local_b_rnorm = local_b/dot(local_b, local_b);
-		// if line cuts through quad, take point on quad and line with highest y-coordinate
-		vec2 p_isect_line_2d = vec2(dot(p_isect_line - L[0], local_a_rnorm), dot(p_isect_line - L[0], local_b_rnorm));
-		vec2 v_isect_line_2d = vec2(dot(v_isect_line, local_a_rnorm), dot(v_isect_line, local_b_rnorm));
-		// intersect with 0,0-1,0, 0,0-0,1, 0,1-1,1, 1,0-1,1
-
-		float line_isects[4];
-		uint line_isect_count = 0;
-		if (abs(v_isect_line_2d.x) > EPSILON) {
-			line_isects[line_isect_count] = -p_isect_line_2d.x / v_isect_line_2d.x;
-			line_isects[line_isect_count+1] = (1 - p_isect_line_2d.x) / v_isect_line_2d.x;
-			line_isect_count += 2;
-		}
-		if (abs(v_isect_line_2d.y) > EPSILON) {
-			line_isects[line_isect_count] = -p_isect_line_2d.y / v_isect_line_2d.y;
-			line_isects[line_isect_count+1] = (1 - p_isect_line_2d.y) / v_isect_line_2d.y;
-			line_isect_count += 2;
-		}
-		float max_dot = -1;
-		//float max_y = -1;
-
-		// TODO: we need to eliminate the "choice" of which point to use, to closely adjacent fragments must not use largely different points.
-		for (uint i = 0; i < line_isect_count; i++) {
-			vec2 line_isect_position = p_isect_line_2d + line_isects[i] * v_isect_line_2d;
-			//if (line_isect_position.x >= -EPSILON && line_isect_position.x <= 1.0 + EPSILON && line_isect_position.y >= -EPSILON && line_isect_position.y <= 1.0 + EPSILON) {
-				vec3 point = custom_lights.data[idx].position + clamp(line_isect_position.x, 0, 1) * area_side_a + clamp(line_isect_position.y, 0, 1) * area_side_b;
-				float dot = dot(normalize(point-vertex), normal);
-				//float y = normalize(M_vert * (point-vertex)).y;
-				if(dot > max_dot) {
-				//if(y > max_y) {
-					max_dot = dot;
-					//max_y = y;
-					steepest_point_diff = point;
-				}
-			//}
-		}
+		float sa = max(sign(dot(normal, area_side_a)), 0);
+		float sb = max(sign(dot(normal, area_side_b)), 0);
+		vec3 apex = custom_lights.data[idx].position + sa * area_side_a + sb * area_side_b;
+		vec3 Ap = vertex + normal * dot(apex-vertex, normal);
+		vec3 ApA = area_norm * dot(area_norm, Ap - apex);
+		vec3 norm_apex = Ap + normal * dot(normal, ApA); // the point from which we can intersect with the light normal
+		// intersect
+		float d = dot(custom_lights.data[idx].position - norm_apex, area_norm) / dot(ApA, -area_norm);
+		vec3 steepest_angle_intersection = norm_apex + d * ApA;
+		
+		light_to_intersection = steepest_angle_intersection - custom_lights.data[idx].position;
+		clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
+		clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
+		steepest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 
 	} else {
 		float d = d_light_norm / dot(normal, -area_norm);
@@ -1656,7 +1617,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	vec3 halfway_vec = (closest_point_diff - vertex + steepest_point_diff - vertex) / length(closest_point_diff - vertex + steepest_point_diff - vertex);
 	float d = d_light_norm / dot(halfway_vec, -area_norm);
 	vec3 most_representative_point_diff = vertex + d * halfway_vec;
-	//most_representative_point_diff = steepest_point_diff;
+	most_representative_point_diff = steepest_point_diff;
 
 	vec3 light_rel_vec_diff = most_representative_point_diff - vertex;
 	vec3 light_rel_vec_spec;

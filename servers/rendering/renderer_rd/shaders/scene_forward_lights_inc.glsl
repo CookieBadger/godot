@@ -1587,24 +1587,19 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	float clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
 	vec3 closest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 	
-	// TODO: steepest point creates a rectangular angled artifact
 	// TODO: steepest point still incorrect when rotating the area light.
 	// we get the point with the lowest angle to the vertex normal.
 	vec3 steepest_point_diff = custom_lights.data[idx].position;
 	if(dot(normal, area_norm) >= 0) { // light is pointing away from the vertex normal
 		// light norm in local space
 		vec3 local_area_norm = normalize(cross(L[3]-L[0], L[1]-L[0])); // b x a
-		//vec3 local_area_norm = normalize(transpose(inverse(M_vert)) * area_norm);
 
 		// get plane on light normal and vertex normal
 		vec3 isect_plane_norm = normalize(cross(vec3(0,1,0), local_area_norm));
 
 		// isect line
-		float h2 = dot(local_area_norm, L[0]);
-		float dot_normals = dot(isect_plane_norm, local_area_norm); // likely 0
-		float c1 = (-h2*dot_normals)/(1-dot_normals*dot_normals);
-		float c2 = (h2)/(1-dot_normals*dot_normals);
-		vec3 p_isect_line = c1 * isect_plane_norm + c2 * local_area_norm;
+		float c = dot(local_area_norm, L[0]);
+		vec3 p_isect_line = c * local_area_norm;
 		vec3 v_isect_line = cross(isect_plane_norm, local_area_norm);
 
 		// calculate area sides in vertex local coordinates
@@ -1619,7 +1614,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 		// intersect with 0,0-1,0, 0,0-0,1, 0,1-1,1, 1,0-1,1
 
 		float line_isects[4];
-		uint line_isect_count = -1;
+		uint line_isect_count = 0;
 		if (abs(v_isect_line_2d.x) > EPSILON) {
 			line_isects[line_isect_count] = -p_isect_line_2d.x / v_isect_line_2d.x;
 			line_isects[line_isect_count+1] = (1 - p_isect_line_2d.x) / v_isect_line_2d.x;
@@ -1630,33 +1625,23 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 			line_isects[line_isect_count+1] = (1 - p_isect_line_2d.y) / v_isect_line_2d.y;
 			line_isect_count += 2;
 		}
-		uint isect_count = 0;
 		float max_dot = -1;
+		//float max_y = -1;
+
+		// TODO: we need to eliminate the "choice" of which point to use, to closely adjacent fragments must not use largely different points.
 		for (uint i = 0; i < line_isect_count; i++) {
 			vec2 line_isect_position = p_isect_line_2d + line_isects[i] * v_isect_line_2d;
-			if (line_isect_position.x >= -EPSILON && line_isect_position.x <= 1.0 + EPSILON && line_isect_position.y >= -EPSILON && line_isect_position.y <= 1.0 + EPSILON) {
+			//if (line_isect_position.x >= -EPSILON && line_isect_position.x <= 1.0 + EPSILON && line_isect_position.y >= -EPSILON && line_isect_position.y <= 1.0 + EPSILON) {
 				vec3 point = custom_lights.data[idx].position + clamp(line_isect_position.x, 0, 1) * area_side_a + clamp(line_isect_position.y, 0, 1) * area_side_b;
 				float dot = dot(normalize(point-vertex), normal);
+				//float y = normalize(M_vert * (point-vertex)).y;
 				if(dot > max_dot) {
+				//if(y > max_y) {
 					max_dot = dot;
+					//max_y = y;
 					steepest_point_diff = point;
 				}
-				isect_count += 1;
-			}
-		}
-
-		if(isect_count == 0) {
-			// if line doesn't cut through, take the corner with the lowest angle (=highest y when normalized)
-			float pmax_dot = -1.0;
-			vec3 corners[4] = {custom_lights.data[idx].position, custom_lights.data[idx].position + area_side_a, custom_lights.data[idx].position + area_side_a + area_side_b, custom_lights.data[idx].position + area_side_b};
-			
-			for(uint i = 0; i < 4; i++) {
-				float pdot = dot(normalize(corners[i] - vertex), normal);
-				if(pdot > pmax_dot) {
-					pmax_dot = pdot;
-					steepest_point_diff = corners[i];
-				}
-			}
+			//}
 		}
 
 	} else {
@@ -1762,7 +1747,6 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 #endif
 			diffuse_light,
 			specular_light);
-	specular_light = vec3(0);
 }
 
 void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,

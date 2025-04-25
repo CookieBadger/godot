@@ -3118,7 +3118,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		}
 
 		{
-			if (ltc.lut_texture.is_null() || ltc.lut_norm_texture.is_null()) {
+			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
 				// TODO: init LTC LUT
 				//Vector<uint8_t> decompressed_lut;
 				//int compressed_size = LTC_LUT_COMPRESSED_SIZE;
@@ -3129,31 +3129,31 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 				//decompressed_lut.resize(decompressed_size);
 				//Compression::decompress(decompressed_lut.ptrw(), decompressed_size, TONY_MC_MAPFACE_LUT, compressed_size, Compression::Mode::MODE_DEFLATE);
 
-				Ref<Image> lut_image;
+				Ref<Image> lut1_image;
 				int dimensions = LTC_LUT_DIMENSIONS;
 				int image_bytes = 4 * dimensions * dimensions;
 				size_t image_size = image_bytes * 4; // float
 
 				// Copy the pixel data into an image so that a 2d texture can be created.
-				Vector<uint8_t> lut_data;
-				lut_data.resize(image_size);
+				Vector<uint8_t> lut1_data;
+				lut1_data.resize(image_size);
 
-				memcpy(lut_data.ptrw(), LTC_LUT, image_size);
-				lut_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut_data);
+				memcpy(lut1_data.ptrw(), LTC_LUT1, image_size);
+				lut1_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut1_data);
 
-				ltc.lut_texture = RS::get_singleton()->texture_2d_create(lut_image);
+				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
 
 				image_bytes = 2 * dimensions * dimensions;
 				image_size = image_bytes * 4;
 
-				Ref<Image> lut_norm_image;
-				Vector<uint8_t> lut_norm_data;
-				lut_norm_data.resize(image_size);
+				Ref<Image> lut2_image;
+				Vector<uint8_t> lut2_data;
+				lut2_data.resize(image_size);
 
-				memcpy(lut_norm_data.ptrw(), LTC_NORM_LUT, image_size);
-				lut_norm_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGF, lut_norm_data);
+				memcpy(lut2_data.ptrw(), LTC_LUT2, image_size);
+				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGF, lut2_data);
 
-				ltc.lut_norm_texture = RS::get_singleton()->texture_2d_create(lut_norm_image);
+				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
 			}
 		}
 
@@ -3162,7 +3162,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.binding = 17;
 			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut_texture));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture));
 			uniforms.push_back(u);
 		}
 
@@ -3171,7 +3171,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.binding = 18;
 			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut_norm_texture));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture));
 			uniforms.push_back(u);
 		}
 
@@ -4520,11 +4520,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
 	RD::get_singleton()->free(best_fit_normal.texture);
 
-	if (ltc.lut_texture.is_valid()) {
-		RD::get_singleton()->free(ltc.lut_texture);
+	if (ltc.lut1_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut1_texture);
 	}
-	if (ltc.lut_norm_texture.is_valid()) {
-		RD::get_singleton()->free(ltc.lut_norm_texture);
+	if (ltc.lut2_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut2_texture);
 	}
 
 	{

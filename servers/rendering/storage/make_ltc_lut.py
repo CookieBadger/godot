@@ -18,10 +18,10 @@ def run(target, source, env):
 		file.write("// LTC Lookup table for BRDF fitting by Eric Heitz (https://eheitzresearch.wordpress.com/415-2/) \n")
 		file.write("// RGBE5999 (E5B9G9R9_UFLOAT_PACK32), DEFLATE compressed\n") # what's the format? DDS_FORMAT_R32G32B32A32_FLOAT
 		file.write("static const int LTC_LUT_DIMENSIONS = 64; // 64x64\n")
-		file.write("static const uint8_t LTC_LUT[] = {")
+		file.write("static const uint8_t LTC_LUT1[] = {")
 		write_zlib_bytes(file, source[1])
 		file.write("};\n\n")
 		
-		file.write("static const uint8_t LTC_NORM_LUT[] = {")
+		file.write("static const uint8_t LTC_LUT2[] = {")
 		write_zlib_bytes(file, source[2])
 		file.write("};\n\n")

@@ -1126,15 +1126,67 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	return 1.0;
 }
 
-// component a with polynomial of degree 5
-// root mean squared error (RMSE): 0.016025178976219842
-// error variance: 0.00025680636121987817
+// Component a with polynomial of degree 5 
+// root mean squared error (RMSE): 0.008254019196049503
+// error variance: 6.812883288875366e-05
 float comp_a(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (-38.380543) + (32.018909)*y + (-9.924983)*pow(y,2) + (8.609998)*pow(y,3) + (-3.406042)*pow(y,4) + (0.423226)*pow(y,5) + (108.333381)*x + (-67.985784)*x*y + (-7.934895)*x*pow(y,2) + (3.312394)*x*pow(y,3) + (-0.067072)*x*pow(y,4) + (-123.986119)*pow(x,2) + (79.072043)*pow(x,2)*y + (-0.042406)*pow(x,2)*pow(y,2) + (-0.889611)*pow(x,2)*pow(y,3) + (62.205915)*pow(x,3) + (-35.844228)*pow(x,3)*y + (0.891934)*pow(x,3)*pow(y,2) + (-12.563021)*pow(x,4) + (5.581046)*pow(x,4)*y + (0.547037)*pow(x,5)	);
+	+ (42.613196) + (-29.804979)*y + (0.940936)*pow(y,2) + (4.310188)*pow(y,3) + (-1.423213)*pow(y,4) + (0.134028)*pow(y,5) + (-115.627828)*x + (79.067059)*x*y + (-15.373782)*x*pow(y,2) + (0.301600)*x*pow(y,3) + (0.225199)*x*pow(y,4) + (115.730190)*pow(x,2) + (-61.876423)*pow(x,2)*y + (9.154508)*pow(x,2)*pow(y,2) + (-0.507271)*pow(x,2)*pow(y,3) + (-57.617228)*pow(x,3) + (20.077433)*pow(x,3)*y + (-1.397545)*pow(x,3)*pow(y,2) + (15.283716)*pow(x,4) + (-2.373037)*pow(x,4)*y + (-1.810645)*pow(x,5)	);
 }
+
+// Component b with polynomial of degree 5 
+// root mean squared error (RMSE): 0.0055034739069856065
+// error variance: 3.0288225044871412e-05
+float comp_b(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (-31.123829) + (18.255014)*y + (-8.955430)*pow(y,2) + (4.847186)*pow(y,3) + (-1.487584)*pow(y,4) + (0.162805)*pow(y,5) + (97.907786)*x + (-34.787298)*x*y + (3.970676)*x*pow(y,2) + (-0.010155)*x*pow(y,3) + (0.091052)*x*pow(y,4) + (-125.229004)*pow(x,2) + (32.243633)*pow(x,2)*y + (-3.652242)*pow(x,2)*pow(y,2) + (-0.194776)*pow(x,2)*pow(y,3) + (78.175594)*pow(x,3) + (-10.816239)*pow(x,3)*y + (1.199773)*pow(x,3)*pow(y,2) + (-24.681347)*pow(x,4) + (0.820760)*pow(x,4)*y + (3.268766)*pow(x,5)	);
+}
+
+// Component c with polynomial of degree 5 
+// root mean squared error (RMSE): 0.007461076154835946
+// error variance: 5.566765738826153e-05
+float comp_c(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (17.477199) + (7.909934)*y + (-14.994321)*pow(y,2) + (4.739302)*pow(y,3) + (-0.810270)*pow(y,4) + (0.046944)*pow(y,5) + (-65.095871)*x + (6.732959)*x*y + (16.888018)*x*pow(y,2) + (-3.041889)*x*pow(y,3) + (0.306748)*x*pow(y,4) + (81.748928)*pow(x,2) + (-21.208980)*pow(x,2)*y + (-7.459796)*pow(x,2)*pow(y,2) + (0.385721)*pow(x,2)*pow(y,3) + (-47.504609)*pow(x,3) + (13.208954)*pow(x,3)*y + (1.410099)*pow(x,3)*pow(y,2) + (13.421180)*pow(x,4) + (-2.668662)*pow(x,4)*y + (-1.489262)*pow(x,5)	);
+}
+
+// Component d with polynomial of degree 5 
+// root mean squared error (RMSE): 0.004341506306613834
+// error variance: 1.8848677010367695e-05
+float comp_d(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (57.049826) + (-25.451225)*y + (6.865143)*pow(y,2) + (-2.704072)*pow(y,3) + (0.850662)*pow(y,4) + (-0.099537)*pow(y,5) + (-177.354545)*x + (55.769993)*x*y + (-6.521949)*x*pow(y,2) + (0.151303)*x*pow(y,3) + (-0.016677)*x*pow(y,4) + (223.788469)*pow(x,2) + (-51.590067)*pow(x,2)*y + (4.838185)*pow(x,2)*pow(y,2) + (-0.047086)*pow(x,2)*pow(y,3) + (-139.134814)*pow(x,3) + (19.520826)*pow(x,3)*y + (-1.156990)*pow(x,3)*pow(y,2) + (43.095950)*pow(x,4) + (-2.417162)*pow(x,4)*y + (-5.413756)*pow(x,5)	);
+}
+
+// Component e with polynomial of degree 5 
+// root mean squared error (RMSE): 0.007469810740851013
+// error variance: 5.579807250413317e-05
+float comp_e(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (33.628760) + (-53.030799)*y + (23.092312)*pow(y,2) + (-4.278389)*pow(y,3) + (0.104612)*pow(y,4) + (0.033568)*pow(y,5) + (-68.405119)*x + (104.299024)*x*y + (-35.210398)*x*pow(y,2) + (5.290676)*x*pow(y,3) + (-0.210190)*x*pow(y,4) + (50.757593)*pow(x,2) + (-73.332257)*pow(x,2)*y + (15.318215)*pow(x,2)*pow(y,2) + (-1.308721)*pow(x,2)*pow(y,3) + (-15.547360)*pow(x,3) + (23.548417)*pow(x,3)*y + (-1.948174)*pow(x,3)*pow(y,2) + (1.033997)*pow(x,4) + (-3.092252)*pow(x,4)*y + (0.271608)*pow(x,5)	);
+}
+
+// Component amp with polynomial of degree 5 
+// root mean squared error (RMSE): 0.009139953386779148
+// error variance: 8.353874791249562e-05
+float comp_amp(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (35.614195) + (-21.254919)*y + (-8.039799)*pow(y,2) + (8.092500)*pow(y,3) + (-1.980968)*pow(y,4) + (0.157147)*pow(y,5) + (-94.993881)*x + (74.211694)*x*y + (-8.540240)*x*pow(y,2) + (-2.534375)*x*pow(y,3) + (0.482349)*x*pow(y,4) + (85.665363)*pow(x,2) + (-65.205722)*pow(x,2)*y + (9.029016)*pow(x,2)*pow(y,2) + (-0.131277)*pow(x,2)*pow(y,3) + (-30.394079)*pow(x,3) + (22.447391)*pow(x,3)*y + (-1.718311)*pow(x,3)*pow(y,2) + (2.390527)*pow(x,4) + (-2.791565)*pow(x,4)*y + (0.524274)*pow(x,5)	);
+}
+
+
 
 float integrate_edge_hill(vec3 p0, vec3 p1) {
 	float cosTheta = dot(p0, p1);
@@ -1423,14 +1475,29 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 
 	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI));
 	lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
-	vec4 brdf = texture(ltc_lut, lut_uv);
+	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv);
+	vec2 M_brdf_eamp = texture(ltc_lut2, lut_uv).xy;
+
+	// M_brdf_abcd.x = comp_a(roughness, theta);
+	// M_brdf_abcd.y = comp_b(roughness, theta);
+	// M_brdf_abcd.z = comp_c(roughness, theta);
+	// M_brdf_abcd.w = comp_d(roughness, theta);
+	// M_brdf_eamp.x = comp_e(roughness, theta);
+	// M_brdf_eamp.y = comp_amp(roughness, theta);
 
 	// actually, M_inv is the inverse of the cosine transformation matrix scaled by a factor of (x-yw), 
 	// but since we normalize the light's vertex positions, this scale cancels out
-	mat3 M_inv = mat3(
+	/*mat3 M_inv = mat3(
 		vec3(0, 0, brdf.z),
 		vec3(brdf.w, brdf.x, 0),
 		vec3(-1, -brdf.y, 0)
+	);*/
+	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_eamp.x - M_brdf_abcd.y * M_brdf_abcd.w);
+
+	mat3 M_inv = mat3(
+		vec3(0, 0, 1.0/M_brdf_abcd.z),
+		vec3(-M_brdf_abcd.w * scale, M_brdf_abcd.x * scale, 0),
+		vec3(-M_brdf_eamp.x * scale, M_brdf_abcd.y * scale, 0)
 	);
 
 	vec3 points[4];
@@ -1439,10 +1506,8 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
 	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
 
-	vec3 ltc_diffuse = ltc_evaluate(vertex, normal, eye_vec, mat3(1), points);
-	vec3 ltc_specular = ltc_evaluate(vertex, normal, eye_vec, M_inv, points);
-	
-	float norm = texture(ltc_norm_lut, lut_uv).w; // is this really w?
+	vec3 ltc_diffuse = max(ltc_evaluate(vertex, normal, eye_vec, mat3(1), points), vec3(0));
+	vec3 ltc_specular = max(ltc_evaluate(vertex, normal, eye_vec, M_inv, points), vec3(0));
 	
 	float a_half_len = length(area_side_a) / 2.0;
 	float b_half_len = length(area_side_b) / 2.0;
@@ -1462,8 +1527,8 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
 
 	diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
-	
-	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * norm * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
+	float amp = M_brdf_eamp.y;
+	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * amp * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 
@@ -1558,13 +1623,13 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
     // rotate area light in (T1, normal, T2) basis
     mat3 M_vert = transpose(mat3(x, normal, z));
 
-	vec3 L[4];
+	vec3 L[5];
 	L[0] = M_vert * points[0];
 	L[1] = M_vert * points[1];
 	L[2] = M_vert * points[2];
 	L[3] = M_vert * points[3];
     int vertex_count = 0;
-	clip_quad_to_horizon(clippedL, vertex_count);
+	clip_quad_to_horizon(L, vertex_count);
 	float solid_angle = polygon_solid_angle(vertex, L, vertex_count);
 
 	// for diffuse light, we take the nearest point on the light to the intersection of the light-plane 

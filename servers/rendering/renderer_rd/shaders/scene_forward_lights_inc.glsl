@@ -1229,8 +1229,16 @@ float integrate_edge_acos(vec3 p0, vec3 p1) {
     return res;
 }
 
-float integrate_edge(vec3 p0, vec3 p1) {
-	return integrate_edge_acos(p0, p1);
+float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
+ 	float epsilon = 0.00001;
+	bool opposite_sides = dot(p_proj0, p_proj1) < -1.0 + epsilon;
+	if(opposite_sides) {
+		// calculate the point on the line p0 to p1 that is closest to the vertex (origin)
+		vec3 half_point_t = p0 + normalize(p1-p0) * dot(p0, normalize(p0-p1));
+		vec3 half_point = normalize(half_point_t);
+		return integrate_edge_acos(p_proj0, half_point) + integrate_edge_acos(half_point, p_proj1);
+	}
+	return integrate_edge_acos(p_proj0, p_proj1);
 }
 
 void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
@@ -1394,17 +1402,18 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
     if (n == 0)
         return vec3(0, 0, 0);
 	
+	vec3 L_proj[5];
 	// project onto unit sphere 
-	L[0] = normalize(L[0]);
-	L[1] = normalize(L[1]);
-	L[2] = normalize(L[2]);
-	L[3] = normalize(L[3]);
-	L[4] = normalize(L[4]);
+	L_proj[0] = normalize(L[0]);
+	L_proj[1] = normalize(L[1]);
+	L_proj[2] = normalize(L[2]);
+	L_proj[3] = normalize(L[3]);
+	L_proj[4] = normalize(L[4]);
 
 	// Prevent abnormal values when the light goes through (or close to) the fragment
 	// get the normal of this spherical polygon:
-	vec3 pnorm = normalize(cross(L[0] - L[1], L[2] - L[1]));
-	if(abs(dot(pnorm, L[0])) < 1e-10) {
+	vec3 pnorm = normalize(cross(L_proj[0] - L_proj[1], L_proj[2] - L_proj[1]));
+	if(abs(dot(pnorm, L_proj[0])) < 1e-10) {
 		// we could just return black, but that would lead to some black pixels in front of the light.
 		// Better, we check if the fragment is on the light, and return white if so. 
 		vec3 r10 = points[0] - points[1];
@@ -1419,16 +1428,15 @@ vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 point
 	}
 
 	float I; // default case of 4 edges, need to adjust for case where light cuts view plane.
-	I = integrate_edge(L[0], L[1]);
-	I += integrate_edge(L[1], L[2]);
-	I += integrate_edge(L[2], L[3]);
+	I = integrate_edge(L_proj[0], L_proj[1], L[0], L[1]);
+	I += integrate_edge(L_proj[1], L_proj[2], L[1], L[2]);
+	I += integrate_edge(L_proj[2], L_proj[3], L[2], L[3]);
     if (n >= 4)
-        I += integrate_edge(L[3], L[4]);
+        I += integrate_edge(L_proj[3], L_proj[4], L[3], L[4]);
     if (n == 5)
-        I += integrate_edge(L[4], L[0]);
+        I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
 
 	if(I <= 0) {
-		return vec3(0.0, 0.0, 0.0);
 		//return vec3(1.0, 0.0, 1.0); // PINK
 	}
 	return vec3(max(0, I));

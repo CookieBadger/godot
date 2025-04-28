@@ -1534,7 +1534,9 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
 	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
 
-	diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
+	if (metallic < 1.0) {
+		diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
+	}
 	float amp = M_brdf_eamp.y;
 	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * amp * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.

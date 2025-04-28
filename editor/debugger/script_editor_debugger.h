@@ -92,6 +92,7 @@ private:
 	Button *le_set = nullptr;
 	Button *le_clear = nullptr;
 	Button *export_csv = nullptr;
+	Button *export_gpu_csv = nullptr;
 
 	VBoxContainer *errors_tab = nullptr;
 	Tree *error_tree = nullptr;
@@ -107,6 +108,7 @@ private:
 	enum FileDialogPurpose {
 		SAVE_MONITORS_CSV,
 		SAVE_VRAM_CSV,
+		SAVE_GPU_PROFILER_CSV,
 	};
 	FileDialogPurpose file_dialog_purpose;
 
@@ -224,6 +226,7 @@ private:
 
 	void _put_msg(const String &p_message, const Array &p_data, uint64_t p_thread_id = Thread::MAIN_ID);
 	void _export_csv();
+	void _export_gpu_csv();
 
 	void _clear_execution();
 	void _stop_and_notify();

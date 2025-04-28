@@ -166,6 +166,20 @@ void ScriptEditorDebugger::save_node(ObjectID p_id, const String &p_file) {
 
 void ScriptEditorDebugger::_file_selected(const String &p_file) {
 	switch (file_dialog_purpose) {
+		case SAVE_GPU_PROFILER_CSV: {
+			Error err;
+			Ref<FileAccess> file = FileAccess::open(p_file, FileAccess::WRITE, &err);
+
+			if (err != OK) {
+				ERR_PRINT("Failed to open " + p_file);
+				return;
+			}
+
+			Vector<Vector<String>> profiler_data = visual_profiler->get_data_as_csv();
+			for (int i = 0; i < profiler_data.size(); i++) {
+				file->store_csv_line(profiler_data[i]);
+			}
+		} break;
 		case SAVE_MONITORS_CSV: {
 			Error err;
 			Ref<FileAccess> file = FileAccess::open(p_file, FileAccess::WRITE, &err);
@@ -1132,6 +1146,14 @@ void ScriptEditorDebugger::_stack_dump_frame_selected() {
 		inspector->edit(nullptr);
 	}
 }
+
+void ScriptEditorDebugger::_export_gpu_csv() {
+	file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
+	file_dialog->set_access(EditorFileDialog::ACCESS_FILESYSTEM);
+	file_dialog_purpose = SAVE_GPU_PROFILER_CSV;
+	file_dialog->popup_file_dialog();
+}
+
 
 void ScriptEditorDebugger::_export_csv() {
 	file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
@@ -2120,6 +2142,10 @@ ScriptEditorDebugger::ScriptEditorDebugger() {
 		export_csv = memnew(Button(TTR("Export measures as CSV")));
 		export_csv->connect(SceneStringName(pressed), callable_mp(this, &ScriptEditorDebugger::_export_csv));
 		buttons->add_child(export_csv);
+
+		export_gpu_csv = memnew(Button(TTR("Export visual profiler measures as CSV")));
+		export_gpu_csv->connect(SceneStringName(pressed), callable_mp(this, &ScriptEditorDebugger::_export_gpu_csv));
+		buttons->add_child(export_gpu_csv);
 
 		misc->add_child(buttons);
 	}

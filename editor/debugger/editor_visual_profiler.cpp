@@ -678,22 +678,18 @@ bool EditorVisualProfiler::is_profiling() {
 
 Vector<Vector<String>> EditorVisualProfiler::get_data_as_csv() const {
 	Vector<Vector<String>> res;
-#if 0
 	if (frame_metrics.is_empty()) {
 		return res;
 	}
 
 	// signatures
 	Vector<String> signatures;
-	const Vector<EditorFrameProfiler::Metric::Category> &categories = frame_metrics[0].categories;
+	const Vector<EditorVisualProfiler::Metric::Area> &categories = frame_metrics[0].areas;
 
 	for (int j = 0; j < categories.size(); j++) {
-		const EditorFrameProfiler::Metric::Category &c = categories[j];
-		signatures.push_back(c.signature);
-
-		for (int k = 0; k < c.items.size(); k++) {
-			signatures.push_back(c.items[k].signature);
-		}
+		const EditorVisualProfiler::Metric::Area &c = categories[j];
+		signatures.push_back(String(c.fullpath_cache) + " CPU");
+		signatures.push_back(String(c.fullpath_cache) + " GPU");
 	}
 	res.push_back(signatures);
 
@@ -714,19 +710,15 @@ Vector<Vector<String>> EditorVisualProfiler::get_data_as_csv() const {
 			continue;
 		}
 		int it = 0;
-		const Vector<EditorFrameProfiler::Metric::Category> &frame_cat = frame_metrics[index].categories;
+		const Vector<EditorVisualProfiler::Metric::Area> &frame_cat = frame_metrics[index].areas;
 
 		for (int j = 0; j < frame_cat.size(); j++) {
-			const EditorFrameProfiler::Metric::Category &c = frame_cat[j];
-			values.write[it++] = String::num_real(c.total_time);
-
-			for (int k = 0; k < c.items.size(); k++) {
-				values.write[it++] = String::num_real(c.items[k].total);
-			}
+			const EditorVisualProfiler::Metric::Area &a = frame_cat[j];
+			values.write[it++] = String::num_real(a.cpu_time);
+			values.write[it++] = String::num_real(a.gpu_time);
 		}
 		res.push_back(values);
 	}
-#endif
 	return res;
 }
 

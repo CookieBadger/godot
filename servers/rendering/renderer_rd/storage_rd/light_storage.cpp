@@ -810,7 +810,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 		if (p_type == RS::LIGHT_SPOT) {
 			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
 		} else if (p_type == RS::LIGHT_CUSTOM) {
-			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS] / 100.0;
+			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS];
 		} else { // (type == RS::LIGHT_OMNI)
 			light_data.shadow_bias = light->param[RS::LIGHT_PARAM_SHADOW_BIAS];
 		}

@@ -56,10 +56,10 @@ layout(set = 0, binding = 4, std430) restrict readonly buffer SpotLights {
 }
 spot_lights;
 
-// layout(set = 0, binding = 16, std430) restrict readonly buffer CustomLights {
+// layout(set = 0, binding = 16, std430) restrict readonly buffer AreaLights {
 // 	LightData data[];
 // }
-// custom_lights;
+// area_lights;
 
 layout(set = 0, binding = 5, std430) restrict readonly buffer ReflectionProbeData {
 	ReflectionData data[];

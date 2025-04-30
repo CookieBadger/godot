@@ -732,6 +732,7 @@ void LightStorage::_update_light_data(const Transform3D &p_inverse_transform, bo
 		light_data.area_side_b[0] = area_vec_b.x;
 		light_data.area_side_b[1] = area_vec_b.y;
 		light_data.area_side_b[2] = area_vec_b.z;
+		light_data.size = Math::sqrt(area_side_a * area_side_a + area_side_b * area_side_b);
 
 		light_data.area_shadow_sample_resolution = (uint32_t) sqrt(p_light_instance->area_shadow_map_indices.size());
 		CRASH_COND(light_data.area_shadow_sample_resolution * light_data.area_shadow_sample_resolution != p_light_instance->area_shadow_map_indices.size());

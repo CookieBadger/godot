@@ -79,10 +79,10 @@ layout(set = 0, binding = 4, std430) restrict readonly buffer SpotLights {
 }
 spot_lights;
 
-layout(set = 0, binding = 16, std430) restrict readonly buffer CustomLights { // TODO: verify if you should put this at the end, or reorder everything
+layout(set = 0, binding = 16, std430) restrict readonly buffer AreaLights { // TODO: verify if you should put this at the end, or reorder everything
 	LightData data[];
 }
-custom_lights;
+area_lights;
 
 layout(set = 0, binding = 5, std430) restrict readonly buffer ReflectionProbeData {
 	ReflectionData data[];

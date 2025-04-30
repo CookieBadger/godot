@@ -2273,21 +2273,21 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(custom_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(area_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
 					continue; //not masked
 				}
 
-				if (custom_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (area_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
-				float shadow = light_process_custom_shadow(light_index, vertex, normal);
+				float shadow = light_process_area_shadow(light_index, vertex, normal);
 
 				shadow = blur_shadow(shadow);
 				
 				//light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 				vec3 vertex_world = (scene_data.inv_view_matrix * vec4(vertex,1.0)).xyz; // used for sampling
-				if (custom_lights.data[light_index].light_mode == 0) {
+				if (area_lights.data[light_index].light_mode == 0) {
 					light_process_area_montecarlo(light_index, vertex, vertex_world, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
@@ -2309,7 +2309,7 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
-				} else if (custom_lights.data[light_index].light_mode == 1) {
+				} else if (area_lights.data[light_index].light_mode == 1) {
 					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,

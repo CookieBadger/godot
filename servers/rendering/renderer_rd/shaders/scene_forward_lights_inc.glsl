@@ -1041,66 +1041,66 @@ void light_process_spot(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 v
 			diffuse_light, specular_light);
 }
 
-float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
+float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 #ifndef SHADOWS_DISABLED
-	if (custom_lights.data[idx].shadow_opacity > 0.001) {
+	if (area_lights.data[idx].shadow_opacity > 0.001) {
 		// there is a shadowmap
 
 		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
-		vec4 base_uv_rect = custom_lights.data[idx].atlas_rect;
+		vec4 base_uv_rect = area_lights.data[idx].atlas_rect;
 		// This offset is required if we decide to do soft sampling (sample kernel around actual point)
 		base_uv_rect.xy += texel_size; // = 1 / 4096 = 0.000244140625
 		base_uv_rect.zw -= texel_size * 2.0;
 
 		//float quadrant_width = 0.5;
-		//float quadrant_limit_x = custom_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
+		//float quadrant_limit_x = area_lights.data[idx].atlas_rect.x >= 0.5 ? 1.0 : 0.5;
 
-		float len_diagonal = sqrt(dot(custom_lights.data[idx].area_side_a, custom_lights.data[idx].area_side_a) + dot(custom_lights.data[idx].area_side_b, custom_lights.data[idx].area_side_b));
-		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_a;
-		vec3 world_side_b = mat3(scene_data_block.data.inv_view_matrix) * custom_lights.data[idx].area_side_b;
-
-		float inv_depth_range = 1.0 / (1.0 / custom_lights.data[idx].inv_radius + len_diagonal);
+		float len_diagonal = area_lights.data[idx].size;
+		vec3 world_side_a = mat3(scene_data_block.data.inv_view_matrix) * area_lights.data[idx].area_side_a;
+		vec3 world_side_b = mat3(scene_data_block.data.inv_view_matrix) * area_lights.data[idx].area_side_b;
+		float inv_depth_range = 1.0 / (1.0 / area_lights.data[idx].inv_radius + len_diagonal);
 
 		float shadow_sum = 0.0;
-		uint resolution = custom_lights.data[idx].area_shadow_sample_resolution; // shorthand
+		uint resolution = area_lights.data[idx].area_shadow_sample_resolution; // shorthand
 		uint sample_count = resolution * resolution;
 
 		for (uint i = 0; i < resolution; i++) {
 			for(uint j = 0; j < resolution; j++) {
 				vec2 sample_on_light = vec2(1.0 / (resolution - 1.0) * j, 1.0 / (resolution - 1.0) * i); // where is point i on the light, relative to the light's topright corner
-				uint map_idx = custom_lights.data[idx].map_idx[i * resolution + j]; // where is point i on the shadow map
+				uint map_idx = area_lights.data[idx].map_idx[i * resolution + j]; // where is point i on the shadow map
 
 				// TODO: area_map_subdivision needed? or can we just calculate subdivision from atlas_rect.size and size of area_shadow_atlas?
-				uint row = map_idx / custom_lights.data[idx].area_map_subdivision;
-				uint col = map_idx % custom_lights.data[idx].area_map_subdivision;
+				uint row = map_idx / area_lights.data[idx].area_map_subdivision;
+				uint col = map_idx % area_lights.data[idx].area_map_subdivision;
 
-				// position of point on light in view space
+				// offset of position of point on light in world space
 				vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);
 
 				// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
 				// for area lights, shadow_matrix stores the inverse transform
 				mat4 sample_mat = scene_data_block.data.inv_view_matrix;
 				sample_mat[3] -= vec4(sample_pos, 0.0);
-				mat4 shadow_sample_matrix = custom_lights.data[idx].shadow_matrix * sample_mat;
+				// this matrix transforms a point from viewspace to light sample local space
+				mat4 shadow_sample_matrix = area_lights.data[idx].shadow_matrix * sample_mat;
 
 				vec3 local_vert = (shadow_sample_matrix * vec4(vertex, 1.0)).xyz;
 
 				float shadow_len = length(local_vert); //need to remember shadow len from here
 				vec3 shadow_dir = normalize(local_vert);
 
-				vec3 local_normal = normalize(mat3(custom_lights.data[idx].shadow_matrix) * normal);
-				vec3 normal_bias = local_normal * custom_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
+				vec3 local_normal = normalize(mat3(area_lights.data[idx].shadow_matrix) * normal);
+				vec3 normal_bias = local_normal * area_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
 
 				vec3 shadow_sample = normalize(shadow_dir + normal_bias);
 
 				shadow_sample.z = 1.0 + abs(shadow_sample.z);
 				vec2 pos = shadow_sample.xy / shadow_sample.z;
-				float depth = shadow_len - custom_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
+				float depth = shadow_len - area_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
 				depth *= inv_depth_range; // max depth = radius + diagonal
 				depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
 
 				vec4 uv_rect = base_uv_rect;
-				vec2 sample_atlas_offset = vec2(col * custom_lights.data[idx].atlas_rect.z, row * custom_lights.data[idx].atlas_rect.w);
+				vec2 sample_atlas_offset = vec2(col * area_lights.data[idx].atlas_rect.z, row * area_lights.data[idx].atlas_rect.w);
 
 				// depending on the current area light sample point, select the right region on the atlas
 
@@ -1109,7 +1109,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 				pos = pos * 0.5 + 0.5;
 				pos = uv_rect.xy + pos * uv_rect.zw;
 
-				vec2 shadow_pixel_size = custom_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
+				vec2 shadow_pixel_size = area_lights.data[idx].soft_shadow_scale / shadow_sample.z * 2.0 * scene_data_block.data.area_shadow_atlas_pixel_size.xy / uv_rect.zw;
 
 				shadow_sum += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
 			}
@@ -1118,7 +1118,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 		float avg_shadow = shadow_sum / sample_count;
 
-		return mix(1.0, avg_shadow, custom_lights.data[idx].shadow_opacity);
+		return mix(1.0, avg_shadow, area_lights.data[idx].shadow_opacity);
 	}
 
 #endif // SHADOWS_DISABLED
@@ -1465,13 +1465,13 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		inout vec3 specular_light) {
 
 	float EPSILON = 1e-4f;
-	vec3 area_side_a = custom_lights.data[idx].area_side_a;
-	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	vec3 area_side_a = area_lights.data[idx].area_side_a;
+	vec3 area_side_b = area_lights.data[idx].area_side_b;
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
-	if (dot(-cross(area_side_a, area_side_b), vertex - custom_lights.data[idx].position) <= 0) {
+	if (dot(-cross(area_side_a, area_side_b), vertex - area_lights.data[idx].position) <= 0) {
 		return; // vertex is behind light
 	}
 
@@ -1509,10 +1509,10 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	);
 
 	vec3 points[4];
-	points[0] = custom_lights.data[idx].position - vertex;
-	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
-	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
-	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
+	points[0] = area_lights.data[idx].position - vertex;
+	points[1] = area_lights.data[idx].position + area_side_a - vertex;
+	points[2] = area_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = area_lights.data[idx].position + area_side_b - vertex;
 
 	vec3 ltc_diffuse = max(ltc_evaluate(vertex, normal, eye_vec, mat3(1), points), vec3(0));
 	vec3 ltc_specular = max(ltc_evaluate(vertex, normal, eye_vec, M_inv, points), vec3(0));
@@ -1523,7 +1523,7 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		vec4(normalize(area_side_a), 0),
 		vec4(normalize(area_side_b), 0),
 		vec4(normalize(cross(area_side_a, area_side_b)), 0),
-		vec4(custom_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
+		vec4(area_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
 	);
 	mat4 light_mat_inv = inverse(light_mat);
 	vec3 pos_local_to_light = (light_mat_inv * vec4(vertex, 1)).xyz;
@@ -1531,14 +1531,14 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float dist = length(closest_point_local_to_light - pos_local_to_light);
 
 	float light_length = max(0, dist);
-	float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
+	float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
 	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
 
 	if (metallic < 1.0) {
-		diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
+		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
 	float amp = M_brdf_eamp.y;
-	specular_light += ltc_specular * custom_lights.data[idx].specular_amount * amp * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
+	specular_light += ltc_specular * area_lights.data[idx].specular_amount * amp * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 
@@ -1609,13 +1609,13 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 #endif
 		inout vec3 diffuse_light, inout vec3 specular_light) {
 	float EPSILON = 1e-4f;
-	vec3 area_side_a = custom_lights.data[idx].area_side_a;
-	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	vec3 area_side_a = area_lights.data[idx].area_side_a;
+	vec3 area_side_b = area_lights.data[idx].area_side_b;
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
-	if (dot(cross(area_side_b, area_side_a), vertex - custom_lights.data[idx].position) <= 0) {
+	if (dot(cross(area_side_b, area_side_a), vertex - area_lights.data[idx].position) <= 0) {
 		return; // vertex is behind light
 	}
 	
@@ -1623,10 +1623,10 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	// calculate area of light above horizon of current pixel:
 	
 	vec3 points[4];
-	points[0] = custom_lights.data[idx].position - vertex;
-	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
-	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
-	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
+	points[0] = area_lights.data[idx].position - vertex;
+	points[1] = area_lights.data[idx].position + area_side_a - vertex;
+	points[2] = area_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = area_lights.data[idx].position + area_side_b - vertex;
     vec3 x, z;
     z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
     x = cross(normal, z);
@@ -1646,7 +1646,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	// with the half-vector between the nearest point above horizon on the light and the point with the least angle to the surface normal
 
 	// First intersect the line defined by light normal and vertex with the light
-	float d_light_norm = dot(custom_lights.data[idx].position - vertex, -area_norm);
+	float d_light_norm = dot(area_lights.data[idx].position - vertex, -area_norm);
 	vec3 vert_to_intersection = (d_light_norm * -area_norm);
 	vec3 normal_light_intersection = vertex + vert_to_intersection; // intersection of light normal on vertex with light_plane 
 	
@@ -1656,37 +1656,37 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 		float d = d_light_norm / dot(horizon_dir, -area_norm);
 		normal_light_intersection = vertex + d * horizon_dir; // intersection of vertex to horizon with plane
 	}
-	vec3 light_to_intersection = normal_light_intersection - custom_lights.data[idx].position;
+	vec3 light_to_intersection = normal_light_intersection - area_lights.data[idx].position;
 	float clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
 	float clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-	vec3 closest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
+	vec3 closest_point_diff = area_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 	
 	// TODO: steepest point still incorrect when rotating the area light.
 	// we get the point with the lowest angle to the vertex normal.
-	vec3 steepest_point_diff = custom_lights.data[idx].position;
+	vec3 steepest_point_diff = area_lights.data[idx].position;
 	if(dot(normal, area_norm) >= 0) { // light is pointing away from the vertex normal
 		float sa = max(sign(dot(normal, area_side_a)), 0);
 		float sb = max(sign(dot(normal, area_side_b)), 0);
-		vec3 apex = custom_lights.data[idx].position + sa * area_side_a + sb * area_side_b;
+		vec3 apex = area_lights.data[idx].position + sa * area_side_a + sb * area_side_b;
 		vec3 Ap = vertex + normal * dot(apex-vertex, normal);
 		vec3 ApA = area_norm * dot(area_norm, Ap - apex);
 		vec3 norm_apex = Ap + normal * dot(normal, ApA); // the point from which we can intersect with the light normal
 		// intersect
-		float d = dot(custom_lights.data[idx].position - norm_apex, area_norm) / dot(ApA, -area_norm);
+		float d = dot(area_lights.data[idx].position - norm_apex, area_norm) / dot(ApA, -area_norm);
 		vec3 steepest_angle_intersection = norm_apex + d * ApA;
 		
-		light_to_intersection = steepest_angle_intersection - custom_lights.data[idx].position;
+		light_to_intersection = steepest_angle_intersection - area_lights.data[idx].position;
 		clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
 		clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		steepest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
+		steepest_point_diff = area_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 
 	} else {
 		float d = d_light_norm / dot(normal, -area_norm);
 		vec3 steepest_angle_intersection = vertex + d * normal; // intersection of light normal on vertex with light_plane 
-		light_to_intersection = steepest_angle_intersection - custom_lights.data[idx].position;
+		light_to_intersection = steepest_angle_intersection - area_lights.data[idx].position;
 		clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
 		clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		steepest_point_diff = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
+		steepest_point_diff = area_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 	}
 
 	vec3 halfway_vec = (closest_point_diff - vertex + steepest_point_diff - vertex) / length(closest_point_diff - vertex + steepest_point_diff - vertex);
@@ -1706,7 +1706,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 		d = d_light_norm/h;
 		vec3 intersection_vec = d * reflection_vec;
 		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
-		light_to_intersection = ref_light_intersection - custom_lights.data[idx].position;
+		light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
 		float len_a = length(area_side_a);
 		float len_b = length(area_side_b);
 		float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
@@ -1715,7 +1715,7 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 		// Code to just take the clamped intersection of the reflection vector with the light (instead of the midpoint of the reflection-cone light intersection, as below)
 		//clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
 		//clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		//vec3 closest_point_spec = custom_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
+		//vec3 closest_point_spec = area_lights.data[idx].position + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
 		//light_rel_vec_spec = closest_point_spec - vertex;
 
 		vec4 orms_unpacked = unpackUnorm4x8(orms);
@@ -1739,23 +1739,23 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 			spec_size = max(tr.x - bl.x, 0) * max(tr.y - bl.y, 0);
 		}
 
-		vec3 closest_point_spec = custom_lights.data[idx].position + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
+		vec3 closest_point_spec = area_lights.data[idx].position + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
 		light_rel_vec_spec = closest_point_spec - vertex;
 	}
 
 	float light_length_diff = length(light_rel_vec_diff);
 	float light_length = light_length_diff;
 
-	float omni_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
+	float omni_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
 	float cos_falloff = max(dot(area_norm, -light_rel_vec_diff/light_length), 0.0); // cosine term for falloff at 90 degrees to light normal
 	float light_attenuation = omni_attenuation * cos_falloff * solid_angle; 
-	vec3 color = custom_lights.data[idx].color;
+	vec3 color = area_lights.data[idx].color;
 
 	float size_A = 0.0;
 
 	light_attenuation *= shadow;
 	
-	float specular_amount = custom_lights.data[idx].specular_amount;
+	float specular_amount = area_lights.data[idx].specular_amount;
 
 	if(spec_size > EPSILON) { // dot(specular_light, specular_light) > EPSILON && 
 		//specular_light /= spec_size; // doesn't seem to work that well...
@@ -1807,22 +1807,22 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		inout vec3 specular_light) {
 
 	float EPSILON = 1e-4f;
-	vec3 area_side_a = custom_lights.data[idx].area_side_a;
-	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	vec3 area_side_a = area_lights.data[idx].area_side_a;
+	vec3 area_side_b = area_lights.data[idx].area_side_b;
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
 
-	uint sample_nr = max(custom_lights.data[idx].area_stochastic_samples, 1);
+	uint sample_nr = max(area_lights.data[idx].area_stochastic_samples, 1);
 	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
 	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
 	float alpha_sum = 0.0;
 	float length_sum = 0.0;
 
-	vec3 color = custom_lights.data[idx].color;
+	vec3 color = area_lights.data[idx].color;
 	vec3 sampling_vertex = vertex;
-	vec3 vert_to_light = sampling_vertex - custom_lights.data[idx].position;
+	vec3 vert_to_light = sampling_vertex - area_lights.data[idx].position;
 	vec3 area_norm = cross(area_side_b, area_side_a);
 
 	if (dot(area_norm, vert_to_light) <= 0) {
@@ -1833,7 +1833,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		sampling_vertex += vec3(0.01, 0.01, 0.01); // small offset
 	}
 
-	vec3 spec_squad_position = custom_lights.data[idx].position;
+	vec3 spec_squad_position = area_lights.data[idx].position;
 	vec3 spec_squad_a = area_side_a;
 	vec3 spec_squad_b = area_side_b;
 
@@ -1841,10 +1841,10 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	float roughness = orms_unpacked.y;
 	if(roughness < 0.5) {
 		vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
-		float d = dot(custom_lights.data[idx].position - vertex, -area_norm) / dot(reflection_vec, -area_norm);
+		float d = dot(area_lights.data[idx].position - vertex, -area_norm) / dot(reflection_vec, -area_norm);
 		vec3 intersection_vec = d * reflection_vec;
 		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
-		vec3 light_to_intersection = ref_light_intersection - custom_lights.data[idx].position;
+		vec3 light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
 		float len_a = length(area_side_a);
 		float len_b = length(area_side_b);
 		float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
@@ -1867,13 +1867,13 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
 
 		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
-			spec_squad_position = custom_lights.data[idx].position + area_side_a * clamp(bl.x/len_a, 0, 1) + area_side_b * clamp(bl.y/len_b, 0, 1);
+			spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(bl.x/len_a, 0, 1) + area_side_b * clamp(bl.y/len_b, 0, 1);
 			spec_squad_a = area_side_a/len_a * (tr.x-bl.x);//clamp(, 0, 1);
 			spec_squad_b = area_side_b/len_b * (tr.y-bl.y);//clamp(, 0, 1);
 		}
 	}
 
-	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
+	SphericalQuad squad = init_spherical_quad(area_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
 	SphericalQuad spec_squad = init_spherical_quad(spec_squad_position, spec_squad_a, spec_squad_b, sampling_vertex);
 
 	if (squad.S == 0) { // area is 0
@@ -1882,10 +1882,10 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	float inv_S = 1 / squad.S;
 	float spec_inv_S = 1 / spec_squad.S;
 
-	vec3 p00 = custom_lights.data[idx].position;
-	vec3 p10 = custom_lights.data[idx].position + area_side_a;
-	vec3 p01 = custom_lights.data[idx].position + area_side_b;
-	vec3 p11 = custom_lights.data[idx].position + area_side_a + area_side_b;
+	vec3 p00 = area_lights.data[idx].position;
+	vec3 p10 = area_lights.data[idx].position + area_side_a;
+	vec3 p01 = area_lights.data[idx].position + area_side_b;
+	vec3 p11 = area_lights.data[idx].position + area_side_a + area_side_b;
 
 	vec3 v00 = normalize(p00 - sampling_vertex);
 	vec3 v10 = normalize(p10 - sampling_vertex);
@@ -1928,8 +1928,8 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		float light_length = length(light_rel_vec_diff);
 		length_sum += light_length;
 
-		float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
-		float specular_amount = custom_lights.data[idx].specular_amount;
+		float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
+		float specular_amount = area_lights.data[idx].specular_amount;
 
 		float size_A = 0.0; // not sure about this one
 
@@ -1944,7 +1944,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 		vec3 light_vec_diff = normalize(light_rel_vec_diff);
 		vec3 light_vec_spec = normalize(light_rel_vec_spec);
-		light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, color, false, light_attenuation, f0, orms, custom_lights.data[idx].specular_amount, albedo, alpha,
+		light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, color, false, light_attenuation, f0, orms, area_lights.data[idx].specular_amount, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 				backlight,
 #endif

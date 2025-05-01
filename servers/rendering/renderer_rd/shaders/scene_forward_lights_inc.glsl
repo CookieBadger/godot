@@ -1109,7 +1109,7 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 				pos = pos * 0.5 + 0.5;
 				pos = uv_rect.xy + pos * uv_rect.zw;
 
-				vec2 shadow_pixel_size = area_lights.data[idx].soft_shadow_scale / shadow_sample.z * 2.0 * scene_data_block.data.area_shadow_atlas_pixel_size.xy / uv_rect.zw;
+				vec2 shadow_pixel_size = area_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
 
 				shadow_sum += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
 			}

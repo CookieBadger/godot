@@ -1088,7 +1088,7 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 				float shadow_len = length(local_vert); //need to remember shadow len from here
 				vec3 shadow_dir = normalize(local_vert);
 
-				vec3 local_normal = normalize(mat3(area_lights.data[idx].shadow_matrix) * normal);
+				vec3 local_normal = normalize(mat3(shadow_sample_matrix) * normal);
 				vec3 normal_bias = local_normal * area_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
 
 				vec3 shadow_sample = normalize(shadow_dir + normal_bias);

@@ -1126,63 +1126,144 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 }
 
 // Component a with polynomial of degree 5 
-// root mean squared error (RMSE): 0.008254019196049503
-// error variance: 6.812883288875366e-05
+// root mean squared error (RMSE): 0.00826631861246398
+// error variance: 6.833202340276843e-05
 float comp_a(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (42.613196) + (-29.804979)*y + (0.940936)*pow(y,2) + (4.310188)*pow(y,3) + (-1.423213)*pow(y,4) + (0.134028)*pow(y,5) + (-115.627828)*x + (79.067059)*x*y + (-15.373782)*x*pow(y,2) + (0.301600)*x*pow(y,3) + (0.225199)*x*pow(y,4) + (115.730190)*pow(x,2) + (-61.876423)*pow(x,2)*y + (9.154508)*pow(x,2)*pow(y,2) + (-0.507271)*pow(x,2)*pow(y,3) + (-57.617228)*pow(x,3) + (20.077433)*pow(x,3)*y + (-1.397545)*pow(x,3)*pow(y,2) + (15.283716)*pow(x,4) + (-2.373037)*pow(x,4)*y + (-1.810645)*pow(x,5)	);
+	+ (40.022068) + (-21.786636)*y + (-6.711040)*pow(y,2) + (7.836000)*pow(y,3) + (-2.238067)*pow(y,4) + (0.207919)*pow(y,5) + (-113.968298)*x + (72.582053)*x*y + (-10.971895)*x*pow(y,2) + (-0.902927)*x*pow(y,3) + (0.364781)*x*pow(y,4) + (115.774423)*pow(x,2) + (-59.489534)*pow(x,2)*y + (8.060379)*pow(x,2)*pow(y,2) + (-0.421001)*pow(x,2)*pow(y,3) + (-57.958025)*pow(x,3) + (19.685421)*pow(x,3)*y + (-1.225889)*pow(x,3)*pow(y,2) + (15.368255)*pow(x,4) + (-2.398787)*pow(x,4)*y + (-1.802015)*pow(x,5)	);
 }
 
 // Component b with polynomial of degree 5 
-// root mean squared error (RMSE): 0.0055034739069856065
-// error variance: 3.0288225044871412e-05
+// root mean squared error (RMSE): 0.00504682527171353
+// error variance: 2.5470445323206342e-05
 float comp_b(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (-31.123829) + (18.255014)*y + (-8.955430)*pow(y,2) + (4.847186)*pow(y,3) + (-1.487584)*pow(y,4) + (0.162805)*pow(y,5) + (97.907786)*x + (-34.787298)*x*y + (3.970676)*x*pow(y,2) + (-0.010155)*x*pow(y,3) + (0.091052)*x*pow(y,4) + (-125.229004)*pow(x,2) + (32.243633)*pow(x,2)*y + (-3.652242)*pow(x,2)*pow(y,2) + (-0.194776)*pow(x,2)*pow(y,3) + (78.175594)*pow(x,3) + (-10.816239)*pow(x,3)*y + (1.199773)*pow(x,3)*pow(y,2) + (-24.681347)*pow(x,4) + (0.820760)*pow(x,4)*y + (3.268766)*pow(x,5)	);
+	+ (-32.371729) + (20.622668)*y + (-10.246609)*pow(y,2) + (5.042130)*pow(y,3) + (-1.433458)*pow(y,4) + (0.153338)*pow(y,5) + (98.859420)*x + (-37.623269)*x*y + (5.569236)*x*pow(y,2) + (-0.449615)*x*pow(y,3) + (0.097781)*x*pow(y,4) + (-124.243103)*pow(x,2) + (32.867644)*pow(x,2)*y + (-3.804820)*pow(x,2)*pow(y,2) + (-0.068663)*pow(x,2)*pow(y,3) + (76.969383)*pow(x,3) + (-10.908016)*pow(x,3)*y + (1.064901)*pow(x,3)*pow(y,2) + (-24.185140)*pow(x,4) + (0.910078)*pow(x,4)*y + (3.179056)*pow(x,5)	);
 }
 
 // Component c with polynomial of degree 5 
-// root mean squared error (RMSE): 0.007461076154835946
-// error variance: 5.566765738826153e-05
+// root mean squared error (RMSE): 0.007847996395488764
+// error variance: 6.159104742360464e-05
 float comp_c(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (17.477199) + (7.909934)*y + (-14.994321)*pow(y,2) + (4.739302)*pow(y,3) + (-0.810270)*pow(y,4) + (0.046944)*pow(y,5) + (-65.095871)*x + (6.732959)*x*y + (16.888018)*x*pow(y,2) + (-3.041889)*x*pow(y,3) + (0.306748)*x*pow(y,4) + (81.748928)*pow(x,2) + (-21.208980)*pow(x,2)*y + (-7.459796)*pow(x,2)*pow(y,2) + (0.385721)*pow(x,2)*pow(y,3) + (-47.504609)*pow(x,3) + (13.208954)*pow(x,3)*y + (1.410099)*pow(x,3)*pow(y,2) + (13.421180)*pow(x,4) + (-2.668662)*pow(x,4)*y + (-1.489262)*pow(x,5)	);
+	+ (11.583158) + (16.195132)*y + (-21.187278)*pow(y,2) + (7.114936)*pow(y,3) + (-1.288357)*pow(y,4) + (0.090490)*pow(y,5) + (-52.766376)*x + (-2.864469)*x*y + (21.805870)*x*pow(y,2) + (-4.130327)*x*pow(y,3) + (0.381285)*x*pow(y,4) + (69.234074)*pow(x,2) + (-16.785586)*pow(x,2)*y + (-8.971769)*pow(x,2)*pow(y,2) + (0.573957)*pow(x,2)*pow(y,3) + (-40.192157)*pow(x,3) + (12.390364)*pow(x,3)*y + (1.546020)*pow(x,3)*pow(y,2) + (11.068497)*pow(x,4) + (-2.629684)*pow(x,4)*y + (-1.169427)*pow(x,5)	);
 }
 
 // Component d with polynomial of degree 5 
-// root mean squared error (RMSE): 0.004341506306613834
-// error variance: 1.8848677010367695e-05
+// root mean squared error (RMSE): 0.004446164724882146
+// error variance: 1.9768380760786335e-05
 float comp_d(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (57.049826) + (-25.451225)*y + (6.865143)*pow(y,2) + (-2.704072)*pow(y,3) + (0.850662)*pow(y,4) + (-0.099537)*pow(y,5) + (-177.354545)*x + (55.769993)*x*y + (-6.521949)*x*pow(y,2) + (0.151303)*x*pow(y,3) + (-0.016677)*x*pow(y,4) + (223.788469)*pow(x,2) + (-51.590067)*pow(x,2)*y + (4.838185)*pow(x,2)*pow(y,2) + (-0.047086)*pow(x,2)*pow(y,3) + (-139.134814)*pow(x,3) + (19.520826)*pow(x,3)*y + (-1.156990)*pow(x,3)*pow(y,2) + (43.095950)*pow(x,4) + (-2.417162)*pow(x,4)*y + (-5.413756)*pow(x,5)	);
+	+ (56.560977) + (-26.447422)*y + (8.007063)*pow(y,2) + (-2.938371)*pow(y,3) + (0.778390)*pow(y,4) + (-0.079369)*pow(y,5) + (-174.029262)*x + (55.590827)*x*y + (-7.595242)*x*pow(y,2) + (0.586064)*x*pow(y,3) + (-0.052755)*x*pow(y,4) + (218.422343)*pow(x,2) + (-49.772234)*pow(x,2)*y + (4.705369)*pow(x,2)*pow(y,2) + (-0.110559)*pow(x,2)*pow(y,3) + (-135.668807)*pow(x,3) + (18.670509)*pow(x,3)*y + (-1.020345)*pow(x,3)*pow(y,2) + (42.042080)*pow(x,4) + (-2.349413)*pow(x,4)*y + (-5.275442)*pow(x,5)	);
 }
 
 // Component e with polynomial of degree 5 
-// root mean squared error (RMSE): 0.007469810740851013
-// error variance: 5.579807250413317e-05
+// root mean squared error (RMSE): 0.007327637848224633
+// error variance: 5.369427643473412e-05
 float comp_e(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (33.628760) + (-53.030799)*y + (23.092312)*pow(y,2) + (-4.278389)*pow(y,3) + (0.104612)*pow(y,4) + (0.033568)*pow(y,5) + (-68.405119)*x + (104.299024)*x*y + (-35.210398)*x*pow(y,2) + (5.290676)*x*pow(y,3) + (-0.210190)*x*pow(y,4) + (50.757593)*pow(x,2) + (-73.332257)*pow(x,2)*y + (15.318215)*pow(x,2)*pow(y,2) + (-1.308721)*pow(x,2)*pow(y,3) + (-15.547360)*pow(x,3) + (23.548417)*pow(x,3)*y + (-1.948174)*pow(x,3)*pow(y,2) + (1.033997)*pow(x,4) + (-3.092252)*pow(x,4)*y + (0.271608)*pow(x,5)	);
+	+ (38.635232) + (-53.895233)*y + (20.158410)*pow(y,2) + (-2.038722)*pow(y,3) + (-0.486485)*pow(y,4) + (0.086644)*pow(y,5) + (-83.242356)*x + (110.795093)*x*y + (-35.490292)*x*pow(y,2) + (4.713696)*x*pow(y,3) + (-0.117706)*x*pow(y,4) + (66.288968)*pow(x,2) + (-78.463860)*pow(x,2)*y + (16.126788)*pow(x,2)*pow(y,2) + (-1.280718)*pow(x,2)*pow(y,3) + (-23.625243)*pow(x,3) + (24.954272)*pow(x,3)*y + (-2.127836)*pow(x,3)*pow(y,2) + (3.208161)*pow(x,4) + (-3.198377)*pow(x,4)*y + (0.024170)*pow(x,5)	);
 }
 
-// Component amp with polynomial of degree 5 
-// root mean squared error (RMSE): 0.009139953386779148
-// error variance: 8.353874791249562e-05
-float comp_amp(float x, float y) {
+// Component mag with polynomial of degree 5 
+// root mean squared error (RMSE): 0.009121039711851554
+// error variance: 8.31933654251731e-05
+float comp_mag(float x, float y) {
 	x += 1.0;
 	y += 1.0;
 	return (
-	+ (35.614195) + (-21.254919)*y + (-8.039799)*pow(y,2) + (8.092500)*pow(y,3) + (-1.980968)*pow(y,4) + (0.157147)*pow(y,5) + (-94.993881)*x + (74.211694)*x*y + (-8.540240)*x*pow(y,2) + (-2.534375)*x*pow(y,3) + (0.482349)*x*pow(y,4) + (85.665363)*pow(x,2) + (-65.205722)*pow(x,2)*y + (9.029016)*pow(x,2)*pow(y,2) + (-0.131277)*pow(x,2)*pow(y,3) + (-30.394079)*pow(x,3) + (22.447391)*pow(x,3)*y + (-1.718311)*pow(x,3)*pow(y,2) + (2.390527)*pow(x,4) + (-2.791565)*pow(x,4)*y + (0.524274)*pow(x,5)	);
+	+ (31.627915) + (-9.242613)*y + (-18.316942)*pow(y,2) + (12.243966)*pow(y,3) + (-2.814830)*pow(y,4) + (0.224888)*pow(y,5) + (-93.286029)*x + (63.261605)*x*y + (-1.313849)*x*pow(y,2) + (-4.396929)*x*pow(y,3) + (0.656442)*x*pow(y,4) + (88.299669)*pow(x,2) + (-61.632692)*pow(x,2)*y + (7.258499)*pow(x,2)*pow(y,2) + (0.096766)*pow(x,2)*pow(y,3) + (-32.964044)*pow(x,3) + (22.033172)*pow(x,3)*y + (-1.578708)*pow(x,3)*pow(y,2) + (3.228726)*pow(x,4) + (-2.787282)*pow(x,4)*y + (0.427175)*pow(x,5)	);
+}
+
+// Component fres with polynomial of degree 5 
+// root mean squared error (RMSE): 0.010951139695856373
+// error variance: 0.00011992746063816118
+float comp_fres(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (-0.874912) + (2.405966)*y + (0.444356)*pow(y,2) + (-3.465719)*pow(y,3) + (0.463044)*pow(y,4) + (0.187222)*pow(y,5) + (0.660714)*x + (-7.715301)*x*y + (11.305963)*x*pow(y,2) + (1.880087)*x*pow(y,3) + (-1.186281)*x*pow(y,4) + (3.182991)*pow(x,2) + (-5.075303)*pow(x,2)*y + (-9.942256)*pow(x,2)*pow(y,2) + (1.837908)*pow(x,2)*pow(y,3) + (-0.220191)*pow(x,3) + (9.148312)*pow(x,3)*y + (0.226042)*pow(x,3)*pow(y,2) + (-2.274063)*pow(x,4) + (-1.613646)*pow(x,4)*y + (0.621338)*pow(x,5)	);
+}
+
+
+// Component a with polynomial of degree 5 
+// root mean squared error (RMSE): 0.007847282004523323
+// error variance: 6.15798348585156e-05
+float comp_a_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (40.290518) + (-18.170297)*y + (-7.811887)*pow(y,2) + (7.678010)*pow(y,3) + (-2.123667)*pow(y,4) + (0.193699)*pow(y,5) + (-118.397707)*x + (65.471498)*x*y + (-8.218117)*x*pow(y,2) + (-1.211069)*x*pow(y,3) + (0.370904)*x*pow(y,4) + (124.985159)*pow(x,2) + (-55.807916)*pow(x,2)*y + (6.778536)*pow(x,2)*pow(y,2) + (-0.339186)*pow(x,2)*pow(y,3) + (-64.848709)*pow(x,3) + (19.208735)*pow(x,3)*y + (-1.037636)*pow(x,3)*pow(y,2) + (17.502999)*pow(x,4) + (-2.461384)*pow(x,4)*y + (-2.021831)*pow(x,5)	);
+}
+
+// Component b with polynomial of degree 5 
+// root mean squared error (RMSE): 0.004972015372305875
+// error variance: 2.4720936862445926e-05
+float comp_b_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (-29.694721) + (22.317485)*y + (-10.250630)*pow(y,2) + (4.901086)*pow(y,3) + (-1.385772)*pow(y,4) + (0.150602)*pow(y,5) + (87.239706)*x + (-41.784029)*x*y + (5.866624)*x*pow(y,2) + (-0.456358)*x*pow(y,3) + (0.079256)*x*pow(y,4) + (-105.665162)*pow(x,2) + (36.451890)*pow(x,2)*y + (-3.890609)*pow(x,2)*pow(y,2) + (-0.027714)*pow(x,2)*pow(y,3) + (62.988809)*pow(x,3) + (-12.380499)*pow(x,3)*y + (1.022257)*pow(x,3)*pow(y,2) + (-19.110899)*pow(x,4) + (1.173446)*pow(x,4)*y + (2.455197)*pow(x,5)	);
+}
+
+// Component c with polynomial of degree 5 
+// root mean squared error (RMSE): 0.008055450853627518
+// error variance: 6.489028845520831e-05
+float comp_c_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (18.438152) + (17.506391)*y + (-22.001051)*pow(y,2) + (7.325071)*pow(y,3) + (-1.312048)*pow(y,4) + (0.091983)*pow(y,5) + (-77.630434)*x + (-4.326441)*x*y + (22.719814)*x*pow(y,2) + (-4.298572)*x*pow(y,3) + (0.387803)*x*pow(y,4) + (103.409544)*pow(x,2) + (-16.684480)*pow(x,2)*y + (-9.276583)*pow(x,2)*pow(y,2) + (0.611482)*pow(x,2)*pow(y,3) + (-62.684066)*pow(x,3) + (12.738066)*pow(x,3)*y + (1.570667)*pow(x,3)*pow(y,2) + (18.190300)*pow(x,4) + (-2.730086)*pow(x,4)*y + (-2.038562)*pow(x,5)	);
+}
+
+// Component d with polynomial of degree 5 
+// root mean squared error (RMSE): 0.004203538161137005
+// error variance: 1.7669733072135076e-05
+float comp_d_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (49.644937) + (-24.047666)*y + (7.248710)*pow(y,2) + (-2.895757)*pow(y,3) + (0.779058)*pow(y,4) + (-0.078956)*pow(y,5) + (-151.988444)*x + (50.518049)*x*y + (-6.113902)*x*pow(y,2) + (0.536562)*x*pow(y,3) + (-0.057818)*x*pow(y,4) + (190.288106)*pow(x,2) + (-46.222327)*pow(x,2)*y + (3.736295)*pow(x,2)*pow(y,2) + (-0.082829)*pow(x,2)*pow(y,3) + (-117.560503)*pow(x,3) + (17.843822)*pow(x,3)*y + (-0.827020)*pow(x,3)*pow(y,2) + (36.120635)*pow(x,4) + (-2.331960)*pow(x,4)*y + (-4.487602)*pow(x,5)	);
+}
+
+// Component e with polynomial of degree 5 
+// root mean squared error (RMSE): 0.006821567579235692
+// error variance: 4.6533784238079495e-05
+float comp_e_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (33.064271) + (-50.177714)*y + (18.981117)*pow(y,2) + (-1.958716)*pow(y,3) + (-0.452548)*pow(y,4) + (0.082617)*pow(y,5) + (-67.358879)*x + (103.132344)*x*y + (-33.368821)*x*pow(y,2) + (4.463898)*x*pow(y,3) + (-0.119857)*x*pow(y,4) + (47.954964)*pow(x,2) + (-73.023067)*pow(x,2)*y + (15.131075)*pow(x,2)*pow(y,2) + (-1.195099)*pow(x,2)*pow(y,3) + (-12.722984)*pow(x,3) + (23.275869)*pow(x,3)*y + (-2.002714)*pow(x,3)*pow(y,2) + (-0.129505)*pow(x,4) + (-2.995953)*pow(x,4)*y + (0.440648)*pow(x,5)	);
+}
+
+// Component mag with polynomial of degree 5 
+// root mean squared error (RMSE): 0.021627974830001156
+// error variance: 0.00046776929524716346
+float comp_mag_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (38.278041) + (-20.114468)*y + (-25.625500)*pow(y,2) + (22.902099)*pow(y,3) + (-6.340879)*pow(y,4) + (0.601630)*pow(y,5) + (-108.579649)*x + (109.445205)*x*y + (-21.421228)*x*pow(y,2) + (-2.934001)*x*pow(y,3) + (0.867130)*x*pow(y,4) + (89.463175)*pow(x,2) + (-86.998759)*pow(x,2)*y + (17.872421)*pow(x,2)*pow(y,2) + (-0.828128)*pow(x,2)*pow(y,3) + (-27.823761)*pow(x,3) + (26.037136)*pow(x,3)*y + (-2.842303)*pow(x,3)*pow(y,2) + (1.304907)*pow(x,4) + (-2.838796)*pow(x,4)*y + (0.606131)*pow(x,5)	);
+}
+
+// Component fres with polynomial of degree 5 
+// root mean squared error (RMSE): 0.010689129633331566
+// error variance: 0.000114257492318167
+float comp_fres_godot(float x, float y) {
+	x += 1.0;
+	y += 1.0;
+	return (
+	+ (-1.859444) + (2.955921)*y + (-2.424913)*pow(y,2) + (-0.784027)*pow(y,3) + (-0.098735)*pow(y,4) + (0.207574)*pow(y,5) + (3.419159)*x + (-2.899320)*x*y + (7.985178)*x*pow(y,2) + (0.950729)*x*pow(y,3) + (-0.957429)*x*pow(y,4) + (-3.183815)*pow(x,2) + (-6.123560)*pow(x,2)*y + (-6.308591)*pow(x,2)*pow(y,2) + (1.653213)*pow(x,2)*pow(y,3) + (4.422340)*pow(x,3) + (7.010380)*pow(x,3)*y + (-0.361543)*pow(x,3)*pow(y,2) + (-3.271138)*pow(x,4) + (-0.957836)*pow(x,4)*y + (0.622685)*pow(x,5)	);
 }
 
 
@@ -1462,7 +1543,6 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 #endif
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
-
 	float EPSILON = 1e-4f;
 	vec3 area_side_a = area_lights.data[idx].area_side_a;
 	vec3 area_side_b = area_lights.data[idx].area_side_b;

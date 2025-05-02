@@ -1482,9 +1482,12 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float theta = acos(dot(normal, eye_vec));
 
 	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI));
-	lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
-	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv);
-	vec2 M_brdf_eamp = texture(ltc_lut2, lut_uv).xy;
+	vec2 lut_uv1 = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
+	vec2 lut_uv2 = vec2(roughness, theta/(0.5*M_PI));
+	lut_uv2 = lut_uv2*(31.0/32.0) + vec2(0.5/32.0); // offset by 1 pixel
+	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv1);
+	vec2 M_brdf_eamp = texture(ltc_lut2, lut_uv1).xy;
+	vec4 test_amp = texture(test_ltc_lut2, lut_uv2);
 
 	// M_brdf_abcd.x = comp_a(roughness, theta);
 	// M_brdf_abcd.y = comp_b(roughness, theta);
@@ -1537,8 +1540,14 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	if (metallic < 1.0) {
 		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
-	float amp = M_brdf_eamp.y;
-	specular_light += ltc_specular * area_lights.data[idx].specular_amount * amp * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
+	//float amp = M_brdf_eamp.y;
+	vec3 spec = ltc_specular * area_lights.data[idx].color;
+	//vec3 spec_color = mix(f0, albedo, metallic);
+	vec3 spec_color = F0(metallic, area_lights.data[idx].specular_amount, albedo);//
+	//vec3 spec_color = clamp(50.0 * f0, metallic, 1.0);
+	
+	spec *= spec_color * max(test_amp.x, 0.0) + (1.0 - spec_color) * max(test_amp.y, 0.0); // TODO
+	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 

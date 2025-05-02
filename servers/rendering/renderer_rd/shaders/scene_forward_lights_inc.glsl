@@ -1077,7 +1077,6 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 				vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);
 
 				// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
-				// for area lights, shadow_matrix stores the inverse transform
 				mat4 sample_mat = scene_data_block.data.inv_view_matrix;
 				sample_mat[3] -= vec4(sample_pos, 0.0);
 				// this matrix transforms a point from viewspace to light sample local space
@@ -1486,29 +1485,30 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	vec2 lut_uv2 = vec2(roughness, theta/(0.5*M_PI));
 	lut_uv2 = lut_uv2*(31.0/32.0) + vec2(0.5/32.0); // offset by 1 pixel
 	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv1);
-	vec2 M_brdf_eamp = texture(ltc_lut2, lut_uv1).xy;
-	vec4 test_amp = texture(test_ltc_lut2, lut_uv2);
+	vec3 M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv1).xyz;
 
 	// M_brdf_abcd.x = comp_a(roughness, theta);
 	// M_brdf_abcd.y = comp_b(roughness, theta);
 	// M_brdf_abcd.z = comp_c(roughness, theta);
 	// M_brdf_abcd.w = comp_d(roughness, theta);
-	// M_brdf_eamp.x = comp_e(roughness, theta);
-	// M_brdf_eamp.y = comp_amp(roughness, theta);
+	// M_brdf_e_mag_fres.x = comp_e(roughness, theta);
+	// M_brdf_e_mag_fres.y = comp_mag(roughness, theta);
+	// M_brdf_e_mag_fres.z = comp_fres(roughness, theta);
 
-	// actually, M_inv is the inverse of the cosine transformation matrix scaled by a factor of (x-yw), 
-	// but since we normalize the light's vertex positions, this scale cancels out
-	/*mat3 M_inv = mat3(
-		vec3(0, 0, brdf.z),
-		vec3(brdf.w, brdf.x, 0),
-		vec3(-1, -brdf.y, 0)
-	);*/
-	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_eamp.x - M_brdf_abcd.y * M_brdf_abcd.w);
+	// M_brdf_abcd.x = comp_a_godot(roughness, theta);
+	// M_brdf_abcd.y = comp_b_godot(roughness, theta);
+	// M_brdf_abcd.z = comp_c_godot(roughness, theta);
+	// M_brdf_abcd.w = comp_d_godot(roughness, theta);
+	// M_brdf_e_mag_fres.x = comp_e_godot(roughness, theta);
+	// M_brdf_e_mag_fres.y = comp_mag_godot(roughness, theta);
+	// M_brdf_e_mag_fres.z = comp_fres_godot(roughness, theta);
+
+	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
 
 	mat3 M_inv = mat3(
 		vec3(0, 0, 1.0/M_brdf_abcd.z),
 		vec3(-M_brdf_abcd.w * scale, M_brdf_abcd.x * scale, 0),
-		vec3(-M_brdf_eamp.x * scale, M_brdf_abcd.y * scale, 0)
+		vec3(-M_brdf_e_mag_fres.x * scale, M_brdf_abcd.y * scale, 0)
 	);
 
 	vec3 points[4];
@@ -1540,13 +1540,10 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	if (metallic < 1.0) {
 		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
-	//float amp = M_brdf_eamp.y;
 	vec3 spec = ltc_specular * area_lights.data[idx].color;
-	//vec3 spec_color = mix(f0, albedo, metallic);
-	vec3 spec_color = F0(metallic, area_lights.data[idx].specular_amount, albedo);//
-	//vec3 spec_color = clamp(50.0 * f0, metallic, 1.0);
+	vec3 spec_color = F0(metallic, area_lights.data[idx].specular_amount, albedo);
 	
-	spec *= spec_color * max(test_amp.x, 0.0) + (1.0 - spec_color) * max(test_amp.y, 0.0); // TODO
+	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
 	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }

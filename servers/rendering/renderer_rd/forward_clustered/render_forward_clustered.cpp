@@ -3117,41 +3117,30 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			uniforms.push_back(u);
 		}
 
-		{
+		{ // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
 			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
-				// TODO: init LTC LUT
-				//Vector<uint8_t> decompressed_lut;
-				//int compressed_size = LTC_LUT_COMPRESSED_SIZE;
-				//int decompressed_size = LTC_LUT_DECOMPRESSED_SIZE;
-
-				// The LTC LUT is embedded in the "ltc_lut.gen.h" header file.
-				//??It is DEFLATE compressed to decrease binary size, so it first needs to be decompressed.
-				//decompressed_lut.resize(decompressed_size);
-				//Compression::decompress(decompressed_lut.ptrw(), decompressed_size, TONY_MC_MAPFACE_LUT, compressed_size, Compression::Mode::MODE_DEFLATE);
-
 				Ref<Image> lut1_image;
 				int dimensions = LTC_LUT_DIMENSIONS;
-				int image_bytes = 4 * dimensions * dimensions;
-				size_t image_size = image_bytes * 4; // float
+				int lut1_bytes = 4 * dimensions * dimensions;
+				size_t lut1_size = lut1_bytes * 4; // float
 
-				// Copy the pixel data into an image so that a 2d texture can be created.
 				Vector<uint8_t> lut1_data;
-				lut1_data.resize(image_size);
+				lut1_data.resize(lut1_size);
 
-				memcpy(lut1_data.ptrw(), LTC_LUT1, image_size);
+				memcpy(lut1_data.ptrw(), LTC_LUT1, lut1_size);
 				lut1_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut1_data);
 
 				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
 
-				image_bytes = 2 * dimensions * dimensions;
-				image_size = image_bytes * 4;
+				int lut2_bytes = 3 * dimensions * dimensions;
+				size_t lut2_size = lut2_bytes * 4;
 
 				Ref<Image> lut2_image;
 				Vector<uint8_t> lut2_data;
-				lut2_data.resize(image_size);
+				lut2_data.resize(lut2_size);
 
-				memcpy(lut2_data.ptrw(), LTC_LUT2, image_size);
-				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGF, lut2_data);
+				memcpy(lut2_data.ptrw(), LTC_LUT2, lut2_size);
+				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBF, lut2_data);
 
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
 			}

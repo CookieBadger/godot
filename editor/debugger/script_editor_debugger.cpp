@@ -1823,6 +1823,75 @@ void ScriptEditorDebugger::toggle_profiler(const String &p_profiler, bool p_enab
 	_put_msg("profiler:" + p_profiler, msg_data);
 }
 
+void ScriptEditorDebugger::clear_profiler() const {
+	profiler->clear();
+}
+void ScriptEditorDebugger::export_profiler_csv(const String &p_path) const {
+
+	Error err;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &err);
+
+	if (err != OK) {
+		ERR_PRINT("Failed to open " + p_path);
+		return;
+	}
+	Vector<String> line;
+	line.resize(Performance::MONITOR_MAX);
+
+	// signatures
+	for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+		line.write[i] = Performance::get_singleton()->get_monitor_name(Performance::Monitor(i));
+	}
+	file->store_csv_line(line);
+
+	// values
+	Vector<List<float>::Element *> iterators;
+	iterators.resize(Performance::MONITOR_MAX);
+	bool continue_iteration = false;
+	for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+		iterators.write[i] = performance_profiler->get_monitor_data(Performance::get_singleton()->get_monitor_name(Performance::Monitor(i)))->back();
+		continue_iteration = continue_iteration || iterators[i];
+	}
+	while (continue_iteration) {
+		continue_iteration = false;
+		for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+			if (iterators[i]) {
+				line.write[i] = String::num_real(iterators[i]->get());
+				iterators.write[i] = iterators[i]->prev();
+			} else {
+				line.write[i] = "";
+			}
+			continue_iteration = continue_iteration || iterators[i];
+		}
+		file->store_csv_line(line);
+	}
+	file->store_string("\n");
+
+	Vector<Vector<String>> profiler_data = profiler->get_data_as_csv();
+	for (int i = 0; i < profiler_data.size(); i++) {
+		file->store_csv_line(profiler_data[i]);
+	}
+}
+
+void ScriptEditorDebugger::clear_visual_profiler() const {
+	visual_profiler->clear();
+}
+
+void ScriptEditorDebugger::export_visual_profiler_csv(const String &p_path) const {
+	Error err;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &err);
+
+	if (err != OK) {
+		ERR_PRINT("Failed to open " + p_path);
+		return;
+	}
+
+	Vector<Vector<String>> profiler_data = visual_profiler->get_data_as_csv();
+	for (int i = 0; i < profiler_data.size(); i++) {
+		file->store_csv_line(profiler_data[i]);
+	}
+}
+
 ScriptEditorDebugger::ScriptEditorDebugger() {
 	tabs = memnew(TabContainer);
 	add_child(tabs);

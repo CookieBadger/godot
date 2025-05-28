@@ -318,6 +318,12 @@ public:
 	void send_message(const String &p_message, const Array &p_args);
 	void toggle_profiler(const String &p_profiler, bool p_enable, const Array &p_data);
 
+	void clear_profiler() const;
+	void export_profiler_csv(const String &p_path) const;
+	void clear_visual_profiler() const;
+	void export_visual_profiler_csv(const String &p_path) const;
+
+
 	ScriptEditorDebugger();
 	~ScriptEditorDebugger();
 };

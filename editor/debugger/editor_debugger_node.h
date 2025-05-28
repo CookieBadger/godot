@@ -219,6 +219,11 @@ public:
 	bool plugins_capture(ScriptEditorDebugger *p_debugger, const String &p_message, const Array &p_data);
 	void add_debugger_plugin(const Ref<EditorDebuggerPlugin> &p_plugin);
 	void remove_debugger_plugin(const Ref<EditorDebuggerPlugin> &p_plugin);
+
+	void clear_profiler() const;
+	void export_profiler_csv(const String &p_path) const;
+	void clear_visual_profiler() const;
+	void export_visual_profiler_csv(const String &p_path) const;
 };
 
 #endif // EDITOR_DEBUGGER_NODE_H

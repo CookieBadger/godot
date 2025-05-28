@@ -38,6 +38,7 @@
 #include "editor/editor_settings.h"
 #include "editor/editor_undo_redo_manager.h"
 #include "editor/filesystem_dock.h"
+#include "editor/debugger/editor_debugger_node.h"
 #include "editor/gui/editor_run_bar.h"
 #include "editor/gui/editor_scene_tabs.h"
 #include "editor/gui/scene_tree_editor.h"
@@ -494,6 +495,21 @@ bool EditorInterface::is_movie_maker_enabled() const {
 	return EditorRunBar::get_singleton()->is_movie_maker_enabled();
 }
 
+void EditorInterface::clear_profiler() const {
+	EditorDebuggerNode::get_singleton()->clear_profiler();
+}
+void EditorInterface::clear_visual_profiler() const {
+	EditorDebuggerNode::get_singleton()->clear_visual_profiler();
+}
+
+void EditorInterface::export_profiler_csv(const String &p_path) const {
+	EditorDebuggerNode::get_singleton()->export_profiler_csv(p_path);
+}
+
+void EditorInterface::export_visual_profiler_csv(const String &p_path) const {
+	EditorDebuggerNode::get_singleton()->export_visual_profiler_csv(p_path);
+}
+
 #ifdef TOOLS_ENABLED
 void EditorInterface::get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const {
 	const String pf = p_function;
@@ -602,6 +618,10 @@ void EditorInterface::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_movie_maker_enabled", "enabled"), &EditorInterface::set_movie_maker_enabled);
 	ClassDB::bind_method(D_METHOD("is_movie_maker_enabled"), &EditorInterface::is_movie_maker_enabled);
+	ClassDB::bind_method(D_METHOD("clear_profiler"), &EditorInterface::clear_profiler);
+	ClassDB::bind_method(D_METHOD("export_profiler_measures_csv", "path"), &EditorInterface::export_profiler_csv);
+	ClassDB::bind_method(D_METHOD("clear_visual_profiler"), &EditorInterface::clear_visual_profiler);
+	ClassDB::bind_method(D_METHOD("export_visual_profiler_measures_csv", "path"), &EditorInterface::export_visual_profiler_csv);
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "movie_maker_enabled"), "set_movie_maker_enabled", "is_movie_maker_enabled");
 }

@@ -25,3 +25,11 @@ def run(target, source, env):
 		file.write("static const uint8_t LTC_LUT2[] = {")
 		write_zlib_bytes(file, source[2])
 		file.write("};\n\n")
+		file.write("static const uint8_t LTC_LUT1_HEITZ[] = {")
+		write_zlib_bytes(file, source[3])
+		file.write("};\n\n")
+		
+		file.write("static const uint8_t LTC_LUT2_HEITZ[] = {")
+		write_zlib_bytes(file, source[4])
+		file.write("};\n\n")
+

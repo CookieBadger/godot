@@ -181,6 +181,8 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 	struct LTC {
 		RID lut1_texture;
 		RID lut2_texture;
+		RID lut1_heitz_texture;
+		RID lut2_heitz_texture;
 	} ltc;
 
 	enum PassMode {

@@ -3118,7 +3118,8 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 		}
 
 		{ // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
-			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
+			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null() || ltc.lut1_heitz_texture.is_null() || ltc.lut2_heitz_texture.is_null()) {
+				// LUT 1 Godot GGX
 				Ref<Image> lut1_image;
 				int dimensions = LTC_LUT_DIMENSIONS;
 				int lut1_bytes = 4 * dimensions * dimensions;
@@ -3132,6 +3133,7 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 
 				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
 
+				// LUT 2 Godot GGX
 				int lut2_bytes = 3 * dimensions * dimensions;
 				size_t lut2_size = lut2_bytes * 4;
 
@@ -3143,6 +3145,26 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBF, lut2_data);
 
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
+
+				// LUT 1 HEITZ GGX
+				Ref<Image> lut1_heitz_image;
+				Vector<uint8_t> lut1_heitz_data;
+				lut1_heitz_data.resize(lut1_size);
+
+				memcpy(lut1_heitz_data.ptrw(), LTC_LUT1_HEITZ, lut1_size);
+				lut1_heitz_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut1_heitz_data);
+
+				ltc.lut1_heitz_texture = RS::get_singleton()->texture_2d_create(lut1_heitz_image);
+
+				// LUT 2 HEITZ GGX
+				Ref<Image> lut2_heitz_image;
+				Vector<uint8_t> lut2_heitz_data;
+				lut2_heitz_data.resize(lut2_size);
+
+				memcpy(lut2_heitz_data.ptrw(), LTC_LUT2_HEITZ, lut2_size);
+				lut2_heitz_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBF, lut2_heitz_data);
+
+				ltc.lut2_heitz_texture = RS::get_singleton()->texture_2d_create(lut2_heitz_image);
 			}
 		}
 
@@ -3161,6 +3183,24 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
 			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
 			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture));
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 19;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_heitz_texture));
+			uniforms.push_back(u);
+		}
+
+		{
+			RD::Uniform u;
+			u.binding = 20;
+			u.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+			u.append_id(RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CanvasItemTextureFilter::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CanvasItemTextureRepeat::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED));
+			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_heitz_texture));
 			uniforms.push_back(u);
 		}
 
@@ -4514,6 +4554,12 @@ RenderForwardClustered::~RenderForwardClustered() {
 	}
 	if (ltc.lut2_texture.is_valid()) {
 		RD::get_singleton()->free(ltc.lut2_texture);
+	}
+	if (ltc.lut1_heitz_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut1_heitz_texture);
+	}
+	if (ltc.lut2_heitz_texture.is_valid()) {
+		RD::get_singleton()->free(ltc.lut2_heitz_texture);
 	}
 
 	{

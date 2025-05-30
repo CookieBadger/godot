@@ -451,7 +451,9 @@ float sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord) {
 	float avg = 0.0;
 
 	for (uint i = 0; i < sc_soft_shadow_samples; i++) {
-		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i].xy), depth, 1.0));
+		vec2 offset = shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i].xy);
+		vec2 sample_coord = pos + offset;
+		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(sample_coord, depth, 1.0));
 	}
 
 	return avg * (1.0 / float(sc_soft_shadow_samples));
@@ -1066,7 +1068,7 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 
 		for (uint i = 0; i < resolution; i++) {
 			for(uint j = 0; j < resolution; j++) {
-				vec2 sample_on_light = vec2(1.0 / (resolution - 1.0) * j, 1.0 / (resolution - 1.0) * i); // where is point i on the light, relative to the light's topright corner
+				vec2 sample_on_light = vec2(1.0 / max(resolution - 1.0, 1.0) * j, 1.0 / max(resolution - 1.0, 1.0) * i); // where is point i on the light, relative to the light's topright corner
 				uint map_idx = area_lights.data[idx].map_idx[i * resolution + j]; // where is point i on the shadow map
 
 				// TODO: area_map_subdivision needed? or can we just calculate subdivision from atlas_rect.size and size of area_shadow_atlas?
@@ -1559,29 +1561,37 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float metallic = orms_unpacked.z;
 
 	float theta = acos(dot(normal, eye_vec));
+	
+	vec4 M_brdf_abcd;
+	vec3 M_brdf_e_mag_fres;
 
-	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI));
-	vec2 lut_uv1 = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
-	vec2 lut_uv2 = vec2(roughness, theta/(0.5*M_PI));
-	lut_uv2 = lut_uv2*(31.0/32.0) + vec2(0.5/32.0); // offset by 1 pixel
-	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv1);
-	vec3 M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv1).xyz;
-
-	// M_brdf_abcd.x = comp_a(roughness, theta);
-	// M_brdf_abcd.y = comp_b(roughness, theta);
-	// M_brdf_abcd.z = comp_c(roughness, theta);
-	// M_brdf_abcd.w = comp_d(roughness, theta);
-	// M_brdf_e_mag_fres.x = comp_e(roughness, theta);
-	// M_brdf_e_mag_fres.y = comp_mag(roughness, theta);
-	// M_brdf_e_mag_fres.z = comp_fres(roughness, theta);
-
-	// M_brdf_abcd.x = comp_a_godot(roughness, theta);
-	// M_brdf_abcd.y = comp_b_godot(roughness, theta);
-	// M_brdf_abcd.z = comp_c_godot(roughness, theta);
-	// M_brdf_abcd.w = comp_d_godot(roughness, theta);
-	// M_brdf_e_mag_fres.x = comp_e_godot(roughness, theta);
-	// M_brdf_e_mag_fres.y = comp_mag_godot(roughness, theta);
-	// M_brdf_e_mag_fres.z = comp_fres_godot(roughness, theta);
+	if(area_lights.data[idx].light_mode == 2) {// GODOT GGX
+		vec2 lut_uv = vec2(max(roughness, 0.02), theta/(0.5*M_PI)); // TODO: convert 64 to constant
+		lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
+		M_brdf_abcd = texture(ltc_lut1, lut_uv);
+		M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv).xyz;
+	} else if(area_lights.data[idx].light_mode == 3) {// HEITZ GGX
+		vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI)); // TODO: convert 64 to constant
+		lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
+		M_brdf_abcd = texture(ltc_lut1_heitz, lut_uv);
+		M_brdf_e_mag_fres = texture(ltc_lut2_heitz, lut_uv).xyz;
+	} else if (area_lights.data[idx].light_mode == 4){
+		M_brdf_abcd.x = comp_a_godot(roughness, theta);
+		M_brdf_abcd.y = comp_b_godot(roughness, theta);
+		M_brdf_abcd.z = comp_c_godot(roughness, theta);
+		M_brdf_abcd.w = comp_d_godot(roughness, theta);
+		M_brdf_e_mag_fres.x = comp_e_godot(roughness, theta);
+		M_brdf_e_mag_fres.y = comp_mag_godot(roughness, theta);
+		M_brdf_e_mag_fres.z = comp_fres_godot(roughness, theta);
+	} else if (area_lights.data[idx].light_mode == 5){
+		M_brdf_abcd.x = comp_a(roughness, theta);
+		M_brdf_abcd.y = comp_b(roughness, theta);
+		M_brdf_abcd.z = comp_c(roughness, theta);
+		M_brdf_abcd.w = comp_d(roughness, theta);
+		M_brdf_e_mag_fres.x = comp_e(roughness, theta);
+		M_brdf_e_mag_fres.y = comp_mag(roughness, theta);
+		M_brdf_e_mag_fres.z = comp_fres(roughness, theta);
+	}
 
 	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
 

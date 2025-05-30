@@ -175,6 +175,10 @@ layout(set = 0, binding = 17) uniform sampler2D ltc_lut1;
 
 layout(set = 0, binding = 18) uniform sampler2D ltc_lut2;
 
+layout(set = 0, binding = 19) uniform sampler2D ltc_lut1_heitz;
+
+layout(set = 0, binding = 20) uniform sampler2D ltc_lut2_heitz;
+
 /* Set 1: Render Pass (changes per render pass) */
 
 layout(set = 1, binding = 0, std140) uniform SceneDataBlock {

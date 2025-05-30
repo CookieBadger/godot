@@ -1830,7 +1830,7 @@ SceneTree::SceneTree() {
 	GLOBAL_DEF("rendering/lights_and_shadows/area_shadow/atlas_size.mobile", 2048);
 	bool area_shadowmap_16_bits = GLOBAL_DEF("rendering/lights_and_shadows/area_shadow/atlas_16_bits", true);
 	int area_atlas_subdivision = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/lights_and_shadows/area_shadow/atlas_subdivision", PROPERTY_HINT_ENUM, "Disabled,4 Shadows,16 Shadows,64 Shadows,256 Shadows,1024 Shadows"), 2);
-	
+				
 	root->set_positional_shadow_atlas_size(shadowmap_size);
 	root->set_positional_shadow_atlas_16_bits(shadowmap_16_bits);
 	root->set_positional_shadow_atlas_quadrant_subdiv(0, Viewport::PositionalShadowAtlasQuadrantSubdiv(atlas_q0));

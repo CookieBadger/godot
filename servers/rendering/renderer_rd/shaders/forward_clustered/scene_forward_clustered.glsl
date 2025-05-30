@@ -2309,8 +2309,8 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
-				} else if (area_lights.data[light_index].light_mode == 1) {
-					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				}else if (area_lights.data[light_index].light_mode == 1) {
+					light_process_area_nearest_point(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif
@@ -2331,8 +2331,8 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
-				} else {
-					light_process_area_nearest_point(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				} else if (area_lights.data[light_index].light_mode == 2 || area_lights.data[light_index].light_mode == 3 || area_lights.data[light_index].light_mode == 4 || area_lights.data[light_index].light_mode == 5) {
+					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

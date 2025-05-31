@@ -32,7 +32,11 @@ float SchlickFresnel(float u) {
 }
 
 vec3 F0(float metallic, float specular, vec3 albedo) {
-	float dielectric = 0.16 * specular * specular;
+	// Don't understand reasoning here. 
+	// Specular is actually at 1.0, which is the inspector value * 2. Why? 
+	// Then, this method assumes specular is 0.5, to get a default value of 0.04. Why?
+	// The method is also not used. Why???
+	float dielectric = 0.16 * specular * specular; 
 	// use albedo * metallic as colored specular reflectance at 0 angle for metallic materials;
 	// see https://google.github.io/filament/Filament.md.html
 	return mix(vec3(dielectric), albedo, vec3(metallic));
@@ -1631,9 +1635,9 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
 	vec3 spec = ltc_specular * area_lights.data[idx].color;
-	vec3 spec_color = F0(metallic, area_lights.data[idx].specular_amount, albedo);
-	
-	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
+	vec3 spec_color = mix(vec3(0.04), albedo, vec3(metallic));
+
+	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) / 2.0 + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
 	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }

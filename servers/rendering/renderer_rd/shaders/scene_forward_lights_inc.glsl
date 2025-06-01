@@ -1688,6 +1688,221 @@ float polygon_solid_angle(vec3 vertex, vec3 L[5], int vertex_count)
 	
 	return angle_sum - plane_polygon_angle_sum;
 }
+void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+		vec3 backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+		vec4 transmittance_color,
+		float transmittance_depth,
+		float transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+		float rim, float rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+		float clearcoat, float clearcoat_roughness, vec3 vertex_normal,
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+		vec3 binormal, vec3 tangent, float anisotropy,
+#endif
+		inout vec3 diffuse_light, inout vec3 specular_light) {
+	float EPSILON = 1e-4f;
+	vec3 area_side_a = area_lights.data[idx].area_side_a;
+	vec3 area_side_b = area_lights.data[idx].area_side_b;
+
+	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
+		return;
+	}
+	vec3 lpos = area_lights.data[idx].position;
+	if (dot(cross(area_side_b, area_side_a), vertex - lpos) <= 0) {
+		return; // vertex is behind light
+	}
+
+	vec4 orms_unpacked = unpackUnorm4x8(orms);
+	float roughness = orms_unpacked.y;
+	float metallic = orms_unpacked.z;
+	vec3 area_norm = normalize(cross(area_side_b, area_side_a));
+	// calculate area of light above horizon of current pixel:
+	
+	vec3 points[4];
+	points[0] = lpos - vertex;
+	points[1] = lpos + area_side_a - vertex;
+	points[2] = lpos + area_side_a + area_side_b - vertex;
+	points[3] = lpos + area_side_b - vertex;
+    vec3 x, z;
+    z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
+    x = cross(normal, z);
+    // rotate area light in (T1, normal, T2) basis
+    mat3 M_vert = transpose(mat3(x, normal, z));
+
+	vec3 L[5];
+	L[0] = M_vert * points[0];
+	L[1] = M_vert * points[1];
+	L[2] = M_vert * points[2];
+	L[3] = M_vert * points[3];
+    int vertex_count = 0;
+	clip_quad_to_horizon(L, vertex_count);
+	float solid_angle = polygon_solid_angle(vertex, L, vertex_count);
+	// for diffuse light, we take the nearest point on the light to the intersection of the light-plane 
+	// with the half-vector between the nearest point above horizon on the light and the point with the least angle to the surface normal
+
+	// First intersect the line defined by light normal and vertex with the light
+	float d_light_norm = dot(lpos - vertex, -area_norm);
+	vec3 vert_to_pr = (d_light_norm * -area_norm); // intersection of light normal on vertex with light_plane 
+	vec3 pr = vertex + vert_to_pr; // might be below horizon, but this is an approximation anyways.
+	
+	vec3 halfway_vec;
+	// TODO: steepest point still incorrect when rotating the area light.
+	// we get the point with the lowest angle to the vertex normal.
+	vec3 pc = lpos;
+	vec3 u_vert_to_pc;
+	vec3 u_vert_to_pr = normalize(vert_to_pr);
+	if(dot(normal, area_norm) >= 0) { 
+		// light is pointing away from the vertex normal 
+		// Idea is to tilt the normal toward the light source until it intersects the plane.
+		// This will yield a vector that it is infinitely close to a vector that is perpendicular to the area light source
+		// Hence, we just calculate a vector that is perpendicular to the area light in a "look at" like cross-product fashion
+		vec3 side_vec = cross(area_norm, normal);
+		vec3 light_perpendicular_vec = cross(side_vec, area_norm);
+
+		u_vert_to_pc = normalize(light_perpendicular_vec); // pc in this case is a point at infinity
+		halfway_vec = (u_vert_to_pr + u_vert_to_pc) / length(u_vert_to_pr + u_vert_to_pc);
+		//halfway_vec = u_vert_to_pr + u_vert_to_pc;
+	} else {
+		float d = d_light_norm / dot(normal, -area_norm);
+		vec3 pc = vertex + d * normal; // intersection of light normal on vertex with light_plane
+		vec3 vert_to_pc = pc - vertex;
+		u_vert_to_pc = normalize(vert_to_pc);
+		// Why are those two not the same?
+		// halfway_vec = (vert_to_pr + vert_to_pc) / length(vert_to_pr + vert_to_pc);
+		halfway_vec = (u_vert_to_pr + u_vert_to_pc) / length(u_vert_to_pr + u_vert_to_pc);
+	}
+	//////////////
+	//debug
+	// if(area_lights.data[idx].specular_amount/2.0 < 0.15) {
+	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(pr, 1)).xyz;
+	// 	return;
+	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.25) {
+	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(u_vert_to_pr, 0)).xyz;
+	// 	return;
+	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.35) {
+	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(u_vert_to_pc, 0)).xyz;
+	// 	return;
+	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.45) {
+	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(halfway_vec, 0)).xyz;
+	// 	return;
+	// }
+	/////////////
+
+	float d = d_light_norm / dot(halfway_vec, -area_norm);
+
+	vec3 halfway_isec = vertex + d * halfway_vec;
+	vec3 light_to_intersection = halfway_isec - lpos;
+	float clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
+	float clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
+	vec3 most_representative_point_diff = lpos + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; // clamped position of the halfway_isec point
+
+	vec3 light_rel_vec_diff = most_representative_point_diff - vertex;
+	
+
+	float light_length_diff = length(light_rel_vec_diff);
+	float light_length = light_length_diff;
+	vec3 light_vec_diff = normalize(light_rel_vec_diff);
+	float cos_theta_o = dot(light_vec_diff, -area_norm);
+	float cos_theta_ppd = dot(light_vec_diff, normal);
+
+	float omni_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
+	float cos_falloff = max(dot(area_norm, -light_rel_vec_diff/light_length), 0.0); // cosine term for falloff at 90 degrees to light normal
+	float light_attenuation = omni_attenuation* cos_falloff * (solid_angle);
+
+	float size_A = 0.0;
+
+	light_attenuation *= shadow;
+	
+	// Diffuse Option A: lambertian shading. Can't control Attenuation, as it is encoded in the solid angle (square falloff)
+	// diffuse_light += area_lights.data[idx].color * cos_theta_ppd * solid_angle;  // apparently no need to multiply albedo
+	
+	vec3 light_rel_vec_spec;
+	// for specular light, we take the point on the light, that has the smallest angle to the reflected view vector
+	vec3 reflection_vec = -eye_vec + 2 * dot(eye_vec, normal) * normal;
+	float h = dot(reflection_vec, -area_norm);
+	float spec_solid_angle = 0.0;
+	float spec_size = 0.0;
+	float cone_solid_angle = 0.0;
+	if(h < EPSILON) { // lines are parallel.
+		light_rel_vec_spec = light_rel_vec_diff; 
+	} else {
+		d = d_light_norm/h;
+		vec3 intersection_vec = d * reflection_vec;
+		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
+		vec3 light_to_ref_intersection = ref_light_intersection - lpos;
+		float len_a = length(area_side_a);
+		float len_b = length(area_side_b);
+		float isec_a = dot(light_to_ref_intersection, area_side_a) / len_a; // projection onto direction a
+		float isec_b = dot(light_to_ref_intersection, area_side_b) / len_b; // projection onto direction b
+
+		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
+		float half_apex_angle = roughness*M_PI/4.0; // linear apex angle formula, empirically derived
+		
+		// something still wrong here. increasing roughness should make specular reflection larger, but instead, it becomes smaller.
+		float r = tan(half_apex_angle) * length(intersection_vec);
+		float a = 1.77245385 * r; //sqrt(pi) // side of a square with same area as ellipse with radius r
+		vec2 d1 = vec2(a,a);
+		vec2 c1 = vec2(isec_a, isec_b);
+
+		vec2 d0 = vec2(len_a, len_b); // diagonal
+		vec2 bl0 = vec2(0);
+		vec2 bl1 = vec2(c1 - d1/2);
+		vec2 tr0 = vec2(bl0 + d0);
+		vec2 tr1 = vec2(c1 + d1/2);
+		vec2 bl = max(bl0, bl1);
+		vec2 tr = min(tr0, tr1);
+		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
+		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
+			spec_size = max(tr.x - bl.x, 0) * max(tr.y - bl.y, 0); // there must be an error in the calculation (or scale), as I found no useful way to use this value.
+			vec3 L[5];
+			L[0] = M_vert * (lpos + area_side_a*bl.x + area_side_b*bl.y - vertex);
+			L[1] = M_vert * (lpos + area_side_a*tr.x + area_side_b*bl.y - vertex);
+			L[2] = M_vert * (lpos + area_side_a*tr.x + area_side_b*tr.y - vertex);
+			L[3] = M_vert * (lpos + area_side_a*bl.x + area_side_b*tr.y - vertex);
+			cone_solid_angle = 4*M_PI*sin(half_apex_angle/2.0)*sin(half_apex_angle/2.0);
+			spec_solid_angle = (polygon_solid_angle(vertex, L, 4));
+		}
+
+		vec3 p_spec = lpos + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
+		light_rel_vec_spec = p_spec - vertex;
+	}
+	
+	vec3 specular_point_light = vec3(0);
+	vec3 light_vec_spec = normalize(light_rel_vec_spec);
+	float specular_amount = 0;
+	if (spec_solid_angle > 0) {
+		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec)  * cone_solid_angle; // looks best in most scenarios
+	}
+
+	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+			backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+			transmittance_color,
+			transmittance_depth,
+			transmittance_boost,
+			transmittance_z,
+#endif
+#ifdef LIGHT_RIM_USED
+			rim * omni_attenuation, rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+			clearcoat, clearcoat_roughness, vertex_normal,
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+			binormal, tangent, anisotropy,
+#endif
+			diffuse_light,
+			specular_light);
+}
 
 void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
@@ -1989,7 +2204,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 	vec4 orms_unpacked = unpackUnorm4x8(orms);
 	float roughness = orms_unpacked.y;
-	if(roughness < 0.5) {
+	if(roughness < 0.8) {
 		vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
 		float d = dot(area_lights.data[idx].position - vertex, -area_norm) / dot(reflection_vec, -area_norm);
 		vec3 intersection_vec = d * reflection_vec;
@@ -2001,7 +2216,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
 
 		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
-		float half_apex_angle = roughness*M_PI/3.0; // linear apex angle formula, empirically derived
+		float half_apex_angle = roughness*M_PI*0.9; // linear apex angle formula, empirically derived
 		float r = tan(half_apex_angle) * length(intersection_vec);
 		float a = 1.77245385 * r; //sqrt(pi)
 		vec2 d1 = vec2(a,a);
@@ -2117,7 +2332,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 		if (pdf > 0) {
 			diffuse_sum += diffuse_contribution / pdf;
-			specular_sum += specular_contribution / s_pdf;
+			specular_sum += max(specular_contribution / pdf, 0.0); // s_pdf leads to those ugly edges of the specular region.
 			alpha_sum += alpha;
 		} else {
 			sample_nr = max(sample_nr - 1, 1);

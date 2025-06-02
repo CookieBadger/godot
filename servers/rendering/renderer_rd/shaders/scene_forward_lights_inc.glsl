@@ -1637,7 +1637,7 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	vec3 spec = ltc_specular * area_lights.data[idx].color;
 	vec3 spec_color = mix(vec3(0.04), albedo, vec3(metallic));
 
-	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) / 2.0 + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
+	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
 	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
@@ -1878,7 +1878,7 @@ void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec
 	vec3 light_vec_spec = normalize(light_rel_vec_spec);
 	float specular_amount = 0;
 	if (spec_solid_angle > 0) {
-		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec)  * cone_solid_angle; // looks best in most scenarios
+		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec) * (spec_size/area_lights.data[idx].size); // looks best in most scenarios
 	}
 
 	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,

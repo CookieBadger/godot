@@ -1272,8 +1272,6 @@ float comp_fres_godot(float x, float y) {
 	+ (-1.859444) + (2.955921)*y + (-2.424913)*pow(y,2) + (-0.784027)*pow(y,3) + (-0.098735)*pow(y,4) + (0.207574)*pow(y,5) + (3.419159)*x + (-2.899320)*x*y + (7.985178)*x*pow(y,2) + (0.950729)*x*pow(y,3) + (-0.957429)*x*pow(y,4) + (-3.183815)*pow(x,2) + (-6.123560)*pow(x,2)*y + (-6.308591)*pow(x,2)*pow(y,2) + (1.653213)*pow(x,2)*pow(y,3) + (4.422340)*pow(x,3) + (7.010380)*pow(x,3)*y + (-0.361543)*pow(x,3)*pow(y,2) + (-3.271138)*pow(x,4) + (-0.957836)*pow(x,4)*y + (0.622685)*pow(x,5)	);
 }
 
-
-
 float integrate_edge_hill(vec3 p0, vec3 p1) {
 	float cosTheta = dot(p0, p1);
 
@@ -1322,9 +1320,9 @@ float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
 		// calculate the point on the line p0 to p1 that is closest to the vertex (origin)
 		vec3 half_point_t = p0 + normalize(p1-p0) * dot(p0, normalize(p0-p1));
 		vec3 half_point = normalize(half_point_t);
-		return integrate_edge_acos(p_proj0, half_point) + integrate_edge_acos(half_point, p_proj1);
+		return integrate_edge_hill(p_proj0, half_point) + integrate_edge_hill(half_point, p_proj1); // TODO: this slows down GPU time by about 10%. 
 	}
-	return integrate_edge_acos(p_proj0, p_proj1);
+	return integrate_edge_hill(p_proj0, p_proj1); // integrate_edge_hill is quite abit faster >10%
 }
 
 void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
@@ -1688,7 +1686,7 @@ float polygon_solid_angle(vec3 vertex, vec3 L[5], int vertex_count)
 	
 	return angle_sum - plane_polygon_angle_sum;
 }
-void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 		vec3 backlight,
 #endif
@@ -1778,22 +1776,6 @@ void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec
 		// halfway_vec = (vert_to_pr + vert_to_pc) / length(vert_to_pr + vert_to_pc);
 		halfway_vec = (u_vert_to_pr + u_vert_to_pc) / length(u_vert_to_pr + u_vert_to_pc);
 	}
-	//////////////
-	//debug
-	// if(area_lights.data[idx].specular_amount/2.0 < 0.15) {
-	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(pr, 1)).xyz;
-	// 	return;
-	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.25) {
-	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(u_vert_to_pr, 0)).xyz;
-	// 	return;
-	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.35) {
-	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(u_vert_to_pc, 0)).xyz;
-	// 	return;
-	// } else if(area_lights.data[idx].specular_amount/2.0 < 0.45) {
-	// 	diffuse_light += (scene_data_block.data.inv_view_matrix * vec4(halfway_vec, 0)).xyz;
-	// 	return;
-	// }
-	/////////////
 
 	float d = d_light_norm / dot(halfway_vec, -area_norm);
 
@@ -1825,28 +1807,34 @@ void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec
 	
 	vec3 light_rel_vec_spec;
 	// for specular light, we take the point on the light, that has the smallest angle to the reflected view vector
-	vec3 reflection_vec = -eye_vec + 2 * dot(eye_vec, normal) * normal;
+	vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
 	float h = dot(reflection_vec, -area_norm);
 	float spec_solid_angle = 0.0;
 	float spec_size = 0.0;
 	float cone_solid_angle = 0.0;
+	float r = 0.0;
+	vec3 p_spec = vec3(0.0);
+	vec3 intersection_vec = vec3(0.0);
+	vec2 isec_point =vec2(0);
+
 	if(h < EPSILON) { // lines are parallel.
 		light_rel_vec_spec = light_rel_vec_diff; 
 	} else {
 		d = d_light_norm/h;
-		vec3 intersection_vec = d * reflection_vec;
+		intersection_vec = d * reflection_vec;
 		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
 		vec3 light_to_ref_intersection = ref_light_intersection - lpos;
 		float len_a = length(area_side_a);
 		float len_b = length(area_side_b);
-		float isec_a = dot(light_to_ref_intersection, area_side_a) / len_a; // projection onto direction a
-		float isec_b = dot(light_to_ref_intersection, area_side_b) / len_b; // projection onto direction b
-
+		float isec_a = dot(light_to_ref_intersection, area_side_a / len_a) ; // projection onto direction a
+		float isec_b = dot(light_to_ref_intersection, area_side_b / len_b) ; // projection onto direction b
+		isec_point = vec2(isec_a / len_a, isec_b / len_b);
 		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
-		float half_apex_angle = roughness*M_PI/4.0; // linear apex angle formula, empirically derived
-		
+		//float half_apex_angle = roughness*M_PI/4.0; // linear apex angle formula, empirically derived
+		float half_apex_angle = 0.1+sqrt(roughness)*M_PI/4.0; // linear apex angle formula, empirically derived
+
 		// something still wrong here. increasing roughness should make specular reflection larger, but instead, it becomes smaller.
-		float r = tan(half_apex_angle) * length(intersection_vec);
+		r = tan(half_apex_angle) * length(intersection_vec);
 		float a = 1.77245385 * r; //sqrt(pi) // side of a square with same area as ellipse with radius r
 		vec2 d1 = vec2(a,a);
 		vec2 c1 = vec2(isec_a, isec_b);
@@ -1860,270 +1848,29 @@ void light_process_area_nearest_point_approx(uint idx, vec3 vertex, vec3 eye_vec
 		vec2 tr = min(tr0, tr1);
 		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
 		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
-			spec_size = max(tr.x - bl.x, 0) * max(tr.y - bl.y, 0); // there must be an error in the calculation (or scale), as I found no useful way to use this value.
+			//spec_size = max(tr.x - bl.x, 0) * max(tr.y - bl.y, 0);
 			vec3 L[5];
-			L[0] = M_vert * (lpos + area_side_a*bl.x + area_side_b*bl.y - vertex);
-			L[1] = M_vert * (lpos + area_side_a*tr.x + area_side_b*bl.y - vertex);
-			L[2] = M_vert * (lpos + area_side_a*tr.x + area_side_b*tr.y - vertex);
-			L[3] = M_vert * (lpos + area_side_a*bl.x + area_side_b*tr.y - vertex);
-			cone_solid_angle = 4*M_PI*sin(half_apex_angle/2.0)*sin(half_apex_angle/2.0);
+			vec2 bl_norm = vec2(clamp(bl.x/len_a, 0, 1), clamp(bl.y/len_b, 0, 1));
+			vec2 tr_norm = vec2(clamp(tr.x/len_a, 0, 1), clamp(tr.y/len_b, 0, 1));
+			L[0] = M_vert * (lpos + area_side_a*bl_norm.x + area_side_b*bl_norm.y - vertex);
+			L[1] = M_vert * (lpos + area_side_a*tr_norm.x + area_side_b*bl_norm.y - vertex);
+			L[2] = M_vert * (lpos + area_side_a*tr_norm.x + area_side_b*tr_norm.y - vertex);
+			L[3] = M_vert * (lpos + area_side_a*bl_norm.x + area_side_b*tr_norm.y - vertex);
 			spec_solid_angle = (polygon_solid_angle(vertex, L, 4));
+			//float cone_solid_angle = 2*M_PI*(1.0 - cos(half_apex_angle));
 		}
 
-		vec3 p_spec = lpos + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
+		p_spec = lpos + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
 		light_rel_vec_spec = p_spec - vertex;
 	}
+
+	vec3 clamped_isec = lpos + clamp(isec_point.x, 0, 1) * area_side_a + clamp(isec_point.y, 0, 1) * area_side_b - vertex;
 	
-	vec3 specular_point_light = vec3(0);
-	vec3 light_vec_spec = normalize(light_rel_vec_spec);
+	//vec3 light_vec_spec = normalize(light_rel_vec_spec);
+	vec3 light_vec_spec = normalize(clamped_isec); // just take reflection vector
 	float specular_amount = 0;
 	if (spec_solid_angle > 0) {
-		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec) * (spec_size/area_lights.data[idx].size); // looks best in most scenarios
-	}
-
-	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,
-#ifdef LIGHT_BACKLIGHT_USED
-			backlight,
-#endif
-#ifdef LIGHT_TRANSMITTANCE_USED
-			transmittance_color,
-			transmittance_depth,
-			transmittance_boost,
-			transmittance_z,
-#endif
-#ifdef LIGHT_RIM_USED
-			rim * omni_attenuation, rim_tint,
-#endif
-#ifdef LIGHT_CLEARCOAT_USED
-			clearcoat, clearcoat_roughness, vertex_normal,
-#endif
-#ifdef LIGHT_ANISOTROPY_USED
-			binormal, tangent, anisotropy,
-#endif
-			diffuse_light,
-			specular_light);
-}
-
-void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
-#ifdef LIGHT_BACKLIGHT_USED
-		vec3 backlight,
-#endif
-#ifdef LIGHT_TRANSMITTANCE_USED
-		vec4 transmittance_color,
-		float transmittance_depth,
-		float transmittance_boost,
-#endif
-#ifdef LIGHT_RIM_USED
-		float rim, float rim_tint,
-#endif
-#ifdef LIGHT_CLEARCOAT_USED
-		float clearcoat, float clearcoat_roughness, vec3 vertex_normal,
-#endif
-#ifdef LIGHT_ANISOTROPY_USED
-		vec3 binormal, vec3 tangent, float anisotropy,
-#endif
-		inout vec3 diffuse_light, inout vec3 specular_light) {
-	float EPSILON = 1e-4f;
-	vec3 area_side_a = area_lights.data[idx].area_side_a;
-	vec3 area_side_b = area_lights.data[idx].area_side_b;
-
-	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
-		return;
-	}
-	vec3 lpos = area_lights.data[idx].position;
-	if (dot(cross(area_side_b, area_side_a), vertex - lpos) <= 0) {
-		return; // vertex is behind light
-	}
-
-	vec4 orms_unpacked = unpackUnorm4x8(orms);
-	float roughness = orms_unpacked.y;
-	vec3 area_norm = normalize(cross(area_side_b, area_side_a));
-	// calculate area of light above horizon of current pixel:
-	
-	vec3 points[4];
-	points[0] = lpos - vertex;
-	points[1] = lpos + area_side_a - vertex;
-	points[2] = lpos + area_side_a + area_side_b - vertex;
-	points[3] = lpos + area_side_b - vertex;
-    vec3 x, z;
-    z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
-    x = cross(normal, z);
-    // rotate area light in (T1, normal, T2) basis
-    mat3 M_vert = transpose(mat3(x, normal, z));
-
-	vec3 L[5];
-	L[0] = M_vert * points[0];
-	L[1] = M_vert * points[1];
-	L[2] = M_vert * points[2];
-	L[3] = M_vert * points[3];
-    int vertex_count = 0;
-	clip_quad_to_horizon(L, vertex_count);
-	float solid_angle = polygon_solid_angle(vertex, L, vertex_count);
-	// for diffuse light, we take the nearest point on the light to the intersection of the light-plane 
-	// with the half-vector between the nearest point above horizon on the light and the point with the least angle to the surface normal
-
-	// First intersect the line defined by light normal and vertex with the light
-	float d_light_norm = dot(lpos - vertex, -area_norm);
-	vec3 vert_to_intersection = (d_light_norm * -area_norm); // intersection of light normal on vertex with light_plane 
-	
-	float p_proj = dot(vert_to_intersection, normal);
-	if (p_proj < 0) { // we need to find a point above the horizon (only important when light goes below horizon)
-		vec3 horizon_dir = normalize(vert_to_intersection + normal * (-p_proj));
-		vert_to_intersection = dot(horizon_dir, vert_to_intersection) * horizon_dir;
-	}
-	vec3 light_intersection = vertex + vert_to_intersection; 
-	vec3 light_to_intersection = light_intersection - lpos;
-	float clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
-	float clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-	vec3 pr = lpos + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b;
-	vec3 vert_to_pr = pr - vertex;
-
-	if(dot(vert_to_pr, normal) < -EPSILON) {
-		// we must have clamped, thus the point is below horizon again.
-		// the point we are looking for is on an edge of the light.
-		// we check which of the four edges intersects with the horizon, and take the intersection that is the closest to the intersection point
-		vec3 points[4] = {lpos, lpos, lpos+area_side_a, lpos+area_side_b};
-		vec3 vecs[4] = {area_side_a, area_side_b, area_side_b, area_side_a};
-		float max_isec_dist = 1.0/area_lights.data[idx].inv_radius; // largest sensible value
-		for(uint i = 0; i < 4; i++) {
-			if(abs(dot(normal, vecs[i])) > EPSILON) {
-				float d = dot(vertex - points[i], normal) / dot(normal, vecs[i]);
-				if (d < 1.0 && d > 0.0) {
-					vec3 isec = points[i] + d * vecs[i];
-					float v_dist = length(vertex - isec);
-					if(v_dist < max_isec_dist) {
-						pr = isec;
-						vert_to_pr = pr - vertex;
-						max_isec_dist = v_dist;
-					}
-				}
-			}
-		}
-		
-	}
-	
-	// TODO: steepest point still incorrect when rotating the area light.
-	// we get the point with the lowest angle to the vertex normal.
-	vec3 pc = lpos;
-	if(dot(normal, area_norm) >= 0) { // light is pointing away from the vertex normal
-		// Pretty sure this case is broken.
-		float sa = max(sign(dot(normal, area_side_a)), 0);
-		float sb = max(sign(dot(normal, area_side_b)), 0);
-		vec3 apex = lpos + sa * area_side_a + sb * area_side_b;
-		vec3 Ap = vertex + normal * dot(apex-vertex, normal);
-		vec3 ApA = area_norm * dot(area_norm, Ap - apex);
-		vec3 norm_apex = Ap + normal * dot(normal, ApA); // the point from which we can intersect with the light normal
-		// intersect
-		float d = dot(lpos - norm_apex, area_norm) / dot(ApA, -area_norm);
-		vec3 steepest_angle_intersection = norm_apex + d * ApA;
-		
-		light_to_intersection = steepest_angle_intersection - lpos;
-		clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
-		clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		pc = lpos + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
-
-	} else {
-		float d = d_light_norm / dot(normal, -area_norm);
-		vec3 steepest_angle_intersection = vertex + d * normal; // intersection of light normal on vertex with light_plane 
-		light_to_intersection = steepest_angle_intersection - lpos;
-		clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
-		clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		pc = lpos + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
-	}
-
-	vec3 halfway_vec = (pr - vertex + pc - vertex) / length(pr - vertex + pc - vertex);
-	float d = d_light_norm / dot(halfway_vec, -area_norm);
-	vec3 most_representative_point_diff = vertex + d * halfway_vec;
-	//most_representative_point_diff = pr;
-
-	//diffuse_light = (scene_data_block.data.inv_view_matrix * vec4(pc, 1)).xyz;
-	//return;
-
-	vec3 light_rel_vec_diff = most_representative_point_diff - vertex;
-	vec3 light_rel_vec_spec;
-	// for specular light, we take the point on the light, that has the smallest angle to the reflected view vector
-	vec3 reflection_vec = -eye_vec + 2 * dot(eye_vec, normal) * normal;
-	float h = dot(reflection_vec, -area_norm);
-	float spec_size = 1.0;
-	if(h < EPSILON) { // lines are parallel.
-		light_rel_vec_spec = light_rel_vec_diff; 
-	} else {
-		d = d_light_norm/h;
-		vec3 intersection_vec = d * reflection_vec;
-		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
-		light_to_intersection = ref_light_intersection - lpos;
-		float len_a = length(area_side_a);
-		float len_b = length(area_side_b);
-		float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
-		float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
-
-		// Code to just take the clamped intersection of the reflection vector with the light (instead of the midpoint of the reflection-cone light intersection, as below)
-		//clamp_a = dot(light_to_intersection, area_side_a) / dot(area_side_a, area_side_a); // projection onto direction a
-		//clamp_b = dot(light_to_intersection, area_side_b) / dot(area_side_b, area_side_b); // projection onto direction b
-		//vec3 closest_point_spec = lpos + clamp(clamp_a,0,1) * area_side_a + clamp(clamp_b,0,1) * area_side_b; //
-		//light_rel_vec_spec = closest_point_spec - vertex;
-
-		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
-		float half_apex_angle = roughness*M_PI/8.0; // linear apex angle formula, empirically derived
-		float r = tan(half_apex_angle) * length(intersection_vec);
-		float a = 1.77245385 * r; //sqrt(pi)
-		vec2 d1 = vec2(a,a);
-		vec2 c1 = vec2(isec_a, isec_b);
-
-		vec2 d0 = vec2(len_a, len_b); // diagonal
-		vec2 bl0 = vec2(0);
-		vec2 bl1 = vec2(c1 - d1/2);
-		vec2 tr0 = vec2(bl0 + d0);
-		vec2 tr1 = vec2(c1 + d1/2);
-		vec2 bl = max(bl0, bl1);
-		vec2 tr = min(tr0, tr1);
-		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
-		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
-			spec_size = max(tr.x - bl.x, 0) * max(tr.y - bl.y, 0);
-		}
-
-		vec3 closest_point_spec = lpos + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
-		light_rel_vec_spec = closest_point_spec - vertex;
-	}
-
-	float light_length_diff = length(vert_to_pr);
-	float light_length = light_length_diff;
-	vec3 light_vec_diff = normalize(light_rel_vec_diff);
-	vec3 light_vec_spec = normalize(light_rel_vec_spec);
-	float cos_theta_o = dot(light_vec_diff, -area_norm);
-	float cos_theta_ppd = dot(light_vec_diff, normal);
-
-	float omni_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
-	float cos_falloff = max(dot(area_norm, -light_rel_vec_diff/light_length), 0.0); // cosine term for falloff at 90 degrees to light normal
-	float light_attenuation = omni_attenuation* cos_falloff * (solid_angle);
-
-	float size_A = 0.0;
-
-	light_attenuation *= shadow;
-	
-	float specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec);
-	
-	// Diffuse Option A: lambertian shading. Can't control Attenuation, as it is encoded in the solid angle (square falloff)
-	//diffuse_light += area_lights.data[idx].color * cos_theta_ppd * solid_angle; //(scene_data_block.data.inv_view_matrix * vec4(pr, 1)).xyz; // apparently no need to multiply albedo
-	
-	// Diffuse Option B: burley.
-	// float NdotV = dot(normal, eye_vec);
-	// float cNdotV = max(NdotV, 1e-4);
-	// float NdotL = min(dot(normal, light_vec_diff), 1.0);
-	// float cNdotL = max(NdotL, 0.0); // clamped NdotL
-	// vec3 H = normalize(eye_vec + light_vec_diff);
-	// float cLdotH = clamp(dot(light_vec_diff, H), 0.0, 1.0);
-	// float FD90_minus_1 = 2.0 * cLdotH * cLdotH * roughness - 0.5;
-	// float FdV = 1.0 + FD90_minus_1 * SchlickFresnel(cNdotV);
-	// float FdL = 1.0 + FD90_minus_1 * SchlickFresnel(cNdotL);
-	// float diffuse_brdf_NL = (1.0 / M_PI) * FdV * FdL * cNdotL;
-	// diffuse_light += area_lights.data[idx].color * diffuse_brdf_NL * light_attenuation;
-	
-	// Specular:
-
-	if(spec_size > EPSILON) { // dot(specular_light, specular_light) > EPSILON && 
-		//specular_light /= spec_size; // doesn't seem to work that well...
-		specular_amount *= min(1.0/spec_size, 1.0);
+		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec) * spec_solid_angle / (2*M_PI); // looks best in most scenarios
 	}
 
 	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,
@@ -2170,7 +1917,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #endif
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
-
+	
 	float EPSILON = 1e-4f;
 	vec3 area_side_a = area_lights.data[idx].area_side_a;
 	vec3 area_side_b = area_lights.data[idx].area_side_b;
@@ -2188,7 +1935,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	vec3 color = area_lights.data[idx].color;
 	vec3 sampling_vertex = vertex;
 	vec3 vert_to_light = sampling_vertex - area_lights.data[idx].position;
-	vec3 area_norm = cross(area_side_b, area_side_a);
+	vec3 area_norm = normalize(cross(area_side_b, area_side_a));
 
 	if (dot(area_norm, vert_to_light) <= 0) {
 		return; // vertex is behind light
@@ -2204,48 +1951,15 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 	vec4 orms_unpacked = unpackUnorm4x8(orms);
 	float roughness = orms_unpacked.y;
-	if(roughness < 0.8) {
-		vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
-		float d = dot(area_lights.data[idx].position - vertex, -area_norm) / dot(reflection_vec, -area_norm);
-		vec3 intersection_vec = d * reflection_vec;
-		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
-		vec3 light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
-		float len_a = length(area_side_a);
-		float len_b = length(area_side_b);
-		float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
-		float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
-
-		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
-		float half_apex_angle = roughness*M_PI*0.9; // linear apex angle formula, empirically derived
-		float r = tan(half_apex_angle) * length(intersection_vec);
-		float a = 1.77245385 * r; //sqrt(pi)
-		vec2 d1 = vec2(a,a);
-		vec2 c1 = vec2(isec_a, isec_b);
-
-		vec2 d0 = vec2(len_a, len_b); // diagonal
-		vec2 bl0 = vec2(0);
-		vec2 bl1 = vec2(c1 - d1/2);
-		vec2 tr0 = vec2(bl0 + d0);
-		vec2 tr1 = vec2(c1 + d1/2);
-		vec2 bl = max(bl0, bl1);
-		vec2 tr = min(tr0, tr1);
-		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
-
-		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
-			spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(bl.x/len_a, 0, 1) + area_side_b * clamp(bl.y/len_b, 0, 1);
-			spec_squad_a = area_side_a/len_a * (tr.x-bl.x);//clamp(, 0, 1);
-			spec_squad_b = area_side_b/len_b * (tr.y-bl.y);//clamp(, 0, 1);
-		}
-	}
-
+	float roughness_spec_sample_limit = 1.0; // at higher rougness only sample diffuse points.
+	float spec_inv_S;
+	
 	SphericalQuad squad = init_spherical_quad(area_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
-	SphericalQuad spec_squad = init_spherical_quad(spec_squad_position, spec_squad_a, spec_squad_b, sampling_vertex);
-
+	SphericalQuad spec_squad = squad;
 	if (squad.S == 0) { // area is 0
 		return;
 	}
 	float inv_S = 1 / squad.S;
-	float spec_inv_S = 1 / spec_squad.S;
 
 	vec3 p00 = area_lights.data[idx].position;
 	vec3 p10 = area_lights.data[idx].position + area_side_a;
@@ -2262,6 +1976,71 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 			max(0.01, abs(dot(v10, normal))), // TODO: double check order of weights here
 			max(0.01, abs(dot(v01, normal))),
 			max(0.01, abs(dot(v11, normal))));
+			
+	vec4 sw;
+	bool has_spec = false;
+	if(roughness < roughness_spec_sample_limit) {
+		vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
+		float h = dot(reflection_vec, -area_norm);
+		if(h > EPSILON) {
+			float d = dot(area_lights.data[idx].position - vertex, -area_norm) / h;
+			vec3 intersection_vec = d * reflection_vec;
+			vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
+			vec3 light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
+			float len_a = length(area_side_a);
+			float len_b = length(area_side_b);
+			float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
+			float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
+
+			//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
+			float half_apex_angle = sqrt(roughness)*M_PI/2.0; // linear apex angle formula, empirically derived
+			float r = tan(half_apex_angle) * length(intersection_vec);
+			float a = 1.77245385 * r; //sqrt(pi)
+			vec2 d1 = vec2(a,a);
+			vec2 c1 = vec2(isec_a, isec_b);
+
+			vec2 d0 = vec2(len_a, len_b); // diagonal
+			vec2 bl0 = vec2(0);
+			vec2 bl1 = vec2(c1 - d1/2);
+			vec2 tr0 = vec2(bl0 + d0);
+			vec2 tr1 = vec2(c1 + d1/2);
+			vec2 bl = max(bl0, bl1);
+			vec2 tr = min(tr0, tr1);
+			vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
+
+			if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
+				vec2 bl_norm = vec2(clamp(bl.x/len_a, 0, 1), clamp(bl.y/len_b, 0, 1));
+				vec2 tr_norm = vec2(clamp(tr.x/len_a, 0, 1), clamp(tr.y/len_b, 0, 1));
+				spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(bl_norm.x, 0, 1) + area_side_b * clamp(bl_norm.y, 0, 1);
+				//intersection_vec_clamped = area_lights.data[idx].position + clamp(cr0r1.x/len_a, 0, 1) * area_side_a + clamp(cr0r1.y/len_b, 0, 1) * area_side_b - vertex;
+				
+				//spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
+				spec_squad_a = area_side_a * (tr_norm.x-bl_norm.x);//clamp(, 0, 1);
+				spec_squad_b = area_side_b * (tr_norm.y-bl_norm.y);//clamp(, 0, 1);
+				
+				SphericalQuad spec_squad = init_spherical_quad(spec_squad_position, spec_squad_a, spec_squad_b, sampling_vertex);
+				spec_inv_S = 1 / spec_squad.S;
+				has_spec = true;
+
+				// vec3 sp00 = spec_squad_position;
+				// vec3 sp10 = spec_squad_position + spec_squad_a;
+				// vec3 sp01 = spec_squad_position + area_side_b;
+				// vec3 sp11 = spec_squad_position + spec_squad_a + area_side_b;
+
+				// vec3 sv00 = normalize(sp00 - sampling_vertex);
+				// vec3 sv10 = normalize(sp10 - sampling_vertex);
+				// vec3 sv01 = normalize(sp01 - sampling_vertex);
+				// vec3 sv11 = normalize(sp11 - sampling_vertex);
+				// //vec3 halfway_vec = normalize((normalize(intersection_vec) + normal)/2.0);
+				// // Compute  weights for rectangle seen from reference point
+				// sw = vec4(
+				// 		max(0.01, abs(dot(sv00, reflection_vec))),
+				// 		max(0.01, abs(dot(sv10, reflection_vec))),
+				// 		max(0.01, abs(dot(sv01, reflection_vec))),
+				// 		max(0.01, abs(dot(sv11, reflection_vec))));
+			}
+		}
+	}
 
 	for (uint i = 0; i < sample_nr; i++) {
 		// sampling of diffuse is based on a world position, so flickering is reduced
@@ -2273,19 +2052,24 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		u = uv[0];
 		v = uv[1];
 		pdf *= bilinear_PDF(u, v, w);
+		float s_pdf = pdf;
 
-		// sampling for specular depends on the view
-		vec3 screen_uvw = gl_FragCoord.xyz * vec3(scene_data_block.data.screen_pixel_size, 1.0);
-		float s_u = randomize(random_seed(screen_uvw) + i);
-		float s_v = randomize(hash(random_seed(screen_uvw) + i));
-
-		vec2 s_uv = sample_bilinear(s_u, s_v, w);
-		s_u = s_uv[0];
-		s_v = s_uv[1];
-		float s_pdf = spec_inv_S * bilinear_PDF(s_u, s_v, w);
-		
 		vec3 sampled_position = sample_squad(squad, u, v);
-		vec3 sampled_position_spec = roughness < 0.5 ? sample_squad(spec_squad, u, v) : sampled_position; // TODO sample from directions within spec_cone_angle
+		vec3 sampled_position_spec = sampled_position;
+		
+		if(has_spec) {
+			// sampling for specular depends on the view
+			vec3 screen_uvw = (gl_FragCoord.xyz+vec3(1920,1080,0.0));// * vec3(scene_data_block.data.screen_pixel_size, 1.0);
+			float s_u = randomize(random_seed(screen_uvw) + i);
+			float s_v = randomize(hash(random_seed(screen_uvw) + i));
+			//s_pdf = spec_inv_S;// * bilinear_PDF(s_u, s_v, sw);
+			// vec2 s_uv = sample_bilinear(s_u, s_v, sw); // for some reason this makes it worse
+			// s_u = s_uv[0];
+			// s_v = s_uv[1];
+			
+			sampled_position_spec = sample_squad(spec_squad, s_u, s_v);
+			//vec3 sampled_position_spec = spec_squad_position + spec_squad_a * s_u + spec_squad_b  * s_v; // DEBUG
+		}
 		vec3 light_rel_vec_diff = sampled_position - sampling_vertex;
 		vec3 light_rel_vec_spec = sampled_position_spec - sampling_vertex;
 
@@ -2330,9 +2114,9 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #endif
 				diffuse_contribution, specular_contribution);
 
-		if (pdf > 0) {
+		if (pdf > 0 && s_pdf > 0) {
 			diffuse_sum += diffuse_contribution / pdf;
-			specular_sum += max(specular_contribution / pdf, 0.0); // s_pdf leads to those ugly edges of the specular region.
+			specular_sum += max(specular_contribution / s_pdf, 0.0); // s_pdf leads to those ugly edges of the specular region.
 			alpha_sum += alpha;
 		} else {
 			sample_nr = max(sample_nr - 1, 1);

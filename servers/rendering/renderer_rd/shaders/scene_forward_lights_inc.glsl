@@ -1796,11 +1796,9 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 
 	float omni_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
 	float cos_falloff = max(dot(area_norm, -light_rel_vec_diff/light_length), 0.0); // cosine term for falloff at 90 degrees to light normal
-	float light_attenuation = omni_attenuation* cos_falloff * (solid_angle);
+	float light_attenuation = omni_attenuation* cos_falloff * (solid_angle) * shadow;
 
 	float size_A = 0.0;
-
-	light_attenuation *= shadow;
 	
 	// Diffuse Option A: lambertian shading. Can't control Attenuation, as it is encoded in the solid angle (square falloff)
 	// diffuse_light += area_lights.data[idx].color * cos_theta_ppd * solid_angle;  // apparently no need to multiply albedo
@@ -1868,12 +1866,17 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 	
 	//vec3 light_vec_spec = normalize(light_rel_vec_spec);
 	vec3 light_vec_spec = normalize(clamped_isec); // just take reflection vector
+	float light_length_spec = length(clamped_isec);
 	float specular_amount = 0;
 	if (spec_solid_angle > 0) {
-		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec) * spec_solid_angle / (2*M_PI); // looks best in most scenarios
+		specular_amount = area_lights.data[idx].specular_amount * dot(normal, light_vec_spec); // looks best in most scenarios
 	}
+	float light_attenuation_spec = get_omni_attenuation(light_length_spec, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation) * cos_falloff * (spec_solid_angle / (2*M_PI)) * shadow;
 
-	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, light_attenuation, f0, orms, specular_amount, albedo, alpha,
+	vec3 diffuse = vec3(0);
+	vec3 specular = vec3(0);
+
+	light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, area_lights.data[idx].color, false, 1.0, f0, orms, specular_amount, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 			backlight,
 #endif
@@ -1892,8 +1895,10 @@ void light_process_area_nearest_point(uint idx, vec3 vertex, vec3 eye_vec, vec3 
 #ifdef LIGHT_ANISOTROPY_USED
 			binormal, tangent, anisotropy,
 #endif
-			diffuse_light,
-			specular_light);
+			diffuse,
+			specular);
+	diffuse_light += diffuse * light_attenuation;
+	specular_light += specular * light_attenuation_spec;
 }
 
 
@@ -2074,9 +2079,11 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 		// TODO: how to calculate attenuation value? probably easiest to base it on diffuse
 		float light_length = length(light_rel_vec_diff);
+		float light_length_spec = length(light_rel_vec_spec);
 		length_sum += light_length;
 
-		float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
+		float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation) * shadow;
+		float light_attenuation_spec = get_omni_attenuation(light_length_spec, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation) * shadow;
 		float specular_amount = area_lights.data[idx].specular_amount;
 
 		float size_A = 0.0; // not sure about this one
@@ -2086,13 +2093,12 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		// TODO: neither SpotLight nor OmniLight implementation gives useful results here.
 #endif //LIGHT_TRANSMITTANCE_USED
 
-		light_attenuation *= shadow;
 		vec3 diffuse_contribution = vec3(0.0, 0.0, 0.0);
 		vec3 specular_contribution = vec3(0.0, 0.0, 0.0);
 
 		vec3 light_vec_diff = normalize(light_rel_vec_diff);
 		vec3 light_vec_spec = normalize(light_rel_vec_spec);
-		light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, color, false, light_attenuation, f0, orms, area_lights.data[idx].specular_amount, albedo, alpha,
+		light_compute(normal, light_vec_diff, light_vec_spec, eye_vec, size_A, color, false, 1.0, f0, orms, area_lights.data[idx].specular_amount, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 				backlight,
 #endif
@@ -2114,20 +2120,20 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 				diffuse_contribution, specular_contribution);
 
 		if (pdf > 0) {
-			diffuse_sum += diffuse_contribution / pdf;
+			diffuse_sum += diffuse_contribution / pdf * light_attenuation;
 		} else {
 			sample_total = max(sample_total - 1, 1);
 		}
 
 		if (s_pdf > 0 && has_spec) {
-			specular_sum += max(specular_contribution / s_pdf, 0.0);
+			specular_sum += max(specular_contribution / s_pdf * light_attenuation_spec, 0.0);
 		} else {
 			spec_sample_total = max(spec_sample_total - 1, 1);
 		}
 	}
 
-	diffuse_light += diffuse_sum / sample_total;
-	specular_light += max(specular_sum / spec_sample_total, 0.0);
+	diffuse_light += diffuse_sum / sample_total ;
+	specular_light += specular_sum / spec_sample_total;
 }
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {

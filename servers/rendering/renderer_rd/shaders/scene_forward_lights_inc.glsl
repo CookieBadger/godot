@@ -1925,8 +1925,9 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
-
-	uint sample_nr = max(area_lights.data[idx].area_stochastic_samples, 1);
+	uint sample_nr = area_lights.data[idx].area_stochastic_samples;
+	uint sample_total = max(sample_nr, 1);
+	uint spec_sample_total = sample_total;
 	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
 	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
 	float alpha_sum = 0.0;
@@ -1951,7 +1952,6 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 
 	vec4 orms_unpacked = unpackUnorm4x8(orms);
 	float roughness = orms_unpacked.y;
-	float roughness_spec_sample_limit = 1.0; // at higher rougness only sample diffuse points.
 	float spec_inv_S;
 	
 	SphericalQuad squad = init_spherical_quad(area_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
@@ -1979,68 +1979,67 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 			
 	vec4 sw;
 	bool has_spec = false;
-	if(roughness < roughness_spec_sample_limit) {
-		vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
-		float h = dot(reflection_vec, -area_norm);
-		if(h > EPSILON) {
-			float d = dot(area_lights.data[idx].position - vertex, -area_norm) / h;
-			vec3 intersection_vec = d * reflection_vec;
-			vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
-			vec3 light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
-			float len_a = length(area_side_a);
-			float len_b = length(area_side_b);
-			float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
-			float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
+	vec3 reflection_vec = normalize(-eye_vec + 2 * dot(eye_vec, normal) * normal);
+	float h = dot(reflection_vec, -area_norm);
+	if(h > EPSILON) {
+		float d = dot(area_lights.data[idx].position - vertex, -area_norm) / h;
+		vec3 intersection_vec = d * reflection_vec;
+		vec3 ref_light_intersection = vertex + intersection_vec; // intersection of reflection_vec with light_plane 
+		vec3 light_to_intersection = ref_light_intersection - area_lights.data[idx].position;
+		float len_a = length(area_side_a);
+		float len_b = length(area_side_b);
+		float isec_a = dot(light_to_intersection, area_side_a) / len_a; // projection onto direction a
+		float isec_b = dot(light_to_intersection, area_side_b) / len_b; // projection onto direction b
 
-			//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
-			float half_apex_angle = sqrt(roughness)*M_PI/2.0; // linear apex angle formula, empirically derived
-			float r = tan(half_apex_angle) * length(intersection_vec);
-			float a = 1.77245385 * r; //sqrt(pi)
-			vec2 d1 = vec2(a,a);
-			vec2 c1 = vec2(isec_a, isec_b);
+		//float half_apex_angle = sqrt(2/(1-roughness+2)); // Suggested apex angle formula (Drobot GPU Pro 5, 2014), produces way too much diffusion.
+		float half_apex_angle = 0.01 + (1.0 - 0.01)*sqrt(roughness)*M_PI/(6.0); // linear apex angle formula, empirically derived
+		float r = tan(half_apex_angle) * length(intersection_vec);
+		float a = 1.77245385 * r; //sqrt(pi)
+		vec2 d1 = vec2(a,a);
+		vec2 c1 = vec2(isec_a, isec_b);
 
-			vec2 d0 = vec2(len_a, len_b); // diagonal
-			vec2 bl0 = vec2(0);
-			vec2 bl1 = vec2(c1 - d1/2);
-			vec2 tr0 = vec2(bl0 + d0);
-			vec2 tr1 = vec2(c1 + d1/2);
-			vec2 bl = max(bl0, bl1);
-			vec2 tr = min(tr0, tr1);
-			vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
+		vec2 d0 = vec2(len_a, len_b); // diagonal
+		vec2 bl0 = vec2(0);
+		vec2 bl1 = vec2(c1 - d1/2);
+		vec2 tr0 = vec2(bl0 + d0);
+		vec2 tr1 = vec2(c1 + d1/2);
+		vec2 bl = max(bl0, bl1);
+		vec2 tr = min(tr0, tr1);
+		vec2 cr0r1 = (bl + tr) / 2; // mid point of corners of intersection quad
 
-			if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
-				vec2 bl_norm = vec2(clamp(bl.x/len_a, 0, 1), clamp(bl.y/len_b, 0, 1));
-				vec2 tr_norm = vec2(clamp(tr.x/len_a, 0, 1), clamp(tr.y/len_b, 0, 1));
-				spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(bl_norm.x, 0, 1) + area_side_b * clamp(bl_norm.y, 0, 1);
-				//intersection_vec_clamped = area_lights.data[idx].position + clamp(cr0r1.x/len_a, 0, 1) * area_side_a + clamp(cr0r1.y/len_b, 0, 1) * area_side_b - vertex;
-				
-				//spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
-				spec_squad_a = area_side_a * (tr_norm.x-bl_norm.x);//clamp(, 0, 1);
-				spec_squad_b = area_side_b * (tr_norm.y-bl_norm.y);//clamp(, 0, 1);
-				
-				SphericalQuad spec_squad = init_spherical_quad(spec_squad_position, spec_squad_a, spec_squad_b, sampling_vertex);
-				spec_inv_S = 1 / spec_squad.S;
-				has_spec = true;
+		if (bl0.x < tr1.x && bl0.y < tr1.y && tr0.x > bl1.x && tr0.y > bl1.y) { // if there is an intersection, i.e. we have some specular reflection
+			vec2 bl_norm = vec2(clamp(bl.x/len_a, 0, 1), clamp(bl.y/len_b, 0, 1));
+			vec2 tr_norm = vec2(clamp(tr.x/len_a, 0, 1), clamp(tr.y/len_b, 0, 1));
+			spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(bl_norm.x, 0, 1) + area_side_b * clamp(bl_norm.y, 0, 1);
+			//intersection_vec_clamped = area_lights.data[idx].position + clamp(cr0r1.x/len_a, 0, 1) * area_side_a + clamp(cr0r1.y/len_b, 0, 1) * area_side_b - vertex;
+			
+			//spec_squad_position = area_lights.data[idx].position + area_side_a * clamp(cr0r1.x/len_a, 0, 1) + area_side_b * clamp(cr0r1.y/len_b, 0, 1);
+			spec_squad_a = area_side_a * (tr_norm.x-bl_norm.x);//clamp(, 0, 1);
+			spec_squad_b = area_side_b * (tr_norm.y-bl_norm.y);//clamp(, 0, 1);
+			
+			SphericalQuad spec_squad = init_spherical_quad(spec_squad_position, spec_squad_a, spec_squad_b, sampling_vertex);
+			spec_inv_S = 1 / spec_squad.S;
+			has_spec = true;
 
-				// vec3 sp00 = spec_squad_position;
-				// vec3 sp10 = spec_squad_position + spec_squad_a;
-				// vec3 sp01 = spec_squad_position + area_side_b;
-				// vec3 sp11 = spec_squad_position + spec_squad_a + area_side_b;
+			vec3 sp00 = spec_squad_position;
+			vec3 sp10 = spec_squad_position + spec_squad_a;
+			vec3 sp01 = spec_squad_position + area_side_b;
+			vec3 sp11 = spec_squad_position + spec_squad_a + area_side_b;
 
-				// vec3 sv00 = normalize(sp00 - sampling_vertex);
-				// vec3 sv10 = normalize(sp10 - sampling_vertex);
-				// vec3 sv01 = normalize(sp01 - sampling_vertex);
-				// vec3 sv11 = normalize(sp11 - sampling_vertex);
-				// //vec3 halfway_vec = normalize((normalize(intersection_vec) + normal)/2.0);
-				// // Compute  weights for rectangle seen from reference point
-				// sw = vec4(
-				// 		max(0.01, abs(dot(sv00, reflection_vec))),
-				// 		max(0.01, abs(dot(sv10, reflection_vec))),
-				// 		max(0.01, abs(dot(sv01, reflection_vec))),
-				// 		max(0.01, abs(dot(sv11, reflection_vec))));
-			}
+			vec3 sv00 = normalize(sp00 - sampling_vertex);
+			vec3 sv10 = normalize(sp10 - sampling_vertex);
+			vec3 sv01 = normalize(sp01 - sampling_vertex);
+			vec3 sv11 = normalize(sp11 - sampling_vertex);
+			//vec3 halfway_vec = normalize((normalize(intersection_vec) + normal)/2.0);
+			// Compute  weights for rectangle seen from reference point
+			sw = vec4(
+					max(0.01, abs(dot(sv00, reflection_vec))),
+					max(0.01, abs(dot(sv10, reflection_vec))),
+					max(0.01, abs(dot(sv01, reflection_vec))),
+					max(0.01, abs(dot(sv11, reflection_vec))));
 		}
 	}
+	
 
 	for (uint i = 0; i < sample_nr; i++) {
 		// sampling of diffuse is based on a world position, so flickering is reduced
@@ -2052,7 +2051,7 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 		u = uv[0];
 		v = uv[1];
 		pdf *= bilinear_PDF(u, v, w);
-		float s_pdf = pdf;
+		float s_pdf = 0.0;
 
 		vec3 sampled_position = sample_squad(squad, u, v);
 		vec3 sampled_position_spec = sampled_position;
@@ -2062,10 +2061,10 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 			vec3 screen_uvw = (gl_FragCoord.xyz+vec3(1920,1080,0.0));// * vec3(scene_data_block.data.screen_pixel_size, 1.0);
 			float s_u = randomize(random_seed(screen_uvw) + i);
 			float s_v = randomize(hash(random_seed(screen_uvw) + i));
-			//s_pdf = spec_inv_S;// * bilinear_PDF(s_u, s_v, sw);
-			// vec2 s_uv = sample_bilinear(s_u, s_v, sw); // for some reason this makes it worse
-			// s_u = s_uv[0];
-			// s_v = s_uv[1];
+			s_pdf = spec_inv_S * bilinear_PDF(s_u, s_v, sw);
+			vec2 s_uv = sample_bilinear(s_u, s_v, sw); // for some reason this makes it worse
+			s_u = s_uv[0];
+			s_v = s_uv[1];
 			
 			sampled_position_spec = sample_squad(spec_squad, s_u, s_v);
 			//vec3 sampled_position_spec = spec_squad_position + spec_squad_a * s_u + spec_squad_b  * s_v; // DEBUG
@@ -2114,19 +2113,21 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #endif
 				diffuse_contribution, specular_contribution);
 
-		if (pdf > 0 && s_pdf > 0) {
+		if (pdf > 0) {
 			diffuse_sum += diffuse_contribution / pdf;
-			specular_sum += max(specular_contribution / s_pdf, 0.0); // s_pdf leads to those ugly edges of the specular region.
-			alpha_sum += alpha;
 		} else {
-			sample_nr = max(sample_nr - 1, 1);
+			sample_total = max(sample_total - 1, 1);
+		}
+
+		if (s_pdf > 0 && has_spec) {
+			specular_sum += max(specular_contribution / s_pdf, 0.0);
+		} else {
+			spec_sample_total = max(spec_sample_total - 1, 1);
 		}
 	}
 
-	float inv_sample_nr = 1.0 / sample_nr;
-	diffuse_light += inv_sample_nr * diffuse_sum;
-	specular_light += inv_sample_nr * specular_sum;
-	alpha = inv_sample_nr * alpha_sum;
+	diffuse_light += diffuse_sum / sample_total;
+	specular_light += max(specular_sum / spec_sample_total, 0.0);
 }
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {

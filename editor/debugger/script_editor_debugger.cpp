@@ -166,6 +166,20 @@ void ScriptEditorDebugger::save_node(ObjectID p_id, const String &p_file) {
 
 void ScriptEditorDebugger::_file_selected(const String &p_file) {
 	switch (file_dialog_purpose) {
+		case SAVE_GPU_PROFILER_CSV: {
+			Error err;
+			Ref<FileAccess> file = FileAccess::open(p_file, FileAccess::WRITE, &err);
+
+			if (err != OK) {
+				ERR_PRINT("Failed to open " + p_file);
+				return;
+			}
+
+			Vector<Vector<String>> profiler_data = visual_profiler->get_data_as_csv();
+			for (int i = 0; i < profiler_data.size(); i++) {
+				file->store_csv_line(profiler_data[i]);
+			}
+		} break;
 		case SAVE_MONITORS_CSV: {
 			Error err;
 			Ref<FileAccess> file = FileAccess::open(p_file, FileAccess::WRITE, &err);
@@ -1012,6 +1026,11 @@ void ScriptEditorDebugger::start(Ref<RemoteDebuggerPeer> p_peer) {
 	_set_reason_text(TTR("Debug session started."), MESSAGE_SUCCESS);
 	_update_buttons_state();
 	emit_signal(SNAME("started"));
+	
+	// AUTOSTART PROFILER
+	profiler->set_pressed(true);
+
+	visual_profiler->set_pressed(true);
 }
 
 void ScriptEditorDebugger::_update_buttons_state() {
@@ -1127,6 +1146,14 @@ void ScriptEditorDebugger::_stack_dump_frame_selected() {
 		inspector->edit(nullptr);
 	}
 }
+
+void ScriptEditorDebugger::_export_gpu_csv() {
+	file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
+	file_dialog->set_access(EditorFileDialog::ACCESS_FILESYSTEM);
+	file_dialog_purpose = SAVE_GPU_PROFILER_CSV;
+	file_dialog->popup_file_dialog();
+}
+
 
 void ScriptEditorDebugger::_export_csv() {
 	file_dialog->set_file_mode(EditorFileDialog::FILE_MODE_SAVE_FILE);
@@ -1796,6 +1823,75 @@ void ScriptEditorDebugger::toggle_profiler(const String &p_profiler, bool p_enab
 	_put_msg("profiler:" + p_profiler, msg_data);
 }
 
+void ScriptEditorDebugger::clear_profiler() const {
+	profiler->clear();
+}
+void ScriptEditorDebugger::export_profiler_csv(const String &p_path) const {
+
+	Error err;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &err);
+
+	if (err != OK) {
+		ERR_PRINT("Failed to open " + p_path);
+		return;
+	}
+	Vector<String> line;
+	line.resize(Performance::MONITOR_MAX);
+
+	// signatures
+	for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+		line.write[i] = Performance::get_singleton()->get_monitor_name(Performance::Monitor(i));
+	}
+	file->store_csv_line(line);
+
+	// values
+	Vector<List<float>::Element *> iterators;
+	iterators.resize(Performance::MONITOR_MAX);
+	bool continue_iteration = false;
+	for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+		iterators.write[i] = performance_profiler->get_monitor_data(Performance::get_singleton()->get_monitor_name(Performance::Monitor(i)))->back();
+		continue_iteration = continue_iteration || iterators[i];
+	}
+	while (continue_iteration) {
+		continue_iteration = false;
+		for (int i = 0; i < Performance::MONITOR_MAX; i++) {
+			if (iterators[i]) {
+				line.write[i] = String::num_real(iterators[i]->get());
+				iterators.write[i] = iterators[i]->prev();
+			} else {
+				line.write[i] = "";
+			}
+			continue_iteration = continue_iteration || iterators[i];
+		}
+		file->store_csv_line(line);
+	}
+	file->store_string("\n");
+
+	Vector<Vector<String>> profiler_data = profiler->get_data_as_csv();
+	for (int i = 0; i < profiler_data.size(); i++) {
+		file->store_csv_line(profiler_data[i]);
+	}
+}
+
+void ScriptEditorDebugger::clear_visual_profiler() const {
+	visual_profiler->clear();
+}
+
+void ScriptEditorDebugger::export_visual_profiler_csv(const String &p_path) const {
+	Error err;
+	Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::WRITE, &err);
+
+	if (err != OK) {
+		ERR_PRINT("Failed to open " + p_path);
+		return;
+	}
+
+	Vector<Vector<String>> profiler_data = visual_profiler->get_data_as_csv();
+	for (int i = 0; i < profiler_data.size(); i++) {
+		file->store_csv_line(profiler_data[i]);
+	}
+}
+
 ScriptEditorDebugger::ScriptEditorDebugger() {
 	tabs = memnew(TabContainer);
 	add_child(tabs);
@@ -2115,6 +2211,10 @@ ScriptEditorDebugger::ScriptEditorDebugger() {
 		export_csv = memnew(Button(TTR("Export measures as CSV")));
 		export_csv->connect(SceneStringName(pressed), callable_mp(this, &ScriptEditorDebugger::_export_csv));
 		buttons->add_child(export_csv);
+
+		export_gpu_csv = memnew(Button(TTR("Export visual profiler measures as CSV")));
+		export_gpu_csv->connect(SceneStringName(pressed), callable_mp(this, &ScriptEditorDebugger::_export_gpu_csv));
+		buttons->add_child(export_gpu_csv);
 
 		misc->add_child(buttons);
 	}

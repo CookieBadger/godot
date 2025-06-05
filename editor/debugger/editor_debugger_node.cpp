@@ -837,3 +837,18 @@ bool EditorDebuggerNode::plugins_capture(ScriptEditorDebugger *p_debugger, const
 	}
 	return parsed;
 }
+
+void EditorDebuggerNode::clear_profiler() const {
+	get_current_debugger()->clear_profiler();
+}
+
+void EditorDebuggerNode::export_profiler_csv(const String &p_path) const {
+	get_current_debugger()->export_profiler_csv(p_path);
+}
+
+void EditorDebuggerNode::clear_visual_profiler() const {
+	get_current_debugger()->clear_visual_profiler();
+}
+void EditorDebuggerNode::export_visual_profiler_csv(const String &p_path) const {
+	get_current_debugger()->export_visual_profiler_csv(p_path);
+}

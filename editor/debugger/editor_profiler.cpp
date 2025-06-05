@@ -177,8 +177,8 @@ void EditorProfiler::_item_edited() {
 }
 
 void EditorProfiler::_update_plot() {
-	const int w = graph->get_size().width;
-	const int h = graph->get_size().height;
+	const int w = MAX(1, graph->get_size().width); // Clamp to 1 to prevent from crashing when profiler is autostarted.
+	const int h = MAX(1, graph->get_size().height);
 	bool reset_texture = false;
 	const int desired_len = w * h * 4;
 
@@ -542,6 +542,7 @@ void EditorProfiler::set_enabled(bool p_enable, bool p_clear) {
 void EditorProfiler::set_pressed(bool p_pressed) {
 	activate->set_pressed(p_pressed);
 	_update_button_text();
+	emit_signal(SNAME("enable_profiling"), activate->is_pressed());
 }
 
 bool EditorProfiler::is_profiling() {

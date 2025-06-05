@@ -179,6 +179,11 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 		RID texture;
 	} best_fit_normal;
 
+	struct LTC {
+		RID lut1_texture;
+		RID lut2_texture;
+	} ltc;
+
 	struct AreaLightShadowBanding { // TODO: what happens with multiple viewports? Should each vp have its own banding flags buffer?
 		AreaLightShadowBandingShaderRD area_light_shadow_banding_shader;
 		RID shader_version;

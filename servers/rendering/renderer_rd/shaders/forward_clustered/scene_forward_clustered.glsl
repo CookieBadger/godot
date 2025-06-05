@@ -2289,9 +2289,7 @@ void fragment_shader(in SceneData scene_data) {
 
 				shadow = blur_shadow(shadow);
 				
-				//light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
-				vec3 vertex_world = (scene_data.inv_view_matrix * vec4(vertex,1.0)).xyz; // used for sampling
-				light_process_area_montecarlo(light_index, vertex, vertex_world, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif

@@ -1128,7 +1128,236 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 	return 1.0;
 }
 
-void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
+float integrate_edge_hill(vec3 p0, vec3 p1) {
+	float cosTheta = dot(p0, p1);
+
+	float x = cosTheta;
+	float y = abs(x);
+	float a = 5.42031 + (3.12829 + 0.0902326 * y) * y;
+	float b = 3.45068 + (4.18814 + y) * y;
+	float theta_sintheta = a / b;
+
+	if (x < 0.0) {
+		theta_sintheta = M_PI * inversesqrt(1.0-x * x) - theta_sintheta;
+	}
+	return theta_sintheta*cross(p0, p1).y;
+}
+
+float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
+ 	float epsilon = 0.00001;
+	bool opposite_sides = dot(p_proj0, p_proj1) < -1.0 + epsilon;
+	if(opposite_sides) {
+		// calculate the point on the line p0 to p1 that is closest to the vertex (origin)
+		vec3 half_point_t = p0 + normalize(p1-p0) * dot(p0, normalize(p0-p1));
+		vec3 half_point = normalize(half_point_t);
+		return integrate_edge_hill(p_proj0, half_point) + integrate_edge_hill(half_point, p_proj1); // TODO: this slows down GPU time by about 10%. 
+	}
+	return integrate_edge_hill(p_proj0, p_proj1); // integrate_edge_hill is quite abit faster >10%
+}
+
+void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count)
+{
+    // detect clipping config
+    int config = 0;
+    if (L[0].y > 0.0) config += 1;
+    if (L[1].y > 0.0) config += 2;
+    if (L[2].y > 0.0) config += 4;
+    if (L[3].y > 0.0) config += 8;
+
+    // clip
+    vertex_count = 0;
+
+    if (config == 0)
+    {
+        // clip all
+    }
+    else if (config == 1) // V1 clip V2 V3 V4
+    {
+        vertex_count = 3;
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
+        L[2] = -L[3].y * L[0] + L[0].y * L[3];
+    }
+    else if (config == 2) // V2 clip V1 V3 V4
+    {
+        vertex_count = 3;
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
+    }
+    else if (config == 3) // V1 V2 clip V3 V4
+    {
+        vertex_count = 4;
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
+        L[3] = -L[3].y * L[0] + L[0].y * L[3];
+    }
+    else if (config == 4) // V3 clip V1 V2 V4
+    {
+        vertex_count = 3;
+        L[0] = -L[3].y * L[2] + L[2].y * L[3];
+        L[1] = -L[1].y * L[2] + L[2].y * L[1];
+    }
+    else if (config == 5) // V1 V3 clip V2 V4) impossible
+    {
+        vertex_count = 0;
+    }
+    else if (config == 6) // V2 V3 clip V1 V4
+    {
+        vertex_count = 4;
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
+        L[3] = -L[3].y * L[2] + L[2].y * L[3];
+    }
+    else if (config == 7) // V1 V2 V3 clip V4
+    {
+        vertex_count = 5;
+        L[4] = -L[3].y * L[0] + L[0].y * L[3];
+        L[3] = -L[3].y * L[2] + L[2].y * L[3];
+    }
+    else if (config == 8) // V4 clip V1 V2 V3
+    {
+        vertex_count = 3;
+        L[0] = -L[0].y * L[3] + L[3].y * L[0];
+        L[1] = -L[2].y * L[3] + L[3].y * L[2];
+        L[2] =  L[3];
+    }
+    else if (config == 9) // V1 V4 clip V2 V3
+    {
+        vertex_count = 4;
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
+        L[2] = -L[2].y * L[3] + L[3].y * L[2];
+    }
+    else if (config == 10) // V2 V4 clip V1 V3) impossible
+    {
+        vertex_count = 0;
+    }
+    else if (config == 11) // V1 V2 V4 clip V3
+    {
+        vertex_count = 5;
+        L[4] = L[3];
+        L[3] = -L[2].y * L[3] + L[3].y * L[2];
+        L[2] = -L[2].y * L[1] + L[1].y * L[2];
+    }
+    else if (config == 12) // V3 V4 clip V1 V2
+    {
+        vertex_count = 4;
+        L[1] = -L[1].y * L[2] + L[2].y * L[1];
+        L[0] = -L[0].y * L[3] + L[3].y * L[0];
+    }
+    else if (config == 13) // V1 V3 V4 clip V2
+    {
+        vertex_count = 5;
+        L[4] = L[3];
+        L[3] = L[2];
+        L[2] = -L[1].y * L[2] + L[2].y * L[1];
+        L[1] = -L[1].y * L[0] + L[0].y * L[1];
+    }
+    else if (config == 14) // V2 V3 V4 clip V1
+    {
+        vertex_count = 5;
+        L[4] = -L[0].y * L[3] + L[3].y * L[0];
+        L[0] = -L[0].y * L[1] + L[1].y * L[0];
+    }
+    else if (config == 15) // V1 V2 V3 V4
+    {
+        vertex_count = 4;
+    }
+    
+    if (vertex_count == 3)
+        L[3] = L[0];
+    if (vertex_count == 4)
+        L[4] = L[0];
+}
+
+vec3 ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
+    // construct the orthonormal basis around the normal vector
+    vec3 x, z;
+	/*if(dot(normal -  eye_vec, normal -  eye_vec) < 0.001) {
+		if(dot(eye_vec, vec3(0,1,0)) < 0.99) {
+			eye_vec = normalize(eye_vec + 0.01 * vec3(0, 1, 0));
+		} else {
+			eye_vec = normalize(eye_vec + 0.01 * vec3(1, 0, 0));
+		}
+	}*/
+    z = -normalize(eye_vec - normal*dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector, unless view=normal. TODO: in that case, we have a problem.
+    x = cross(normal, z);
+
+    // rotate area light in (T1, normal, T2) basis
+    M_inv = M_inv * transpose(mat3(x, normal, z));
+
+	vec3 L[5];
+	L[0] = M_inv * points[0];
+	L[1] = M_inv * points[1];
+	L[2] = M_inv * points[2];
+	L[3] = M_inv * points[3];
+
+	// before normalization, clamp the points such that they are not further away, than 100 times the shorter direction
+	vec3 Lx = L[1]-L[0];
+	vec3 Ly = L[2]-L[1];
+	float len_x = length(Lx);
+	float len_y = length(Ly);
+	float ratio = len_x / len_y;
+	float thresh = 100.0;
+	if (ratio > thresh) { // x >> y
+		float dx = (len_x - len_y * thresh) / len_x;
+		
+		L[0] *= dx;
+		L[1] *= dx;
+		L[2] *= dx;
+		L[3] *=	dx;
+	} else if (ratio < 1.0/thresh) { // b >> a
+		float dy = (len_y - len_x * thresh) / len_y;
+		
+		L[0] *= dy;
+		L[1] *= dy;
+		L[2] *= dy;
+		L[3] *= dy;
+	}
+
+    int n = 0;
+    clip_quad_to_horizon(L, n);
+    if (n == 0)
+        return vec3(0, 0, 0);
+	
+	vec3 L_proj[5];
+	// project onto unit sphere 
+	L_proj[0] = normalize(L[0]);
+	L_proj[1] = normalize(L[1]);
+	L_proj[2] = normalize(L[2]);
+	L_proj[3] = normalize(L[3]);
+	L_proj[4] = normalize(L[4]);
+
+	// Prevent abnormal values when the light goes through (or close to) the fragment
+	// get the normal of this spherical polygon:
+	vec3 pnorm = normalize(cross(L_proj[0] - L_proj[1], L_proj[2] - L_proj[1]));
+	if(abs(dot(pnorm, L_proj[0])) < 1e-10) {
+		// we could just return black, but that would lead to some black pixels in front of the light.
+		// Better, we check if the fragment is on the light, and return white if so. 
+		vec3 r10 = points[0] - points[1];
+		vec3 r12 = points[2] - points[1];
+		float alpha = -dot(points[1], r10)/dot(r10, r10);
+		float beta = -dot(points[1], r12)/dot(r12, r12);
+		if(0.0 < alpha && alpha < 1.0 && 0.0 < beta && beta < 1.0) { // fragment is on light {
+			return vec3(2*M_PI);
+		} else {
+			return vec3(0.0);
+		}
+	}
+
+	float I; // default case of 4 edges, need to adjust for case where light cuts view plane.
+	I = integrate_edge(L_proj[0], L_proj[1], L[0], L[1]);
+	I += integrate_edge(L_proj[1], L_proj[2], L[1], L[2]);
+	I += integrate_edge(L_proj[2], L_proj[3], L[2], L[3]);
+    if (n >= 4)
+        I += integrate_edge(L_proj[3], L_proj[4], L[3], L[4]);
+    if (n == 5)
+        I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
+
+	if(I <= 0) {
+		//return vec3(1.0, 0.0, 1.0); // PINK
+	}
+	return vec3(max(0, I));
+}
+
+// implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
+void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, vec3 f0, uint orms, float shadow, vec3 albedo, inout float alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 		vec3 backlight,
 #endif
@@ -1148,120 +1377,77 @@ void light_process_area_montecarlo(uint idx, vec3 vertex, vec3 vertex_world, vec
 #endif
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
-
 	float EPSILON = 1e-4f;
-	vec3 area_side_a = custom_lights.data[idx].area_side_a;
-	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	vec3 area_side_a = area_lights.data[idx].area_side_a;
+	vec3 area_side_b = area_lights.data[idx].area_side_b;
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
-
-	uint sample_nr = max(custom_lights.data[idx].area_stochastic_samples, 1);
-	vec3 diffuse_sum = vec3(0.0, 0.0, 0.0);
-	vec3 specular_sum = vec3(0.0, 0.0, 0.0);
-	float alpha_sum = 0.0;
-	float length_sum = 0.0;
-
-	vec3 color = custom_lights.data[idx].color;
-	vec3 sampling_vertex = vertex;
-	vec3 vert_to_light = sampling_vertex - custom_lights.data[idx].position;
-
-	if (dot(cross(area_side_a, area_side_b), -vert_to_light) <= 0) {
+	if (dot(-cross(area_side_a, area_side_b), vertex - area_lights.data[idx].position) <= 0) {
 		return; // vertex is behind light
 	}
 
-	if (dot(vert_to_light, vert_to_light) < EPSILON) {
-		sampling_vertex += vec3(0.01, 0.01, 0.01); // small offset
+	vec4 orms_unpacked = unpackUnorm4x8(orms);
+	float roughness = orms_unpacked.y;
+	float metallic = orms_unpacked.z;
+
+	float theta = acos(dot(normal, eye_vec));
+	
+	vec4 M_brdf_abcd;
+	vec3 M_brdf_e_mag_fres;
+		
+	// HEITZ GGX
+	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI)); // TODO: convert 64 to constant
+	lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
+	M_brdf_abcd = texture(ltc_lut1_heitz, lut_uv);
+	M_brdf_e_mag_fres = texture(ltc_lut2_heitz, lut_uv).xyz;
+
+	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
+
+	mat3 M_inv = mat3(
+		vec3(0, 0, 1.0/M_brdf_abcd.z),
+		vec3(-M_brdf_abcd.w * scale, M_brdf_abcd.x * scale, 0),
+		vec3(-M_brdf_e_mag_fres.x * scale, M_brdf_abcd.y * scale, 0)
+	);
+
+	vec3 points[4];
+	points[0] = area_lights.data[idx].position - vertex;
+	points[1] = area_lights.data[idx].position + area_side_a - vertex;
+	points[2] = area_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = area_lights.data[idx].position + area_side_b - vertex;
+
+	vec3 ltc_diffuse = max(ltc_evaluate(vertex, normal, eye_vec, mat3(1), points), vec3(0));
+	vec3 ltc_specular = max(ltc_evaluate(vertex, normal, eye_vec, M_inv, points), vec3(0));
+	
+	float a_half_len = length(area_side_a) / 2.0;
+	float b_half_len = length(area_side_b) / 2.0;
+	mat4 light_mat = mat4(
+		vec4(normalize(area_side_a), 0),
+		vec4(normalize(area_side_b), 0),
+		vec4(normalize(cross(area_side_a, area_side_b)), 0),
+		vec4(area_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
+	);
+	mat4 light_mat_inv = inverse(light_mat);
+	vec3 pos_local_to_light = (light_mat_inv * vec4(vertex, 1)).xyz;
+	vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0);
+	float dist = length(closest_point_local_to_light - pos_local_to_light);
+
+	float light_length = max(0, dist);
+	float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
+	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
+
+	if (metallic < 1.0) {
+		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
+	vec3 spec = ltc_specular * area_lights.data[idx].color;
+	vec3 spec_color = mix(vec3(0.04), albedo, vec3(metallic));
 
-	SphericalQuad squad = init_spherical_quad(custom_lights.data[idx].position, area_side_a, area_side_b, sampling_vertex);
-	if (squad.S == 0) { // area is 0
-		return;
-	}
-	float inv_S = 1 / squad.S;
-
-	vec3 p00 = custom_lights.data[idx].position;
-	vec3 p10 = custom_lights.data[idx].position + area_side_a;
-	vec3 p01 = custom_lights.data[idx].position + area_side_b;
-	vec3 p11 = custom_lights.data[idx].position + area_side_a + area_side_b;
-
-	vec3 v00 = normalize(p00 - sampling_vertex);
-	vec3 v10 = normalize(p10 - sampling_vertex);
-	vec3 v01 = normalize(p01 - sampling_vertex);
-	vec3 v11 = normalize(p11 - sampling_vertex);
-
-	// Compute  weights for rectangle seen from reference point
-	vec4 w = vec4(max(0.01, abs(dot(v00, normal))),
-			max(0.01, abs(dot(v10, normal))), // TODO: double check order of weights here
-			max(0.01, abs(dot(v01, normal))),
-			max(0.01, abs(dot(v11, normal))));
-
-	for (uint i = 0; i < sample_nr; i++) {
-		float pdf = inv_S;
-		float u = randomize1(random_seed1(vertex_world) + i);
-		float v = randomize1(hash1(random_seed1(vertex_world) + i));
-
-		vec2 uv = sample_bilinear(u, v, w);
-		u = uv[0];
-		v = uv[1];
-		pdf *= bilinear_PDF(u, v, w);
-
-		vec3 sampled_position = sample_squad(squad, u, v);
-		vec3 light_rel_vec = sampled_position - sampling_vertex;
-
-		float light_length = length(light_rel_vec);
-		length_sum += light_length;
-
-		float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
-		float specular_amount = custom_lights.data[idx].specular_amount;
-
-		float size_A = 0.0; // not sure about this one
-
-// TODO: Fix this block
-#ifdef LIGHT_TRANSMITTANCE_USED
-		// TODO: neither SpotLight nor OmniLight implementation gives useful results here.
-#endif //LIGHT_TRANSMITTANCE_USED
-
-		light_attenuation *= shadow;
-		vec3 diffuse_contribution = vec3(0.0, 0.0, 0.0);
-		vec3 specular_contribution = vec3(0.0, 0.0, 0.0);
-
-		light_compute(normal, normalize(light_rel_vec), eye_vec, size_A, color, false, light_attenuation, f0, orms, custom_lights.data[idx].specular_amount, albedo, alpha,
-#ifdef LIGHT_BACKLIGHT_USED
-				backlight,
-#endif
-#ifdef LIGHT_TRANSMITTANCE_USED
-				transmittance_color,
-				transmittance_depth,
-				transmittance_boost,
-				transmittance_z,
-#endif
-#ifdef LIGHT_RIM_USED
-				rim * light_attenuation, rim_tint,
-#endif
-#ifdef LIGHT_CLEARCOAT_USED
-				clearcoat, clearcoat_roughness, vertex_normal,
-#endif
-#ifdef LIGHT_ANISOTROPY_USED
-				binormal, tangent, anisotropy,
-#endif
-				diffuse_contribution, specular_contribution);
-
-		if (pdf > 0) {
-			diffuse_sum += diffuse_contribution / pdf;
-			specular_sum += specular_contribution / pdf;
-			alpha_sum += alpha;
-		} else {
-			sample_nr = max(sample_nr - 1, 1);
-		}
-	}
-
-	float inv_sample_nr = 1.0 / sample_nr;
-	diffuse_light += inv_sample_nr * diffuse_sum;
-	specular_light += inv_sample_nr * specular_sum;
-	alpha = inv_sample_nr * alpha_sum;
+	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
+	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
+	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
+
 
 void reflection_process(uint ref_index, vec3 vertex, vec3 ref_vec, vec3 normal, float roughness, vec3 ambient_light, vec3 specular_light, inout vec4 ambient_accum, inout vec4 reflection_accum) {
 	vec3 box_extents = reflections.data[ref_index].box_extents;

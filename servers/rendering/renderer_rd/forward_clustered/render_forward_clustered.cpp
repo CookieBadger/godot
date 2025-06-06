@@ -40,6 +40,7 @@
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/storage/ltc_lut.gen.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -1544,7 +1545,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		_render_shadow_end();
 
 		// Render area shadow reprojection 
-		RENDER_TIMESTAMP("> Area Shadow Reprojection");
+		//RENDER_TIMESTAMP("> Area Shadow Reprojection");
 		// TODO: try to also collect the reprojection passes in scene cull and access them via light_storage, like samples
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;
@@ -1583,7 +1584,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 			light_storage->light_instance_set_area_shadow_samples(p_render_data->render_shadows[p_render_data->area_shadows[i]].light, positions, atlas_indices, weights);
 		}
-		RENDER_TIMESTAMP("< Area Shadow Reprojection");
+		//RENDER_TIMESTAMP("< Area Shadow Reprojection");
 	}
 
 	if (rb_data.is_valid() && ss_effects) {
@@ -2830,8 +2831,8 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	// render only shadow values (PASS_MODE_AREA_SHADOW_REPROJECTION, custom resolution, greyscale)
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
-
-	RENDER_TIMESTAMP("Area Shadow Reprojection Draw " + p_quad);
+	String quad_str = vformat("[P:(%f;%f);S:(%f;%f)]", p_quad.position.x, p_quad.position.y, p_quad.size.x, p_quad.size.y);
+	//RENDER_TIMESTAMP("Area Shadow Reprojection Draw " + quad_str);
 	RD::get_singleton()->draw_command_begin_label("Area Shadow Reprojection");
 
 	Vector<Vector2> points_in_quad = { Vector2(p_quad.get_position()), Vector2(p_quad.get_position().x + p_quad.get_size().x, p_quad.get_position().y), Vector2(p_quad.get_position().x, p_quad.get_position().y + p_quad.get_size().y), Vector2(p_quad.get_end()) };
@@ -2874,7 +2875,7 @@ void RenderForwardClustered::_render_area_shadow_banding_test(RenderDataRD *p_re
 	//     bool too_much_banding = hardware occlusion query about the nr of pixels in output image > 0
 
 	
-	RENDER_TIMESTAMP("Area Shadow Reprojection Compute Test " + p_quad);
+	//RENDER_TIMESTAMP("Area Shadow Reprojection Compute Test " + quad_str);
 
 	Vector<RD::Uniform> shadow_banding_uniforms;
 	{

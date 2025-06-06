@@ -146,8 +146,8 @@ void EditorVisualProfiler::_item_selected() {
 }
 
 void EditorVisualProfiler::_update_plot() {
-	const int w = graph->get_size().width;
-	const int h = graph->get_size().height;
+	const int w = graph->get_size().width + 1;
+	const int h = graph->get_size().height + 1;
 
 	bool reset_texture = false;
 

@@ -1039,7 +1039,14 @@ void light_process_spot(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 v
 
 float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 #ifndef SHADOWS_DISABLED
-	if (custom_lights.data[idx].shadow_opacity > 0.001) {
+	float EPSILON = 1e-4f;
+	vec3 area_side_a = custom_lights.data[idx].area_side_a;
+	vec3 area_side_b = custom_lights.data[idx].area_side_b;
+	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
+		return 1.0;
+	}
+
+	if (custom_lights.data[idx].shadow_opacity > 0.001 && dot(-cross(area_side_a, area_side_b), vertex - custom_lights.data[idx].position) > 0) {
 		// there is a shadowmap
 
 		vec2 texel_size = scene_data_block.data.area_shadow_atlas_pixel_size.xy;
@@ -1083,7 +1090,7 @@ float light_process_custom_shadow(uint idx, vec3 vertex, vec3 normal) {
 			float shadow_len = length(local_vert); //need to remember shadow len from here
 			vec3 shadow_dir = normalize(local_vert);
 
-			vec3 local_normal = normalize(mat3(custom_lights.data[idx].shadow_matrix) * normal);
+			vec3 local_normal = normalize(mat3(shadow_sample_matrix) * normal);
 			vec3 normal_bias = local_normal * custom_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
 
 			vec3 shadow_sample = normalize(shadow_dir + normal_bias);
@@ -1378,13 +1385,13 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		inout vec3 diffuse_light,
 		inout vec3 specular_light) {
 	float EPSILON = 1e-4f;
-	vec3 area_side_a = area_lights.data[idx].area_side_a;
-	vec3 area_side_b = area_lights.data[idx].area_side_b;
+	vec3 area_side_a = custom_lights.data[idx].area_side_a;
+	vec3 area_side_b = custom_lights.data[idx].area_side_b;
 
 	if (dot(area_side_a, area_side_a) < EPSILON || dot(area_side_b, area_side_b) < EPSILON) { // area is 0
 		return;
 	}
-	if (dot(-cross(area_side_a, area_side_b), vertex - area_lights.data[idx].position) <= 0) {
+	if (dot(-cross(area_side_a, area_side_b), vertex - custom_lights.data[idx].position) <= 0) {
 		return; // vertex is behind light
 	}
 
@@ -1400,8 +1407,8 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	// HEITZ GGX
 	vec2 lut_uv = vec2(roughness, theta/(0.5*M_PI)); // TODO: convert 64 to constant
 	lut_uv = lut_uv*(63.0/64.0) + vec2(0.5/64.0); // offset by 1 pixel
-	M_brdf_abcd = texture(ltc_lut1_heitz, lut_uv);
-	M_brdf_e_mag_fres = texture(ltc_lut2_heitz, lut_uv).xyz;
+	M_brdf_abcd = texture(ltc_lut1, lut_uv);
+	M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv).xyz;
 
 	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
 
@@ -1412,10 +1419,10 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	);
 
 	vec3 points[4];
-	points[0] = area_lights.data[idx].position - vertex;
-	points[1] = area_lights.data[idx].position + area_side_a - vertex;
-	points[2] = area_lights.data[idx].position + area_side_a + area_side_b - vertex;
-	points[3] = area_lights.data[idx].position + area_side_b - vertex;
+	points[0] = custom_lights.data[idx].position - vertex;
+	points[1] = custom_lights.data[idx].position + area_side_a - vertex;
+	points[2] = custom_lights.data[idx].position + area_side_a + area_side_b - vertex;
+	points[3] = custom_lights.data[idx].position + area_side_b - vertex;
 
 	vec3 ltc_diffuse = max(ltc_evaluate(vertex, normal, eye_vec, mat3(1), points), vec3(0));
 	vec3 ltc_specular = max(ltc_evaluate(vertex, normal, eye_vec, M_inv, points), vec3(0));
@@ -1426,7 +1433,7 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 		vec4(normalize(area_side_a), 0),
 		vec4(normalize(area_side_b), 0),
 		vec4(normalize(cross(area_side_a, area_side_b)), 0),
-		vec4(area_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
+		vec4(custom_lights.data[idx].position + (area_side_a + area_side_b)/2.0, 1)
 	);
 	mat4 light_mat_inv = inverse(light_mat);
 	vec3 pos_local_to_light = (light_mat_inv * vec4(vertex, 1)).xyz;
@@ -1434,17 +1441,17 @@ void light_process_area_ltc(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, ve
 	float dist = length(closest_point_local_to_light - pos_local_to_light);
 
 	float light_length = max(0, dist);
-	float light_attenuation = get_omni_attenuation(light_length, area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
+	float light_attenuation = get_omni_attenuation(light_length, custom_lights.data[idx].inv_radius, custom_lights.data[idx].attenuation);
 	light_attenuation = clamp(light_attenuation * shadow, 0, 1);
 
 	if (metallic < 1.0) {
-		diffuse_light += ltc_diffuse * area_lights.data[idx].color / (2*M_PI) * light_attenuation;
+		diffuse_light += ltc_diffuse * custom_lights.data[idx].color / (2*M_PI) * light_attenuation;
 	}
-	vec3 spec = ltc_specular * area_lights.data[idx].color;
+	vec3 spec = ltc_specular * custom_lights.data[idx].color;
 	vec3 spec_color = mix(vec3(0.04), albedo, vec3(metallic));
 
 	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0); // TODO
-	specular_light += spec / (2*M_PI) * area_lights.data[idx].specular_amount * light_attenuation;
+	specular_light += spec / (2*M_PI) * custom_lights.data[idx].specular_amount * light_attenuation;
 	//alpha = ?; // ... SHADOW_TO_OPACITY might affect this.
 }
 

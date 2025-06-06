@@ -1545,7 +1545,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		_render_shadow_end();
 
 		// Render area shadow reprojection 
-		//RENDER_TIMESTAMP("> Area Shadow Reprojection");
+		RENDER_TIMESTAMP("Render Reprojection Pass");
 		// TODO: try to also collect the reprojection passes in scene cull and access them via light_storage, like samples
 		for (uint32_t i = 0; i < p_render_data->area_shadows.size(); i++) { // Add shadow passes for all the samples of all lights. Requires: the light RID, instances relevant for the light, Vector2 point of sample on light, and pass index + start index of the light (or rather just index of the slot on the atlas that we should render to)
 			RID light = p_render_data->render_shadows[p_render_data->area_shadows[i]].light;

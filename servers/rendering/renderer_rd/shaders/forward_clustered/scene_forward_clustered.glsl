@@ -2066,7 +2066,7 @@ void fragment_shader(in SceneData scene_data) {
 
 			float size_A = sc_use_directional_soft_shadows ? directional_lights.data[i].size : 0.0;
 
-			light_compute(normal, directional_lights.data[i].direction, normalize(view), size_A,
+			light_compute(normal, directional_lights.data[i].direction, directional_lights.data[i].direction, normalize(view), size_A,
 #ifndef DEBUG_DRAW_PSSM_SPLITS
 					directional_lights.data[i].color * directional_lights.data[i].energy,
 #else
@@ -2277,11 +2277,11 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(custom_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(area_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
 					continue; //not masked
 				}
 
-				if (custom_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (area_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -2289,7 +2289,10 @@ void fragment_shader(in SceneData scene_data) {
 
 				shadow = blur_shadow(shadow);
 				
-				light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+				vec3 vertex_world = (scene_data.inv_view_matrix * vec4(vertex,1.0)).xyz; // used for sampling
+
+				if (area_lights.data[light_index].light_mode == 0) {
+					light_process_area_montecarlo(light_index, vertex, vertex_world, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
 #endif
@@ -2310,6 +2313,51 @@ void fragment_shader(in SceneData scene_data) {
 						binormal, anisotropy,
 #endif
 						diffuse_light, specular_light);
+				}else if (area_lights.data[light_index].light_mode == 1) {
+					light_process_area_nearest_point(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+						transmittance_color,
+						transmittance_depth,
+						transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim,
+						rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, normalize(normal_interp),
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+						tangent,
+						binormal, anisotropy,
+#endif
+						diffuse_light, specular_light);
+				} else if (area_lights.data[light_index].light_mode == 2 || area_lights.data[light_index].light_mode == 3 || area_lights.data[light_index].light_mode == 4 || area_lights.data[light_index].light_mode == 5) {
+					light_process_area_ltc(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
+#ifdef LIGHT_BACKLIGHT_USED
+						backlight,
+#endif
+#ifdef LIGHT_TRANSMITTANCE_USED
+						transmittance_color,
+						transmittance_depth,
+						transmittance_boost,
+#endif
+#ifdef LIGHT_RIM_USED
+						rim,
+						rim_tint,
+#endif
+#ifdef LIGHT_CLEARCOAT_USED
+						clearcoat, clearcoat_roughness, normalize(normal_interp),
+#endif
+#ifdef LIGHT_ANISOTROPY_USED
+						tangent,
+						binormal, anisotropy,
+#endif
+						diffuse_light, specular_light);
+				}
 			}
 		}
 	}
@@ -2332,7 +2380,7 @@ void fragment_shader(in SceneData scene_data) {
 #ifdef AREA_SHADOW_REPROJECTION
 	float shadow = 1.0; // full light
 #ifndef MODE_UNSHADED
-	if (bool(custom_lights.data[0].mask & instances.data[instance_index].layer_mask)) {
+	if (bool(area_lights.data[0].mask & instances.data[instance_index].layer_mask)) {
 		shadow = light_process_custom_shadow(0, vertex, normal);
 	}
 #endif

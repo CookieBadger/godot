@@ -1067,61 +1067,87 @@ float light_process_area_shadow(uint idx, vec3 vertex, vec3 normal) {
 		float inv_depth_range = 1.0 / (1.0 / area_lights.data[idx].inv_radius + len_diagonal);
 
 		float shadow_sum = 0.0;
-		uint resolution = area_lights.data[idx].area_shadow_sample_resolution; // shorthand
-		uint sample_count = resolution * resolution;
+		//uint resolution = area_lights.data[idx].area_shadow_sample_resolution; // shorthand
+		uint resolution = 2;
+		//uint sample_count = resolution * resolution;
+		
+		vec3 vert_to_a = normalize(area_lights.data[idx].position - vertex);
+		vec3 vert_to_b = normalize(area_lights.data[idx].position + area_lights.data[idx].area_side_a - vertex);
+		vec3 vert_to_c = normalize(area_lights.data[idx].position + area_lights.data[idx].area_side_a + area_lights.data[idx].area_side_b - vertex);
+		float horizontal_span = acos(dot(vert_to_a, vert_to_b));
+		float vertical_span = acos(dot(vert_to_b, vert_to_c));
 
-		for (uint i = 0; i < resolution; i++) {
-			for(uint j = 0; j < resolution; j++) {
-				vec2 sample_on_light = vec2(1.0 / max(resolution - 1.0, 1.0) * j, 1.0 / max(resolution - 1.0, 1.0) * i); // where is point i on the light, relative to the light's topright corner
-				uint map_idx = area_lights.data[idx].map_idx[i * resolution + j]; // where is point i on the shadow map
+		uint corner_count = 4;
+		for (uint i = 0; i < 4; i++) {
+			vec2 sample_on_light = vec2(1.0 * (i % 2), (i / 2)); // where is point i on the light, relative to the light's topright corner // (0,0), (1,0), (0,1), (1,1)
+			uint map_idx = area_lights.data[idx].map_idx[i]; // where is point i on the shadow map
 
-				// TODO: area_map_subdivision needed? or can we just calculate subdivision from atlas_rect.size and size of area_shadow_atlas?
-				uint row = map_idx / area_lights.data[idx].area_map_subdivision;
-				uint col = map_idx % area_lights.data[idx].area_map_subdivision;
+			// TODO: area_map_subdivision needed? or can we just calculate subdivision from atlas_rect.size and size of area_shadow_atlas?
+			uint row = map_idx / area_lights.data[idx].area_map_subdivision;
+			uint col = map_idx % area_lights.data[idx].area_map_subdivision;
 
-				// offset of position of point on light in world space
-				vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);
+			// offset of position of point on light in world space
+			vec3 sample_pos = (world_side_a + world_side_b) / 2.0 - (world_side_a * sample_on_light.x + world_side_b * sample_on_light.y);
 
-				// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
-				mat4 sample_mat = scene_data_block.data.inv_view_matrix;
-				sample_mat[3] -= vec4(sample_pos, 0.0);
-				// this matrix transforms a point from viewspace to light sample local space
-				mat4 shadow_sample_matrix = area_lights.data[idx].shadow_matrix * sample_mat;
+			// shadow matrix is calculated as (view_matrix * light_sample_transform)^(-1) = inv_light_transform * inv_sample * inv_view_matrix
+			mat4 sample_mat = scene_data_block.data.inv_view_matrix;
+			sample_mat[3] -= vec4(sample_pos, 0.0);
+			// this matrix transforms a point from viewspace to light sample local space
+			mat4 shadow_sample_matrix = area_lights.data[idx].shadow_matrix * sample_mat;
 
-				vec3 local_vert = (shadow_sample_matrix * vec4(vertex, 1.0)).xyz;
-
-				float shadow_len = length(local_vert); //need to remember shadow len from here
-				vec3 shadow_dir = normalize(local_vert);
-
-				vec3 local_normal = normalize(mat3(shadow_sample_matrix) * normal);
-				vec3 normal_bias = local_normal * area_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
-
-				vec3 shadow_sample = normalize(shadow_dir + normal_bias);
-
-				shadow_sample.z = 1.0 + abs(shadow_sample.z);
-				vec2 pos = shadow_sample.xy / shadow_sample.z;
-				float depth = shadow_len - area_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
-				depth *= inv_depth_range; // max depth = radius + diagonal
-				depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
-
-				vec4 uv_rect = base_uv_rect;
-				vec2 sample_atlas_offset = vec2(col * area_lights.data[idx].atlas_rect.z, row * area_lights.data[idx].atlas_rect.w);
-
-				// depending on the current area light sample point, select the right region on the atlas
-
-				uv_rect.xy += sample_atlas_offset;
-
-				pos = pos * 0.5 + 0.5;
-				pos = uv_rect.xy + pos * uv_rect.zw;
-
-				vec2 shadow_pixel_size = area_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
-
-				shadow_sum += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth));
-			}
+			vec3 local_vert = (shadow_sample_matrix * vec4(vertex, 1.0)).xyz;
 			
-		}
+			float shadow_len = length(local_vert); //need to remember shadow len from here
 
-		float avg_shadow = shadow_sum / sample_count;
+			// offset vertex slightly
+			uint sample_count = 8;
+			float corner_shadow_sum = 0.0;
+			for (uint v = 0; v < sample_count; v++) {
+				for (uint h = 0; h < sample_count; h++) {
+					float rotation_h = 1.0 / max(sample_count - 1.0, 1.0) * h * horizontal_span * -sign(0.5-(i%2));
+					float rotation_v = 1.0 / max(sample_count - 1.0, 1.0) * v * vertical_span * -sign(0.5-(i/2));
+				
+					vec3 shadow_dir = normalize(local_vert);
+					// rotate with rodrigues
+					shadow_dir = shadow_dir * cos(rotation_h) + vec3(-shadow_dir.z, 0, shadow_dir.x)*sin(rotation_h) + vec3(0,shadow_dir.y,0)*(1.0 - cos(rotation_h));
+					shadow_dir = shadow_dir * cos(rotation_v) + vec3(0, -shadow_dir.z, shadow_dir.y) * sin(rotation_v) + vec3(shadow_dir.x, 0, 0) * (1.0 - cos(rotation_v));
+					// rotate with quaternion formula
+					// quat = normalize(vec4(0,sin(rotation/2.0),0, cos(rotation/2.0)));
+					// inv_quat = vec4(-quat.x, -quat.y, -quat.z, quat.w);
+					// shadow_dir = (quat*vec4(shadow_dir,0)*inv_quat).xyz;
+
+					vec3 local_normal = normalize(mat3(shadow_sample_matrix) * normal);
+					vec3 normal_bias = local_normal * area_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
+
+					vec3 shadow_sample = normalize(shadow_dir + normal_bias);
+					
+					shadow_sample.z = 1.0 + abs(shadow_sample.z);
+					vec2 pos = shadow_sample.xy / shadow_sample.z;
+					float depth = shadow_len - area_lights.data[idx].shadow_bias; // shadow_len = distance from vertex to light
+					depth *= inv_depth_range; // max depth = radius + diagonal
+					depth = 1.0 - depth; // shadow map depth range = radius of light (white or 1.0 on map)
+
+					vec4 uv_rect = base_uv_rect;
+					vec2 sample_atlas_offset = vec2(col * area_lights.data[idx].atlas_rect.z, row * area_lights.data[idx].atlas_rect.w);
+
+					// depending on the current area light sample point, select the right region on the atlas
+
+					uv_rect.xy += sample_atlas_offset;
+
+					pos = pos * 0.5 + 0.5;
+					pos = uv_rect.xy + pos * uv_rect.zw;
+
+					vec2 shadow_pixel_size = area_lights.data[idx].soft_shadow_scale / shadow_sample.z * scene_data_block.data.area_shadow_atlas_pixel_size.xy;
+
+					//corner_shadow_sum += sample_pcf_shadow(area_shadow_atlas, shadow_pixel_size, vec3(pos, depth)); // TODO: weight this here.
+					corner_shadow_sum += textureProj(sampler2DShadow(area_shadow_atlas, shadow_sampler), vec4(pos, depth, 1.0));
+				}
+			}
+			shadow_sum += corner_shadow_sum / (sample_count*sample_count);
+		}
+		
+
+		float avg_shadow = shadow_sum / corner_count;
 
 		return mix(1.0, avg_shadow, area_lights.data[idx].shadow_opacity);
 	}

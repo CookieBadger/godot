@@ -12,6 +12,18 @@
 		<link title="Third Person Shooter (TPS) Demo">https://godotengine.org/asset-library/asset/2710</link>
 	</tutorials>
 	<methods>
+		<method name="get_area_size" qualifiers="const">
+			<return type="Vector2" />
+			<description>
+				Returns the width and height of the area.
+			</description>
+		</method>
+		<method name="get_area_texture" qualifiers="const">
+			<return type="Texture2D" />
+			<description>
+				Returns the texture used for the area light.
+			</description>
+		</method>
 		<method name="get_correlated_color" qualifiers="const">
 			<return type="Color" />
 			<description>
@@ -23,6 +35,34 @@
 			<param index="0" name="param" type="int" enum="Light3D.Param" />
 			<description>
 				Returns the value of the specified [enum Light3D.Param] parameter.
+			</description>
+		</method>
+		<method name="is_area_normalizing_energy" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Getter for [member AreaLight3D.area_normalize_energy]. If [code]true[/code], the energy of [AreaLight3D]s are normalized by their areas.
+			</description>
+		</method>
+		<method name="set_area_normalize_energy">
+			<return type="void" />
+			<param index="0" name="enable" type="bool" />
+			<description>
+				Setter for [member AreaLight3D.area_normalize_energy]. If [code]true[/code], the energy of [AreaLight3D]s are normalized by their areas.
+			</description>
+		</method>
+		<method name="set_area_size">
+			<return type="void" />
+			<param index="0" name="area_size" type="Vector2" />
+			<description>
+				Sets the width and height of the area.
+			</description>
+		</method>
+		<method name="set_area_texture">
+			<return type="void" />
+			<param index="0" name="texture" type="Texture2D" />
+			<description>
+				[Texture2D] simulating the colors on the surface of the light. Area light textures make the light appear like a TV screen. For best performance, the texture dimensions should be a multiple of [code]128[/code].
+				[b]Note:[/b] Area light textures are only supported in the Forward+ and Mobile rendering methods, not Compatibility.
 			</description>
 		</method>
 		<method name="set_param">
@@ -95,7 +135,7 @@
 			[b]Note:[/b] Light projector textures are only supported in the Forward+ and Mobile rendering methods, not Compatibility.
 		</member>
 		<member name="light_size" type="float" setter="set_param" getter="get_param" default="0.0" keywords="pcss">
-			The size of the light in Godot units. Only available for [OmniLight3D]s and [SpotLight3D]s. Increasing this value will make the light fade out slower and shadows appear blurrier (also called percentage-closer soft shadows, or PCSS). This can be used to simulate area lights to an extent. Increasing this value above [code]0.0[/code] for lights with shadows enabled will have a noticeable performance cost due to PCSS.
+			The simulated size of the light in Godot units, affecting shading and shadows. For [OmniLight3D]s and [SpotLight3D]s, increasing this value simulates a spherical area light, expanding the size of specular highlights. If shadows are enabled, a penumbra is rendered, making shadows appear blurrier. For [AreaLight3D]s, only the shadows are affected. Penumbras are simulated with percentage-closer soft shadows, or PCSS, which has a noticeable performance cost for values above [code]0.0[/code].
 			[b]Note:[/b] [member light_size] is not affected by [member Node3D.scale] (the light's scale or its parent's scale).
 			[b]Note:[/b] PCSS for positional lights is only supported in the Forward+ and Mobile rendering methods, not Compatibility.
 		</member>

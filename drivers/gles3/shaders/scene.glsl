@@ -35,7 +35,6 @@ APPLY_TONEMAPPING = true
 // these are false, we are doing a directional light pass.
 ADDITIVE_OMNI = false
 ADDITIVE_SPOT = false
-ADDITIVE_AREA = false
 RENDER_MATERIAL = false
 SECOND_REFLECTION_PROBE = false
 LIGHTMAP_BICUBIC_FILTER = false
@@ -216,7 +215,7 @@ scene_data;
 
 #ifdef USE_ADDITIVE_LIGHTING
 
-#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA)
+#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 struct PositionalShadowData {
 	highp mat4 shadow_matrix;
 	highp vec3 light_position;
@@ -253,7 +252,7 @@ layout(std140) uniform DirectionalShadows { // ubo:11
 
 uniform lowp uint directional_shadow_index;
 
-#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA))
+#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 #endif // USE_ADDITIVE_LIGHTING
 
 #ifdef USE_VERTEX_LIGHTING
@@ -267,7 +266,7 @@ out vec3 additive_specular_light_interp;
 #endif // USE_ADDITIVE_LIGHTING
 
 // Directional light data.
-#if !defined(DISABLE_LIGHT_DIRECTIONAL) || (!defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && !defined(ADDITIVE_AREA) && defined(USE_ADDITIVE_LIGHTING))
+#if !defined(DISABLE_LIGHT_DIRECTIONAL) || (!defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && defined(USE_ADDITIVE_LIGHTING))
 
 struct DirectionalLightData {
 	mediump vec3 direction;
@@ -290,7 +289,7 @@ layout(std140) uniform DirectionalLights { // ubo:8
 #endif // !DISABLE_LIGHT_DIRECTIONAL
 
 // Omni, spot, and area light data.
-#if !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || (defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA) && defined(USE_ADDITIVE_LIGHTING))
+#if !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || (defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) && defined(USE_ADDITIVE_LIGHTING))
 
 struct LightData { // This structure needs to be as packed as possible.
 	highp vec3 position;
@@ -334,7 +333,7 @@ uniform uint spot_light_count;
 #endif // BASE_PASS
 #endif // DISABLE_LIGHT_SPOT
 
-#if !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_AREA)
+#if !defined(DISABLE_LIGHT_AREA)
 layout(std140) uniform AreaLightData { // ubo:7
 	LightData area_lights[MAX_LIGHT_DATA_STRUCTS];
 };
@@ -342,9 +341,9 @@ layout(std140) uniform AreaLightData { // ubo:7
 uniform uint area_light_indices[MAX_FORWARD_LIGHTS];
 uniform uint area_light_count;
 #endif // defined(BASE_PASS) && !defined(USE_VERTEX_LIGHTING)
-#endif // !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_AREA)
+#endif // !defined(DISABLE_LIGHT_AREA)
 
-#endif // !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || (!defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA) && defined(USE_ADDITIVE_LIGHTING))
+#endif // !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || (!defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) && defined(USE_ADDITIVE_LIGHTING))
 
 #ifdef USE_ADDITIVE_LIGHTING
 #ifdef ADDITIVE_OMNI
@@ -352,9 +351,6 @@ uniform lowp uint omni_light_index;
 #endif
 #ifdef ADDITIVE_SPOT
 uniform lowp uint spot_light_index;
-#endif
-#ifdef ADDITIVE_AREA
-uniform lowp uint area_light_index;
 #endif
 #endif // USE_ADDITIVE_LIGHTING
 
@@ -442,7 +438,7 @@ void light_process_spot(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, float 
 }
 #endif // !defined(DISABLE_LIGHT_SPOT) || (defined(ADDITIVE_SPOT) && defined(USE_ADDITIVE_LIGHTING))
 
-#if !defined(DISABLE_LIGHT_AREA) || (defined(ADDITIVE_AREA) && defined(USE_ADDITIVE_LIGHTING))
+#if !defined(DISABLE_LIGHT_AREA) && defined(USE_ADDITIVE_LIGHTING))
 void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, float roughness,
 		inout vec3 diffuse_light, inout vec3 specular_light) {
 	vec3 light_rel_vec = area_lights[idx].position - vertex;
@@ -465,7 +461,7 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, float 
 			diffuse_light,
 			specular_light);
 }
-#endif // !defined(DISABLE_LIGHT_AREA) || (defined(ADDITIVE_AREA) && defined(USE_ADDITIVE_LIGHTING))
+#endif // !defined(DISABLE_LIGHT_AREA) && defined(USE_ADDITIVE_LIGHTING))
 
 #endif // !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && defined(USE_VERTEX_LIGHTING)
 
@@ -718,7 +714,7 @@ void main() {
 
 	// Calculate shadows.
 #ifdef USE_ADDITIVE_LIGHTING
-#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA)
+#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 	// Apply normal bias at draw time to avoid issues with scaling non-fused geometry.
 	vec3 light_rel_vec = positional_shadows[positional_shadow_index].light_position - vertex_interp;
 	float light_length = length(light_rel_vec);
@@ -726,11 +722,6 @@ void main() {
 	vec3 normal_offset = (1.0 - aNdotL) * positional_shadows[positional_shadow_index].shadow_normal_bias * light_length * normal_interp;
 
 #ifdef ADDITIVE_SPOT
-	// Calculate coord here so we can take advantage of prefetch.
-	shadow_coord = positional_shadows[positional_shadow_index].shadow_matrix * vec4(vertex_interp + normal_offset, 1.0);
-#endif
-
-#ifdef ADDITIVE_AREA
 	// Calculate coord here so we can take advantage of prefetch.
 	shadow_coord = positional_shadows[positional_shadow_index].shadow_matrix * vec4(vertex_interp + normal_offset, 1.0);
 #endif
@@ -756,7 +747,7 @@ void main() {
 	shadow_coord4 = directional_shadows[directional_shadow_index].shadow_matrix4 * vec4(vertex_interp + normal_offset, 1.0);
 #endif //LIGHT_USE_PSSM4
 
-#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA))
+#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT))
 #endif // USE_ADDITIVE_LIGHTING
 
 #if defined(RENDER_SHADOWS) && !defined(RENDER_SHADOWS_LINEAR)
@@ -839,12 +830,12 @@ void main() {
 #ifdef USE_ADDITIVE_LIGHTING
 	additive_diffuse_light_interp = vec3(0.0);
 	additive_specular_light_interp = vec3(0.0);
-#if !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && !defined(ADDITIVE_AREA)
+#if !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT)
 
 	light_compute(normal_interp, normalize(directional_lights[directional_shadow_index].direction), normalize(view), directional_lights[directional_shadow_index].color * directional_lights[directional_shadow_index].energy, true, roughness,
 			additive_diffuse_light_interp.rgb,
 			additive_specular_light_interp.rgb);
-#endif // !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && !defined(ADDITIVE_AREA)
+#endif // !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT)
 
 #ifdef ADDITIVE_OMNI
 	light_process_omni(omni_light_index, vertex_interp, view, normal_interp, roughness,
@@ -855,11 +846,6 @@ void main() {
 	light_process_spot(spot_light_index, vertex_interp, view, normal_interp, roughness,
 			additive_diffuse_light_interp.rgb, additive_specular_light_interp.rgb);
 #endif // ADDITIVE_SPOT
-
-#ifdef ADDITIVE_AREA
-	light_process_area(area_light_index, vertex_interp, view, normal_interp, roughness,
-			additive_diffuse_light_interp.rgb, additive_specular_light_interp.rgb);
-#endif // ADDITIVE_AREA
 
 #endif // USE_ADDITIVE_LIGHTING
 #endif // !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
@@ -1130,7 +1116,7 @@ uniform highp sampler2DShadow directional_shadow_atlas; // texunit:-3
 #endif // !DISABLE_LIGHT_DIRECTIONAL
 
 // Omni, spot, and area light data.
-#if !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA)
+#if !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 
 struct LightData { // This structure needs to be as packed as possible.
 	highp vec3 position;
@@ -1174,7 +1160,7 @@ uniform uint spot_light_count;
 #endif // defined(BASE_PASS) && !defined(USE_VERTEX_LIGHTING)
 #endif // !defined(DISABLE_LIGHT_SPOT) || defined(ADDITIVE_SPOT)
 
-#if !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_AREA)
+#if !defined(DISABLE_LIGHT_AREA)
 layout(std140) uniform AreaLightData { // ubo:7
 	LightData area_lights[MAX_LIGHT_DATA_STRUCTS];
 };
@@ -1185,9 +1171,9 @@ uniform highp sampler2D ltc_lut2; // texunit:-11
 uniform uint area_light_indices[MAX_FORWARD_LIGHTS];
 uniform uint area_light_count;
 #endif // defined(BASE_PASS) && !defined(USE_VERTEX_LIGHTING)
-#endif // !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_AREA)
+#endif // !defined(DISABLE_LIGHT_AREA)
 
-#endif // !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA)
+#endif // !defined(DISABLE_LIGHT_OMNI) || !defined(DISABLE_LIGHT_SPOT) || !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 
 #ifdef USE_ADDITIVE_LIGHTING
 #ifdef ADDITIVE_OMNI
@@ -1198,12 +1184,8 @@ uniform lowp uint omni_light_index;
 uniform highp sampler2DShadow spot_shadow_texture; // texunit:-3
 uniform lowp uint spot_light_index;
 #endif
-#ifdef ADDITIVE_AREA
-uniform highp sampler2DShadow area_shadow_texture; // texunit:-3
-uniform lowp uint area_light_index;
-#endif
 
-#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT) || defined(ADDITIVE_AREA)
+#if defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)
 struct PositionalShadowData {
 	highp mat4 shadow_matrix;
 	highp vec3 light_position;
@@ -1237,7 +1219,7 @@ layout(std140) uniform DirectionalShadows { // ubo:11
 };
 
 uniform lowp uint directional_shadow_index;
-#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT)) || defined(ADDITIVE_AREA)
+#endif // !(defined(ADDITIVE_OMNI) || defined(ADDITIVE_SPOT))
 
 #if !defined(ADDITIVE_OMNI)
 float sample_shadow(highp sampler2DShadow shadow, float shadow_pixel_size, vec4 pos) {
@@ -1602,7 +1584,7 @@ void light_process_omni(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 }
 #endif // !DISABLE_LIGHT_OMNI
 
-#if !defined(DISABLE_LIGHT_AREA) || defined(ADDITIVE_AREA)
+#if !defined(DISABLE_LIGHT_AREA)
 float integrate_edge_hill(vec3 p0, vec3 p1) {
 	// Approximation suggested by Hill and Heitz, calculating the integral of the spherical cosine distribution over the line between p0 and p1.
 	// Runs faster than the exact formula of Baum et al. (1989).
@@ -2752,7 +2734,7 @@ void main() {
 	specular_light = additive_specular_light_interp * f0;
 #endif // USE_VERTEX_LIGHTING
 
-#if !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && !defined(ADDITIVE_AREA)
+#if !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT)
 
 #ifndef SHADOWS_DISABLED
 // Baked shadowmasks
@@ -2923,7 +2905,7 @@ void main() {
 	diffuse_light *= directional_shadow;
 	specular_light *= directional_shadow;
 #endif // !USE_VERTEX_LIGHTING
-#endif // !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT) && !defined(ADDITIVE_AREA)
+#endif // !defined(ADDITIVE_OMNI) && !defined(ADDITIVE_SPOT)
 
 #ifdef ADDITIVE_OMNI
 	float omni_shadow = 1.0f;
@@ -2987,36 +2969,6 @@ void main() {
 #endif // !USE_VERTEX_LIGHTING
 
 #endif // ADDITIVE_SPOT
-
-#ifdef ADDITIVE_AREA
-	float area_shadow = 1.0f;
-#ifndef SHADOWS_DISABLED
-	area_shadow = sample_shadow(area_shadow_texture, positional_shadows[positional_shadow_index].shadow_atlas_pixel_size, shadow_coord);
-	area_shadow = mix(1.0, area_shadow, area_lights[area_light_index].shadow_opacity);
-#endif // SHADOWS_DISABLED
-
-#ifndef USE_VERTEX_LIGHTING
-	light_process_area(area_light_index, vertex, view, normal, f0, roughness, metallic, area_shadow, albedo, alpha, screen_uv,
-#ifdef LIGHT_BACKLIGHT_USED
-			backlight,
-#endif
-#ifdef LIGHT_RIM_USED
-			rim,
-			rim_tint,
-#endif
-#ifdef LIGHT_CLEARCOAT_USED
-			clearcoat, clearcoat_roughness, geo_normal,
-#endif // LIGHT_CLEARCOAT_USED
-#ifdef LIGHT_ANISOTROPY_USED
-			binormal, tangent, anisotropy,
-#endif
-			diffuse_light, specular_light);
-#else
-	// Just apply shadows to vertex lighting.
-	diffuse_light *= area_shadow;
-	specular_light *= area_shadow;
-#endif // !USE_VERTEX_LIGHTING
-#endif // ADDITIVE_AREA
 
 	diffuse_light *= albedo;
 	diffuse_light *= 1.0 - metallic;

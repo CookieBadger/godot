@@ -617,7 +617,7 @@ void LightStorage::free_light_data() {
 	}
 
 	if (area_light_buffer.is_valid()) {
-		RD::get_singleton()->free(area_light_buffer);
+		RD::get_singleton()->free_rid(area_light_buffer);
 		area_light_buffer = RID();
 	}
 

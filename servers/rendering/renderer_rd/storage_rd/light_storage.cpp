@@ -198,6 +198,7 @@ void LightStorage::area_light_initialize(RID p_rid) {
 
 void LightStorage::light_free(RID p_rid) {
 	light_set_projector(p_rid, RID()); //clear projector
+	light_area_set_texture(p_rid, RID()); //clear area texture
 
 	// delete the texture
 	Light *light = light_owner.get_or_null(p_rid);
@@ -443,6 +444,34 @@ void LightStorage::light_area_set_normalize_energy(RID p_light, bool p_enabled) 
 bool LightStorage::light_area_get_normalize_energy(RID p_light) const {
 	const Light *light = light_owner.get_or_null(p_light);
 	return light->area_normalize_energy;
+}
+
+void LightStorage::light_area_set_texture(RID p_light, RID p_texture) {
+	TextureStorage *texture_storage = TextureStorage::get_singleton();
+	Light *light = light_owner.get_or_null(p_light);
+	ERR_FAIL_NULL(light);
+
+	if (light->area_texture == p_texture) {
+		return;
+	}
+
+	ERR_FAIL_COND(p_texture.is_valid() && !texture_storage->owns_texture(p_texture));
+
+	if (light->area_texture.is_valid()) {
+		texture_storage->texture_remove_from_decal_atlas(light->area_texture, false, true);
+	}
+
+	light->area_texture = p_texture;
+
+	if (light->area_texture.is_valid()) {
+		texture_storage->texture_add_to_decal_atlas(light->area_texture, false, true);
+	}
+	light->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_LIGHT_SOFT_SHADOW_AND_PROJECTOR);
+}
+
+RID LightStorage::light_area_get_texture(RID p_light) const {
+	const Light *light = light_owner.get_or_null(p_light);
+	return light->area_texture;
 }
 
 uint32_t LightStorage::light_get_max_sdfgi_cascade(RID p_light) {
@@ -1098,6 +1127,15 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			light_data.projector_rect[1] = 0;
 			light_data.projector_rect[2] = 0;
 			light_data.projector_rect[3] = 0;
+		}
+
+		RID area_texture = light->area_texture;
+		if (area_texture.is_valid() && type == RS::LIGHT_AREA) {
+			Rect2 rect = texture_storage->decal_atlas_get_texture_rect(area_texture);
+			light_data.projector_rect[0] = rect.position.x;
+			light_data.projector_rect[1] = rect.position.y;
+			light_data.projector_rect[2] = rect.size.width / 3.0 * 2.0; // two thirds = original rect, rest is mipmaps
+			light_data.projector_rect[3] = rect.size.height;
 		}
 
 		const bool needs_shadow =

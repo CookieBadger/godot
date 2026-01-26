@@ -527,7 +527,7 @@ vec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[5], f
 	return fetch_ltc_lod(vec2(1.0) - uv, texture_rect, lod, max_mipmap);
 }
 
-vec3 ltc_evaluate_diff(vec3 vertex, vec3 normal, vec3 points[4], vec4 texture_rect, float max_mipmap) {
+vec3 ltc_evaluate_diff(vec3 normal, vec3 points[4], vec4 texture_rect, float max_mipmap) {
 	// construct the orthonormal basis around the normal vector
 	vec3 x, z;
 	vec3 eye_vec = abs(normal.z) < 0.7 ? vec3(0.0, 0.0, -1.0) : vec3(1.0, 0.0, 0.0);
@@ -582,7 +582,7 @@ vec3 ltc_evaluate_diff(vec3 vertex, vec3 normal, vec3 points[4], vec4 texture_re
 		I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
 	}
 
-	return abs(I) * light_texture;
+	return abs(I) * light_texture; // usually we would divide by (2.0 * M_PI) , but this leads to a large difference to the radiance of point lights
 }
 
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
@@ -624,19 +624,19 @@ bool compute_area_light(uint index, vec3 pos, vec3 normal, inout vec3 light) {
 	}
 
 	vec3 points[4];
-	points[0] = lights.data[index].position - vertex;
-	points[1] = lights.data[index].position + area_width - vertex;
-	points[2] = lights.data[index].position + area_width + area_height - vertex;
-	points[3] = lights.data[index].position + area_height - vertex;
+	points[0] = (lights.data[index].position - vertex) * params.cell_size;
+	points[1] = (lights.data[index].position + area_width - vertex) * params.cell_size;
+	points[2] = (lights.data[index].position + area_width + area_height - vertex) * params.cell_size;
+	points[3] = (lights.data[index].position + area_height - vertex) * params.cell_size;
 
 	if (dot(normal, normal) < 0.04) { // length(normal) < 0.2
 		// if the normal is invalid, just assume, it faces the light to get full light
 		// in this case, the horizon clipping could actually be skipped, since it won't clip anything.
 		normal = -area_direction;
 	}
-	vec3 ltc_diffuse = max(ltc_evaluate_diff(vertex, normal, points, lights.data[index].area_projector_rect, lights.data[index].cos_spot_angle), 0.0);
+	vec3 ltc_diffuse = max(ltc_evaluate_diff(normal, points, lights.data[index].area_projector_rect, lights.data[index].cos_spot_angle), 0.0);
 
-	light = lights.data[index].color * ltc_diffuse / (2.0 * M_PI) * attenuation * lights.data[index].energy;
+	light = lights.data[index].color * ltc_diffuse * attenuation * lights.data[index].energy;
 
 	return true;
 }

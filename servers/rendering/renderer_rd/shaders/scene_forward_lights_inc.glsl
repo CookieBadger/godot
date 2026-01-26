@@ -1415,6 +1415,9 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	ltc_evaluate(vec3(normal), vec3(eye_vec), mat3(1), points, area_lights.data[idx].projector_rect, max_mipmap, ltc_diffuse, ltc_diffuse_tex_color);
 	ltc_evaluate_specular(vec3(normal), vec3(eye_vec), roughness, points, area_lights.data[idx].projector_rect, max_mipmap, ltc_fresnel, ltc_specular, ltc_specular_tex_color);
 
+	half f90 = clamp(dot(f0, hvec3(50.0 * 0.33)), metallic, half(1.0));
+	hvec3 fresnel_color = f0 * max(ltc_fresnel.x, half(0.0)) + (f90 - f0) * max(ltc_fresnel.y, half(0.0));
+
 #if defined(LIGHT_CODE_USED)
 	// Light is written by the user shader.
 	mat4 inv_view_matrix = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
@@ -1462,7 +1465,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	bool is_directional = false;
 	bool is_area = true;
 	float area_diffuse = float(ltc_diffuse);
-	float area_specular = float(ltc_specular);
+	float area_specular = float(ltc_specular * fresnel_color);
 	vec3 area_diffuse_tex_color = vec3(ltc_diffuse_tex_color);
 	vec3 area_specular_tex_color = vec3(ltc_specular_tex_color);
 
@@ -1560,11 +1563,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #elif defined(SPECULAR_DISABLED)
 	// do nothing
 #else
-	hvec3 spec = ltc_specular * ltc_specular_tex_color * color;
-	half f90 = clamp(dot(f0, hvec3(50.0 * 0.33)), metallic, half(1.0));
-	hvec3 spec_color = f0;
-
-	spec *= spec_color * max(ltc_fresnel.x, half(0.0)) + (f90 - spec_color) * max(ltc_fresnel.y, half(0.0));
+	hvec3 spec = ltc_specular * ltc_specular_tex_color * color * fresnel_color;
 	specular_light += spec * specular_amount * light_attenuation_ltc;
 #endif // SPECULAR_TOON
 

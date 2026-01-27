@@ -1108,7 +1108,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 		RID projector = light->projector;
 
-		if (projector.is_valid()) {
+		if (projector.is_valid() && type != RS::LIGHT_AREA) {
 			Rect2 rect = texture_storage->decal_atlas_get_texture_rect(projector);
 
 			if (type == RS::LIGHT_SPOT) {

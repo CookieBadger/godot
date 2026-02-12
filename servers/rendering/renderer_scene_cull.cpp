@@ -2890,9 +2890,10 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 
 	// Minimize allocations when picking the most relevant lights per mesh.
 	// We need to track the score and current index of the best N lights.
-	thread_local LocalVector<Pair<float, uint32_t>> omni_score_idx, spot_score_idx;
+	thread_local LocalVector<Pair<float, uint32_t>> omni_score_idx, spot_score_idx, area_score_idx;
 	omni_score_idx.clear();
 	spot_score_idx.clear();
+	area_score_idx.clear();
 	uint32_t max_lights_per_mesh = scene_render->get_max_lights_per_mesh();
 	uint32_t max_lights_total = scene_render->get_max_lights_total();
 
@@ -3012,18 +3013,20 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						geom->geometry_instance->clear_light_instances();
 						if ((max_lights_per_mesh > 0) && (max_lights_total > 0)) {
 							// For the top N lights, track the score and the index into the internal light storage array.
-							uint32_t total_omni_count = 0, total_spot_count = 0;
-							bool omni_needs_heap = true, spot_needs_heap = true;
-							uint32_t omni_count = 0, spot_count = 0;
+							uint32_t total_omni_count = 0, total_spot_count = 0, total_area_count;
+							bool omni_needs_heap = true, spot_needs_heap = true, area_needs_heap = true;
+							uint32_t omni_count = 0, spot_count = 0, area_count = 0;
 							omni_score_idx.clear();
 							spot_score_idx.clear();
+							area_score_idx.clear();
 							SortArray<Pair<float, uint32_t>> heapify; // SortArray has heap functions, but no local storage.
 							// Iterate over the lights (possibly > max_renderable_lights), keeping the closest to the mesh center.
 							Vector3 mesh_center = idata.instance->transformed_aabb.get_center();
 							for (const Instance *E : geom->lights) {
 								RS::LightType light_type = RSG::light_storage->light_get_type(E->base);
 								if (((RS::LIGHT_OMNI == light_type) && (total_omni_count++ < max_lights_total)) ||
-										((RS::LIGHT_SPOT == light_type) && (total_spot_count++ < max_lights_total))) {
+										((RS::LIGHT_SPOT == light_type) && (total_spot_count++ < max_lights_total)) ||
+										((RS::LIGHT_AREA == light_type) && (total_area_count++ < max_lights_total))) {
 									// Perform culling.
 									if (!(RSG::light_storage->light_get_cull_mask(E->base) & idata.layer_mask)) {
 										continue;
@@ -3101,6 +3104,32 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 													uint32_t replace_index = spot_score_idx[0].second;
 													geom->geometry_instance->pair_light_instance(light->instance, light_type, replace_index);
 													heapify.adjust_heap(0, 0, spot_count, Pair(light_inst_score, replace_index), &spot_score_idx[0]);
+												}
+											}
+										} break;
+										case RS::LIGHT_AREA: {
+											if (area_count < max_lights_per_mesh) {
+												// We have room to just add it, and track the score and where it goes.
+												area_score_idx.push_back(Pair(light_inst_score, area_count));
+												geom->geometry_instance->pair_light_instance(light->instance, light_type, area_count++);
+											} else {
+												if (area_needs_heap) {
+													// We need to make this a heap one time.
+													heapify.make_heap(0, area_count, &area_score_idx[0]);
+													area_needs_heap = false;
+												}
+												if (light_inst_score < area_score_idx[0].first) {
+#if VERIFY_RELEVANT_LIGHT_HEAP
+													// The [0] element should have the max score.
+													for (uint32_t vi = 1; vi < max_lights_per_mesh; ++vi) {
+														if (area_score_idx[vi].first > area_score_idx[0].first) {
+															ERR_PRINT_ONCE("Relevant Area Light Heap Error");
+														}
+													}
+#endif
+													uint32_t replace_index = area_score_idx[0].second;
+													geom->geometry_instance->pair_light_instance(light->instance, light_type, replace_index);
+													heapify.adjust_heap(0, 0, area_count, Pair(light_inst_score, replace_index), &area_score_idx[0]);
 												}
 											}
 										} break;

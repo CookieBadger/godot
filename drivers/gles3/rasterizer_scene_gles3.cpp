@@ -113,9 +113,11 @@ void RasterizerSceneGLES3::GeometryInstanceGLES3::pair_light_instance(
 				}
 			} break;
 			case RS::LIGHT_AREA: {
-				if (paired_area_light_count < (uint32_t)config->max_lights_per_object) {
-					paired_area_lights.push_back(p_light_instances[i]);
-					paired_area_light_count++;
+				if (placement_idx >= paired_area_light_count) {
+					paired_area_lights.push_back(p_light_instance);
+					++paired_area_light_count;
+				} else {
+					paired_area_lights[placement_idx] = p_light_instance;
 				}
 			} break;
 			default:

@@ -2775,9 +2775,9 @@ void RenderForwardMobile::GeometryInstanceForwardMobile::pair_light_instance(
 				}
 			} break;
 			case RS::LIGHT_AREA: {
-				if (area_light_count < (uint32_t)MAX_RDL_CULL) {
-					area_lights[area_light_count] = RendererRD::LightStorage::get_singleton()->light_instance_get_forward_id(p_light_instances[i]);
-					area_light_count++;
+				area_lights[placement_idx] = light_id;
+				if (placement_idx >= area_light_count) {
+					area_light_count = placement_idx + 1;
 				}
 			} break;
 			default:

@@ -1139,7 +1139,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half f90 = clamp(dot(f0, hvec3(50.0 * 0.33)), metallic, half(1.0));
 	hvec3 fresnel_color = f0 * max(half(ltc_fresnel.x), half(0.0)) + (f90 - f0) * max(half(ltc_fresnel.y), half(0.0));
 
-#if defined(LIGHT_CODE_USED)
+#if defined(LIGHT_CODE_USED) && defined(AREA_LIGHT_CODE_USED)
 	// Light is written by the user shader.
 	mat4 inv_view_matrix = transpose(mat4(scene_data_block.data.inv_view_matrix[0],
 			scene_data_block.data.inv_view_matrix[1],

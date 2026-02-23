@@ -341,64 +341,6 @@ bool compute_light_at_pos(uint index, vec3 pos, vec3 normal, inout vec3 light, i
 	return true;
 }
 
-vec3 ltc_evaluate_diff(vec3 normal, vec3 points[4], vec4 texture_rect, float max_mipmap) {
-	// construct the orthonormal basis around the normal vector
-	vec3 x, z;
-	vec3 eye_vec = abs(normal.z) < 0.7 ? vec3(0.0, 0.0, -1.0) : vec3(1.0, 0.0, 0.0);
-	z = -normalize(eye_vec - normal * dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector
-	x = cross(normal, z);
-
-	// rotate area light in (T1, normal, T2) basis
-	mat3 basis = transpose(mat3(x, normal, z));
-
-	vec3 L[5];
-	L[0] = basis * points[0];
-	L[1] = basis * points[1];
-	L[2] = basis * points[2];
-	L[3] = basis * points[3];
-	vec3 L_unclipped[4] = { L[0], L[1], L[2], L[3] };
-
-	int n = 0;
-	clip_quad_to_horizon(L, n);
-	if (n == 0) {
-		return vec3(0.0);
-	}
-
-	vec3 light_texture = vec3(1.0);
-	if (texture_rect != vec4(0.0)) {
-		light_texture = fetch_ltc_filtered_texture_with_form_factor(texture_rect, L_unclipped, max_mipmap, area_light_atlas, texture_sampler);
-	}
-
-	vec3 L_proj[5];
-	// project onto unit sphere
-	L_proj[0] = normalize(L[0]);
-	L_proj[1] = normalize(L[1]);
-	L_proj[2] = normalize(L[2]);
-	L_proj[3] = normalize(L[3]);
-	L_proj[4] = normalize(L[4]);
-
-	// Prevent abnormal values when the light goes through (or close to) the fragment
-	vec3 pnorm = normalize(cross(L_proj[0] - L_proj[1], L_proj[2] - L_proj[1]));
-	if (abs(dot(pnorm, L_proj[0])) < 1e-10) {
-		// we could just return black, but that would lead to some black pixels in front of the light.
-		// for global illumination that shouldn't cause any visual artifacts
-		return vec3(0.0);
-	}
-
-	float I;
-	I = integrate_edge(L_proj[0], L_proj[1], L[0], L[1]);
-	I += integrate_edge(L_proj[1], L_proj[2], L[1], L[2]);
-	I += integrate_edge(L_proj[2], L_proj[3], L[2], L[3]);
-	if (n >= 4) {
-		I += integrate_edge(L_proj[3], L_proj[4], L[3], L[4]);
-	}
-	if (n == 5) {
-		I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
-	}
-
-	return abs(I) * light_texture; // usually we would divide by (2.0 * M_PI) , but this leads to a large difference to the radiance of point lights
-}
-
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
 bool compute_area_light(uint index, vec3 pos, vec3 normal, inout vec3 light) {
 	float EPSILON = 1e-7f;
@@ -448,7 +390,10 @@ bool compute_area_light(uint index, vec3 pos, vec3 normal, inout vec3 light) {
 		// in this case, the horizon clipping could actually be skipped, since it won't clip anything.
 		normal = -area_direction;
 	}
-	vec3 ltc_diffuse = max(ltc_evaluate_diff(normal, points, lights.data[index].area_projector_rect, lights.data[index].cos_spot_angle), 0.0);
+	vec3 light_tex_color = vec3(1.0);
+	float ltc;
+	ltc_evaluate_diff(normal, points, lights.data[index].area_projector_rect, lights.data[index].cos_spot_angle, area_light_atlas, texture_sampler, ltc, light_tex_color);
+	vec3 ltc_diffuse = ltc * light_tex_color;
 
 	light = lights.data[index].color * ltc_diffuse * attenuation * lights.data[index].energy;
 

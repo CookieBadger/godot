@@ -156,7 +156,8 @@ private:
 		float specular_amount;
 		float shadow_opacity;
 
-		alignas(16) float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
+		float pad[2];
+		float atlas_rect[4]; // in omni, used for atlas uv, in spot, used for projector uv
 		float shadow_matrix[16];
 		float shadow_bias;
 		float shadow_normal_bias;

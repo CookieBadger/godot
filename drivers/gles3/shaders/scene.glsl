@@ -1819,9 +1819,6 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0);
 	float dist = length(closest_point_local_to_light - pos_local_to_light);
 
-	float light_length = max(0, dist);
-	float decay = area_lights[idx].attenuation;
-
 	vec3 points[4];
 	points[0] = area_lights[idx].position - vertex;
 	points[1] = area_lights[idx].position + area_width - vertex;
@@ -1837,15 +1834,14 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	float f90 = clamp(dot(f0, vec3(50.0 * 0.33)), metallic, 1.0);
 	vec3 fresnel_color = f0 * max(ltc_fresnel.x, 0.0) + (f90 - f0) * max(ltc_fresnel.y, 0.0);
 
-#ifndef LIGHT_CODE_USED
-	decay -= 2.0; // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
-#endif
-	float attenuation = get_omni_spot_attenuation(light_length, area_lights[idx].inv_radius, decay);
+	float light_length = max(0, dist);
+	float light_attenuation_raw = get_omni_spot_attenuation(light_length, area_lights[idx].inv_radius, area_lights[idx].attenuation);
+	float light_attenuation = light_attenuation_raw * light_length * light_length; // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
 
 	vec3 light_color = area_lights[idx].color;
-	attenuation *= shadow;
+	float attenuation = light_attenuation * shadow;
 
-#if defined(LIGHT_CODE_USED)
+#if defined(LIGHT_CODE_USED) && defined(AREA_LIGHT_CODE_USED)
 	// light is written by the light shader
 
 	highp mat4 model_matrix = world_transform;
@@ -1869,7 +1865,7 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 #else
 
 	if (metallic < 1.0) {
-		diffuse_light += ltc_diffuse * light_color / (2.0 * M_PI) * attenuation;
+		diffuse_light += ltc_diffuse * light_color * attenuation;
 	}
 
 	vec3 spec = ltc_specular * light_color * fresnel_color;

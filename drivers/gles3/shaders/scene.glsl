@@ -1779,204 +1779,7 @@ void light_process_omni(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 
 #if !defined(DISABLE_LIGHT_AREA)
 
-float acos_approx(float p_x) {
-	float x = abs(p_x);
-	float res = -0.156583f * x + (M_PI / 2.0);
-	res *= sqrt(1.0f - x);
-	return (p_x >= 0) ? res : M_PI - res;
-}
-
-float integrate_edge_hill(vec3 p0, vec3 p1) {
-	// Approximation suggested by Hill and Heitz, calculating the integral of the spherical cosine distribution over the line between p0 and p1.
-	// Runs faster than the exact formula of Baum et al. (1989).
-	float cosTheta = dot(p0, p1);
-
-	float x = cosTheta;
-	float y = abs(x);
-	float a = 5.42031 + (3.12829 + 0.0902326 * y) * y;
-	float b = 3.45068 + (4.18814 + y) * y;
-	float theta_sintheta = a / b;
-
-	if (x < 0.0) {
-		theta_sintheta = M_PI * inversesqrt(1.0 - x * x) - theta_sintheta;
-	}
-	return theta_sintheta * cross(p0, p1).y;
-}
-
-float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
-	float epsilon = 0.00001;
-	bool opposite_sides = dot(p_proj0, p_proj1) < -1.0 + epsilon;
-	if (opposite_sides) {
-		// calculate the point on the line p0 to p1 that is closest to the vertex (origin)
-		vec3 half_point_t = p0 + normalize(p1 - p0) * dot(p0, normalize(p0 - p1));
-		vec3 half_point = normalize(half_point_t);
-		return integrate_edge_hill(p_proj0, half_point) + integrate_edge_hill(half_point, p_proj1);
-	}
-	return integrate_edge_hill(p_proj0, p_proj1);
-}
-
-void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count) {
-	// detect clipping config
-	int config = 0;
-	if (L[0].y > 0.0) {
-		config += 1;
-	}
-	if (L[1].y > 0.0) {
-		config += 2;
-	}
-	if (L[2].y > 0.0) {
-		config += 4;
-	}
-	if (L[3].y > 0.0) {
-		config += 8;
-	}
-
-	// clip
-	vertex_count = 0;
-
-	if (config == 0) {
-		// clip all
-	} else if (config == 1) // V1 clip V2 V3 V4
-	{
-		vertex_count = 3;
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-		L[2] = -L[3].y * L[0] + L[0].y * L[3];
-	} else if (config == 2) // V2 clip V1 V3 V4
-	{
-		vertex_count = 3;
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-	} else if (config == 3) // V1 V2 clip V3 V4
-	{
-		vertex_count = 4;
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-		L[3] = -L[3].y * L[0] + L[0].y * L[3];
-	} else if (config == 4) // V3 clip V1 V2 V4
-	{
-		vertex_count = 3;
-		L[0] = -L[3].y * L[2] + L[2].y * L[3];
-		L[1] = -L[1].y * L[2] + L[2].y * L[1];
-	} else if (config == 5) // V1 V3 clip V2 V4) impossible
-	{
-		vertex_count = 0;
-	} else if (config == 6) // V2 V3 clip V1 V4
-	{
-		vertex_count = 4;
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-		L[3] = -L[3].y * L[2] + L[2].y * L[3];
-	} else if (config == 7) // V1 V2 V3 clip V4
-	{
-		vertex_count = 5;
-		L[4] = -L[3].y * L[0] + L[0].y * L[3];
-		L[3] = -L[3].y * L[2] + L[2].y * L[3];
-	} else if (config == 8) // V4 clip V1 V2 V3
-	{
-		vertex_count = 3;
-		L[0] = -L[0].y * L[3] + L[3].y * L[0];
-		L[1] = -L[2].y * L[3] + L[3].y * L[2];
-		L[2] = L[3];
-	} else if (config == 9) // V1 V4 clip V2 V3
-	{
-		vertex_count = 4;
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-		L[2] = -L[2].y * L[3] + L[3].y * L[2];
-	} else if (config == 10) // V2 V4 clip V1 V3) impossible
-	{
-		vertex_count = 0;
-	} else if (config == 11) // V1 V2 V4 clip V3
-	{
-		vertex_count = 5;
-		L[4] = L[3];
-		L[3] = -L[2].y * L[3] + L[3].y * L[2];
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-	} else if (config == 12) // V3 V4 clip V1 V2
-	{
-		vertex_count = 4;
-		L[1] = -L[1].y * L[2] + L[2].y * L[1];
-		L[0] = -L[0].y * L[3] + L[3].y * L[0];
-	} else if (config == 13) // V1 V3 V4 clip V2
-	{
-		vertex_count = 5;
-		L[4] = L[3];
-		L[3] = L[2];
-		L[2] = -L[1].y * L[2] + L[2].y * L[1];
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-	} else if (config == 14) // V2 V3 V4 clip V1
-	{
-		vertex_count = 5;
-		L[4] = -L[0].y * L[3] + L[3].y * L[0];
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-	} else if (config == 15) // V1 V2 V3 V4
-	{
-		vertex_count = 4;
-	}
-
-	if (vertex_count == 3) {
-		L[3] = L[0];
-	}
-	if (vertex_count == 4) {
-		L[4] = L[0];
-	}
-}
-
-float ltc_evaluate(vec3 vertex, vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4]) {
-	// construct the orthonormal basis around the normal vector
-	vec3 x, z;
-	z = -normalize(eye_vec - normal * dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector
-	x = cross(normal, z);
-
-	// rotate area light in (T1, normal, T2) basis
-	M_inv = M_inv * transpose(mat3(x, normal, z));
-
-	vec3 L[5];
-	L[0] = M_inv * points[0];
-	L[1] = M_inv * points[1];
-	L[2] = M_inv * points[2];
-	L[3] = M_inv * points[3];
-
-	int n = 0;
-	clip_quad_to_horizon(L, n);
-	if (n == 0) {
-		return 0.0;
-	}
-
-	vec3 L_proj[5];
-	// project onto unit sphere
-	L_proj[0] = normalize(L[0]);
-	L_proj[1] = normalize(L[1]);
-	L_proj[2] = normalize(L[2]);
-	L_proj[3] = normalize(L[3]);
-	L_proj[4] = normalize(L[4]);
-
-	// Prevent abnormal values when the light goes through (or close to) the fragment
-	vec3 pnorm = normalize(cross(L_proj[0] - L_proj[1], L_proj[2] - L_proj[1]));
-	if (abs(dot(pnorm, L_proj[0])) < 1e-10) {
-		// we could just return black, but that would lead to some black pixels in front of the light.
-		// Better, we check if the fragment is on the light, and return white if so.
-		vec3 r10 = points[0] - points[1];
-		vec3 r12 = points[2] - points[1];
-		float alpha = -dot(points[1], r10) / dot(r10, r10);
-		float beta = -dot(points[1], r12) / dot(r12, r12);
-		if (0.0 < alpha && alpha < 1.0 && 0.0 < beta && beta < 1.0) { // fragment is on light {
-			return 2.0 * M_PI;
-		} else {
-			return 0.0;
-		}
-	}
-
-	float I;
-	I = integrate_edge(L_proj[0], L_proj[1], L[0], L[1]);
-	I += integrate_edge(L_proj[1], L_proj[2], L[1], L[2]);
-	I += integrate_edge(L_proj[2], L_proj[3], L[2], L[3]);
-	if (n >= 4) {
-		I += integrate_edge(L_proj[3], L_proj[4], L[3], L[4]);
-	}
-	if (n == 5) {
-		I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
-	}
-
-	return abs(I);
-}
+#include "area_lights_inc.glsl"
 
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
 void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f0, float roughness, float metallic, float shadow, vec3 albedo, inout float alpha, vec2 screen_uv,
@@ -2019,32 +1822,20 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	float light_length = max(0, dist);
 	float decay = area_lights[idx].attenuation;
 
-	float theta = acos_approx(dot(normal, eye_vec));
-
-	vec4 M_brdf_abcd;
-	vec3 M_brdf_e_mag_fres;
-
-	vec2 lut_uv = vec2(max(roughness, 0.02), theta / (0.5 * M_PI));
-	float LTC_LUT_SIZE = 64.0;
-	lut_uv = lut_uv * (63.0 / LTC_LUT_SIZE) + vec2(0.5 / LTC_LUT_SIZE); // offset by 1 pixel
-	M_brdf_abcd = texture(ltc_lut1, lut_uv);
-	M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv).xyz;
-
-	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
-
-	mat3 M_inv = mat3(
-			vec3(0, 0, 1.0 / M_brdf_abcd.z),
-			vec3(-M_brdf_abcd.w * scale, M_brdf_abcd.x * scale, 0),
-			vec3(-M_brdf_e_mag_fres.x * scale, M_brdf_abcd.y * scale, 0));
-
 	vec3 points[4];
 	points[0] = area_lights[idx].position - vertex;
 	points[1] = area_lights[idx].position + area_width - vertex;
 	points[2] = area_lights[idx].position + area_width + area_height - vertex;
 	points[3] = area_lights[idx].position + area_height - vertex;
 
-	float ltc_diffuse = max(ltc_evaluate(vertex, normal, eye_vec, mat3(1), points), 0.0);
-	float ltc_specular = max(ltc_evaluate(vertex, normal, eye_vec, M_inv, points), 0.0);
+	float ltc_diffuse = 0.0;
+	float ltc_specular = 0.0;
+	vec2 ltc_fresnel = vec2(0.0);
+	ltc_evaluate(normal, eye_vec, mat3(1), points, ltc_diffuse);
+	ltc_evaluate_specular(normal, eye_vec, roughness, points, ltc_lut1, ltc_lut2, ltc_specular, ltc_fresnel);
+
+	float f90 = clamp(dot(f0, vec3(50.0 * 0.33)), metallic, 1.0);
+	vec3 fresnel_color = f0 * max(ltc_fresnel.x, 0.0) + (f90 - f0) * max(ltc_fresnel.y, 0.0);
 
 #ifndef LIGHT_CODE_USED
 	decay -= 2.0; // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
@@ -2066,10 +1857,8 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	float specular_amount = area_lights[idx].specular_amount;
 
 	bool is_area = true;
-	float area_diffuse = ltc_diffuse;
-	float area_specular = ltc_specular;
-	vec3 area_diffuse_tex_color = vec3(1.0);
-	vec3 area_specular_tex_color = vec3(1.0);
+	vec3 area_diffuse = vec3(ltc_diffuse);
+	vec3 area_specular = ltc_specular * fresnel_color;
 
 	/* clang-format off */
 
@@ -2082,11 +1871,9 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	if (metallic < 1.0) {
 		diffuse_light += ltc_diffuse * light_color / (2.0 * M_PI) * attenuation;
 	}
-	vec3 spec = ltc_specular * light_color;
-	vec3 spec_color = mix(vec3(0.04), albedo, vec3(metallic));
 
-	spec *= spec_color * max(M_brdf_e_mag_fres.y, 0.0) + (1.0 - spec_color) * max(M_brdf_e_mag_fres.z, 0.0);
-	specular_light += spec / (2.0 * M_PI) * area_lights[idx].specular_amount * attenuation;
+	vec3 spec = ltc_specular * light_color * fresnel_color;
+	specular_light += spec * area_lights[idx].specular_amount * attenuation;
 #endif // LIGHT_CODE_USED
 }
 #endif // !DISABLE_LIGHT_AREA

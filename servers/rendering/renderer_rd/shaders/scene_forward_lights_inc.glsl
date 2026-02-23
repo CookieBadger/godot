@@ -950,100 +950,6 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			diffuse_light, specular_light);
 }
 
-float acos_approx(float p_x) {
-	float x = abs(p_x);
-	float res = -0.156583f * x + (M_PI / 2.0);
-	res *= sqrt(1.0f - x);
-	return (p_x >= 0) ? res : M_PI - res;
-}
-
-void ltc_evaluate(vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4], vec4 texture_rect, float max_mipmap, out half integral, out hvec3 tex_color) {
-	// default is white
-	tex_color = hvec3(1.0);
-	// construct the orthonormal basis around the normal vector
-	vec3 x, z;
-	z = -normalize(eye_vec - normal * dot(eye_vec, normal)); // expanding the angle between view and normal vector to 90 degrees, this gives a normal vector
-	x = cross(normal, z);
-
-	// rotate area light in (T1, normal, T2) basis
-	M_inv = M_inv * transpose(mat3(x, normal, z));
-
-	vec3 L[5];
-	L[0] = M_inv * points[0];
-	L[1] = M_inv * points[1];
-	L[2] = M_inv * points[2];
-	L[3] = M_inv * points[3];
-	vec3 L_unclipped[4] = { L[0], L[1], L[2], L[3] };
-
-	int n = 0;
-	clip_quad_to_horizon(L, n);
-	if (n == 0) {
-		integral = half(0.0);
-		return;
-	}
-
-	if (texture_rect != vec4(0.0)) {
-		tex_color = hvec3(fetch_ltc_filtered_texture_with_form_factor(texture_rect, L_unclipped, max_mipmap, area_light_atlas, light_projector_sampler));
-	}
-
-	vec3 L_proj[5];
-	// project onto unit sphere
-	L_proj[0] = normalize(L[0]);
-	L_proj[1] = normalize(L[1]);
-	L_proj[2] = normalize(L[2]);
-	L_proj[3] = normalize(L[3]);
-	L_proj[4] = normalize(L[4]);
-
-	// Prevent abnormal values when the light goes through (or close to) the fragment
-	vec3 pnorm = normalize(cross(L_proj[0] - L_proj[1], L_proj[2] - L_proj[1]));
-	if (abs(dot(pnorm, L_proj[0])) < 1e-10) {
-		// we could just return black, but that would lead to some black pixels in front of the light.
-		// Better, we check if the fragment is on the light, and return white if so.
-		vec3 r10 = points[0] - points[1];
-		vec3 r12 = points[2] - points[1];
-		float alpha = -dot(points[1], r10) / dot(r10, r10);
-		float beta = -dot(points[1], r12) / dot(r12, r12);
-		if (0.0 < alpha && alpha < 1.0 && 0.0 < beta && beta < 1.0) { // fragment is on light {
-			integral = half(1.0);
-			return;
-		} else {
-			integral = half(0.0);
-			return;
-		}
-	}
-
-	float I;
-	I = integrate_edge(L_proj[0], L_proj[1], L[0], L[1]);
-	I += integrate_edge(L_proj[1], L_proj[2], L[1], L[2]);
-	I += integrate_edge(L_proj[2], L_proj[3], L[2], L[3]);
-	if (n >= 4) {
-		I += integrate_edge(L_proj[3], L_proj[4], L[3], L[4]);
-	}
-	if (n == 5) {
-		I += integrate_edge(L_proj[4], L_proj[0], L[4], L[0]);
-	}
-
-	integral = half(abs(I) / (2.0 * M_PI));
-}
-
-void ltc_evaluate_specular(vec3 normal, vec3 eye_vec, half roughness, vec3 points[4], vec4 texture_rect, float max_mipmap, out hvec2 fresnel, out half ltc_specular, out hvec3 ltc_specular_tex_color) {
-	half theta = half(acos_approx(dot(normal, eye_vec)));
-	const half LTC_LUT_SIZE = half(64.0);
-	hvec2 lut_pos = hvec2(max(roughness, half(0.02)), theta / half(0.5 * M_PI));
-	vec2 lut_uv = vec2(lut_pos * (half(63.0) / LTC_LUT_SIZE) + hvec2(half(0.5) / LTC_LUT_SIZE)); // offset by 1 pixel
-	vec4 M_brdf_abcd = texture(ltc_lut1, lut_uv);
-	vec3 M_brdf_e_mag_fres = texture(ltc_lut2, lut_uv).xyz;
-	float scale = 1.0 / (M_brdf_abcd.x * M_brdf_e_mag_fres.x - M_brdf_abcd.y * M_brdf_abcd.w);
-
-	mat3 M_inv = mat3(
-			vec3(0, 0, 1.0 / M_brdf_abcd.z),
-			vec3(-M_brdf_abcd.w * scale, M_brdf_abcd.x * scale, 0),
-			vec3(-M_brdf_e_mag_fres.x * scale, M_brdf_abcd.y * scale, 0));
-
-	ltc_evaluate(normal, eye_vec, M_inv, points, texture_rect, max_mipmap, ltc_specular, ltc_specular_tex_color);
-	fresnel = hvec2(M_brdf_e_mag_fres.yz);
-}
-
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
 void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, hvec3 f0, half roughness, half metallic, float taa_frame_count, hvec3 albedo, inout half alpha, vec2 screen_uv, hvec3 energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
@@ -1222,16 +1128,16 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	points[2] = area_lights.data[idx].position + area_width + area_height - vertex;
 	points[3] = area_lights.data[idx].position + area_height - vertex;
 
-	half ltc_diffuse = half(0.0);
-	hvec3 ltc_diffuse_tex_color = hvec3(1.0);
-	half ltc_specular = half(0.0);
-	hvec3 ltc_specular_tex_color = hvec3(1.0);
-	hvec2 ltc_fresnel = hvec2(0.0);
-	ltc_evaluate(vec3(normal), vec3(eye_vec), mat3(1), points, area_lights.data[idx].projector_rect, max_mipmap, ltc_diffuse, ltc_diffuse_tex_color);
-	ltc_evaluate_specular(vec3(normal), vec3(eye_vec), roughness, points, area_lights.data[idx].projector_rect, max_mipmap, ltc_fresnel, ltc_specular, ltc_specular_tex_color);
+	float ltc_diffuse = 0.0;
+	vec3 ltc_diffuse_tex_color = vec3(1.0);
+	float ltc_specular = 0.0;
+	vec3 ltc_specular_tex_color = vec3(1.0);
+	vec2 ltc_fresnel = vec2(0.0);
+	ltc_evaluate(vec3(normal), vec3(eye_vec), mat3(1), points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, light_projector_sampler, ltc_diffuse, ltc_diffuse_tex_color);
+	ltc_evaluate_specular(vec3(normal), vec3(eye_vec), roughness, points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, light_projector_sampler, ltc_lut1, ltc_lut2, ltc_specular, ltc_fresnel, ltc_specular_tex_color);
 
 	half f90 = clamp(dot(f0, hvec3(50.0 * 0.33)), metallic, half(1.0));
-	hvec3 fresnel_color = f0 * max(ltc_fresnel.x, half(0.0)) + (f90 - f0) * max(ltc_fresnel.y, half(0.0));
+	hvec3 fresnel_color = f0 * max(half(ltc_fresnel.x), half(0.0)) + (f90 - f0) * max(half(ltc_fresnel.y), half(0.0));
 
 #if defined(LIGHT_CODE_USED)
 	// Light is written by the user shader.
@@ -1279,10 +1185,8 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	vec3 specular_light_highp = vec3(specular_light);
 	bool is_directional = false;
 	bool is_area = true;
-	float area_diffuse = float(ltc_diffuse);
-	float area_specular = float(ltc_specular * fresnel_color);
-	vec3 area_diffuse_tex_color = vec3(ltc_diffuse_tex_color);
-	vec3 area_specular_tex_color = vec3(ltc_specular_tex_color);
+	vec3 area_diffuse = ltc_diffuse * ltc_diffuse_tex_color;
+	vec3 area_specular = ltc_specular * vec3(fresnel_color) * ltc_specular_tex_color;
 
 #CODE : LIGHT
 
@@ -1334,9 +1238,9 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #endif
 		// transmission can't use ltc_diffuse_tex_color, because for backface pixels texture would have to be sampled for opposite normal direction.
 #ifdef SSS_MODE_SKIN
-		diffuse_light += SSS_skin(ltc_diffuse, transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, color * isotropic_light_color * area);
+		diffuse_light += SSS_skin(half(ltc_diffuse), transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, color * isotropic_light_color * area);
 #else
-		diffuse_light += SSS(ltc_diffuse, transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, color * isotropic_light_color * area);
+		diffuse_light += SSS(half(ltc_diffuse), transmittance_depth, transmittance_z, transmittance_boost, transmittance_color, color * isotropic_light_color * area);
 #endif
 	}
 #endif //LIGHT_TRANSMITTANCE_USED
@@ -1348,37 +1252,37 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #endif
 
 #if defined(DIFFUSE_TOON)
-	half diffuse = smoothstep(-roughness, max(roughness, half(0.01)), ltc_diffuse);
+	half diffuse = smoothstep(-roughness, max(roughness, half(0.01)), hvec3(ltc_diffuse));
 	diffuse_light += diffuse * isotropic_light_color * color * area * light_attenuation;
 #else
 	if (metallic < half(1.0)) {
-		diffuse_light += ltc_diffuse * ltc_diffuse_tex_color * color * light_attenuation_ltc;
+		diffuse_light += hvec3(ltc_diffuse) * hvec3(ltc_diffuse_tex_color) * color * light_attenuation_ltc;
 	}
 #endif // DIFFUSE_TOON
 
 #if defined(LIGHT_BACKLIGHT_USED)
 	// backlight can't use ltc_diffuse_tex_color, because for backface pixels texture would have to sampled for opposite normal direction.
-	diffuse_light += max(half(1.0) - ltc_diffuse, half(0.0)) * backlight * color * isotropic_light_color * area * light_attenuation;
+	diffuse_light += max(half(1.0) - hvec3(ltc_diffuse), half(0.0)) * backlight * color * isotropic_light_color * area * light_attenuation;
 #endif
 
 #if defined(LIGHT_CLEARCOAT_USED)
-	hvec3 cc_specular_tex_color = hvec3(1.0);
-	half cc_specular_ltc = half(0.0);
-	hvec2 fresnel_discard;
-	ltc_evaluate_specular(vec3(vertex_normal), vec3(eye_vec), clearcoat_roughness, points, area_lights.data[idx].projector_rect, max_mipmap, fresnel_discard, cc_specular_ltc, cc_specular_tex_color);
-	specular_light += cc_specular_ltc * cc_specular_tex_color * clearcoat * color * light_attenuation_ltc * specular_amount;
+	vec3 cc_specular_tex_color = vec3(1.0);
+	float cc_specular_ltc = 0.0;
+	vec2 fresnel_discard;
+	ltc_evaluate_specular(vec3(vertex_normal), vec3(eye_vec), float(clearcoat_roughness), points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, light_projector_sampler, ltc_lut1, ltc_lut2, cc_specular_ltc, fresnel_discard, cc_specular_tex_color);
+	specular_light += half(cc_specular_ltc) * hvec3(cc_specular_tex_color) * clearcoat * color * light_attenuation_ltc * specular_amount;
 #endif // LIGHT_CLEARCOAT_USED
 
 #if defined(SPECULAR_TOON)
 	// If ltc_specular turns out to be not similar enough to RdotV, since its based on GGX, toon shading would need its own lookup-table.
 	half mid = half(1.0) - roughness;
 	mid *= mid;
-	half intensity = smoothstep(mid - roughness * half(0.5), mid + roughness * half(0.5), ltc_specular) * mid; // should we use specular tex color here?? or diffuse? or white?
-	diffuse_light += intensity * ltc_specular_tex_color * color * light_attenuation * specular_amount; // write to diffuse_light, as in toon shading you generally want no reflection
+	half intensity = smoothstep(mid - roughness * half(0.5), mid + roughness * half(0.5), half(ltc_specular)) * mid; // should we use specular tex color here?? or diffuse? or white?
+	diffuse_light += intensity * hvec3(ltc_specular_tex_color) * color * light_attenuation * specular_amount; // write to diffuse_light, as in toon shading you generally want no reflection
 #elif defined(SPECULAR_DISABLED)
 	// do nothing
 #else
-	hvec3 spec = ltc_specular * ltc_specular_tex_color * color * fresnel_color;
+	hvec3 spec = half(ltc_specular) * hvec3(ltc_specular_tex_color) * color * fresnel_color;
 	specular_light += spec * specular_amount * light_attenuation_ltc;
 #endif // SPECULAR_TOON
 

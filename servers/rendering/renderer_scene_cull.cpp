@@ -3013,7 +3013,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						geom->geometry_instance->clear_light_instances();
 						if ((max_lights_per_mesh > 0) && (max_lights_total > 0)) {
 							// For the top N lights, track the score and the index into the internal light storage array.
-							uint32_t total_omni_count = 0, total_spot_count = 0, total_area_count;
+							uint32_t total_omni_count = 0, total_spot_count = 0, total_area_count = 0;
 							bool omni_needs_heap = true, spot_needs_heap = true, area_needs_heap = true;
 							uint32_t omni_count = 0, spot_count = 0, area_count = 0;
 							omni_score_idx.clear();

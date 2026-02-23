@@ -1,3 +1,4 @@
+// COPIED FROM servers\rendering\renderer_rd\shaders\area_lights_inc.glsl
 // Functions related to area lights
 
 #define M_PI 3.14159265359

@@ -579,7 +579,7 @@ vec3 fetch_ltc_lod(vec2 uv, vec4 texture_rect, float lod, float max_mipmap) {
 	return sample_col.rgb * sample_col.a; // premultiply alpha channel
 }
 
-vec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[5], float max_mipmap) {
+vec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[4], float max_mipmap) {
 	vec3 L0 = normalize(L[0]);
 	vec3 L1 = normalize(L[1]);
 	vec3 L2 = normalize(L[2]);
@@ -591,8 +591,6 @@ vec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[5], f
 	F += integrate_edge_hill(L2, L3);
 	F += integrate_edge_hill(L3, L0);
 
-	//return F;//
-	//F = vec3(0.0, 1.0, 0.0);
 	vec2 uv;
 	float lod = 0.0;
 
@@ -639,7 +637,7 @@ float ltc_evaluate_diff(vec3 normal, vec3 points[4], vec4 texture_rect, float ma
 	L[1] = basis * points[1];
 	L[2] = basis * points[2];
 	L[3] = basis * points[3];
-	vec3 L_unclipped[5] = L;
+	vec3 L_unclipped[4] = { L[0], L[1], L[2], L[3] };
 
 	int n = 0;
 	clip_quad_to_horizon(L, n);

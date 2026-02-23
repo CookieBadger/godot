@@ -18,6 +18,8 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #include "../light_data_inc.glsl"
 #include "../oct_inc.glsl"
 
+#include "../area_lights_inc.glsl"
+
 #define M_TAU 6.28318530718
 #define M_PI 3.14159265359
 
@@ -262,28 +264,6 @@ float henyey_greenstein(float cos_theta, float g) {
 	return k * (1.0 - g * g) / (pow(1.0 + g * g - 2.0 * g * cos_theta, 1.5));
 }
 
-// Form factor function for area light, taken from Ureña, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
-float quad_solid_angle(vec3 L[4]) {
-	// The solid angle of a spherical rectangle is the difference of the sum of its angles
-	// and the sum of the angles of a plane rectangle (2*PI)
-	vec3 c1 = cross(L[0], L[1]);
-	vec3 c2 = cross(L[1], L[2]);
-	vec3 c3 = cross(L[2], L[3]);
-	vec3 c4 = cross(L[3], L[0]);
-	vec3 n0 = normalize(c1);
-	vec3 n1 = normalize(c2);
-	vec3 n2 = normalize(c3);
-	vec3 n3 = normalize(c4);
-	float g0 = acos(clamp(dot(-n0, n1), -1.0, 1.0));
-	float g1 = acos(clamp(dot(-n1, n2), -1.0, 1.0));
-	float g2 = acos(clamp(dot(-n2, n3), -1.0, 1.0));
-	float g3 = acos(clamp(dot(-n3, n0), -1.0, 1.0));
-
-	float angle_sum = g0 + g1 + g2 + g3;
-
-	return clamp(angle_sum - M_TAU, 0.0, M_TAU);
-}
-
 #define TEMPORAL_FRAMES 16
 
 const vec3 halton_map[TEMPORAL_FRAMES] = vec3[](
@@ -306,18 +286,6 @@ const vec3 halton_map[TEMPORAL_FRAMES] = vec3[](
 
 // Higher values will make light in volumetric fog fade out sooner when it's occluded by shadow.
 const float INV_FOG_FADE = 10.0;
-
-vec3 fetch_ltc_lod(vec2 uv, vec4 texture_rect, float lod, float max_mipmap) {
-	float low = min(max(floor(lod), 0.0), max_mipmap - 1.0);
-	float high = min(max(floor(lod + 1.0), 1.0), max_mipmap);
-	vec2 sample_pos = clamp(uv, 0.0, 1.0) * texture_rect.zw;
-	vec4 sample_col_low = textureLod(sampler2D(area_light_atlas, linear_sampler), texture_rect.xy + sample_pos, low);
-	vec4 sample_col_high = textureLod(sampler2D(area_light_atlas, linear_sampler), texture_rect.xy + sample_pos, high);
-
-	float blend = high - lod;
-	vec4 sample_col = mix(sample_col_high, sample_col_low, blend);
-	return sample_col.rgb * sample_col.a; // premultiply alpha channel
-}
 
 void main() {
 	vec3 fog_cell_size = 1.0 / vec3(params.fog_volume_size);
@@ -692,7 +660,7 @@ void main() {
 								lod = log(2048.0 * lod) / log(3.0);
 
 								vec2 uv = (closest_point_local_to_light.xy + vec2(a_half_len, b_half_len)) / vec2(a_len, b_len);
-								light *= fetch_ltc_lod(vec2(1.0) - uv, area_lights.data[light_index].projector_rect, lod, area_lights.data[light_index].cone_angle);
+								light *= fetch_ltc_lod(vec2(1.0) - uv, area_lights.data[light_index].projector_rect, lod, area_lights.data[light_index].cone_angle, area_light_atlas, linear_sampler);
 							}
 
 							if (area_lights.data[light_index].shadow_opacity > 0.001) {

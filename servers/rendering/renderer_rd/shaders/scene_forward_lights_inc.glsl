@@ -2,6 +2,8 @@
 
 #extension GL_EXT_control_flow_attributes : require
 
+#include "area_lights_inc.glsl"
+
 // This annotation macro must be placed before any loops that rely on specialization constants as their upper bound.
 // Drivers may choose to unroll these loops based on the possible range of the value that can be deduced from the
 // spec constant, which can lead to their code generation taking a much longer time than desired.
@@ -955,193 +957,6 @@ float acos_approx(float p_x) {
 	return (p_x >= 0) ? res : M_PI - res;
 }
 
-vec3 integrate_edge_hill(vec3 p0, vec3 p1) {
-	// Approximation suggested by Hill and Heitz, calculating the integral of the spherical cosine distribution over the line between p0 and p1.
-	// Runs faster than the exact formula of Baum et al. (1989).
-	float cosTheta = dot(p0, p1);
-
-	float x = cosTheta;
-	float y = abs(x);
-	float a = 5.42031 + (3.12829 + 0.0902326 * y) * y;
-	float b = 3.45068 + (4.18814 + y) * y;
-	float theta_sintheta = a / b;
-
-	if (x < 0.0) {
-		theta_sintheta = M_PI * inversesqrt(1.0 - x * x) - theta_sintheta; // original paper: 0.5*inversesqrt(max(1.0 - x*x, 1e-7)) - theta_sintheta
-	}
-	return theta_sintheta * cross(p0, p1);
-}
-
-float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
-	float epsilon = 0.00001;
-	bool opposite_sides = dot(p_proj0, p_proj1) < -1.0 + epsilon;
-	if (opposite_sides) {
-		// calculate the point on the line p0 to p1 that is closest to the vertex (origin)
-		vec3 half_point_t = p0 + normalize(p1 - p0) * dot(p0, normalize(p0 - p1));
-		vec3 half_point = normalize(half_point_t);
-		return integrate_edge_hill(p_proj0, half_point).y + integrate_edge_hill(half_point, p_proj1).y;
-	}
-	return integrate_edge_hill(p_proj0, p_proj1).y;
-}
-
-void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count) {
-	// detect clipping config
-	int config = 0;
-	if (L[0].y > 0.0) {
-		config += 1;
-	}
-	if (L[1].y > 0.0) {
-		config += 2;
-	}
-	if (L[2].y > 0.0) {
-		config += 4;
-	}
-	if (L[3].y > 0.0) {
-		config += 8;
-	}
-
-	// clip
-	vertex_count = 0;
-
-	if (config == 0) {
-		// clip all
-	} else if (config == 1) // V1 clip V2 V3 V4
-	{
-		vertex_count = 3;
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-		L[2] = -L[3].y * L[0] + L[0].y * L[3];
-	} else if (config == 2) // V2 clip V1 V3 V4
-	{
-		vertex_count = 3;
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-	} else if (config == 3) // V1 V2 clip V3 V4
-	{
-		vertex_count = 4;
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-		L[3] = -L[3].y * L[0] + L[0].y * L[3];
-	} else if (config == 4) // V3 clip V1 V2 V4
-	{
-		vertex_count = 3;
-		L[0] = -L[3].y * L[2] + L[2].y * L[3];
-		L[1] = -L[1].y * L[2] + L[2].y * L[1];
-	} else if (config == 5) // V1 V3 clip V2 V4) impossible
-	{
-		vertex_count = 0;
-	} else if (config == 6) // V2 V3 clip V1 V4
-	{
-		vertex_count = 4;
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-		L[3] = -L[3].y * L[2] + L[2].y * L[3];
-	} else if (config == 7) // V1 V2 V3 clip V4
-	{
-		vertex_count = 5;
-		L[4] = -L[3].y * L[0] + L[0].y * L[3];
-		L[3] = -L[3].y * L[2] + L[2].y * L[3];
-	} else if (config == 8) // V4 clip V1 V2 V3
-	{
-		vertex_count = 3;
-		L[0] = -L[0].y * L[3] + L[3].y * L[0];
-		L[1] = -L[2].y * L[3] + L[3].y * L[2];
-		L[2] = L[3];
-	} else if (config == 9) // V1 V4 clip V2 V3
-	{
-		vertex_count = 4;
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-		L[2] = -L[2].y * L[3] + L[3].y * L[2];
-	} else if (config == 10) // V2 V4 clip V1 V3) impossible
-	{
-		vertex_count = 0;
-	} else if (config == 11) // V1 V2 V4 clip V3
-	{
-		vertex_count = 5;
-		L[4] = L[3];
-		L[3] = -L[2].y * L[3] + L[3].y * L[2];
-		L[2] = -L[2].y * L[1] + L[1].y * L[2];
-	} else if (config == 12) // V3 V4 clip V1 V2
-	{
-		vertex_count = 4;
-		L[1] = -L[1].y * L[2] + L[2].y * L[1];
-		L[0] = -L[0].y * L[3] + L[3].y * L[0];
-	} else if (config == 13) // V1 V3 V4 clip V2
-	{
-		vertex_count = 5;
-		L[4] = L[3];
-		L[3] = L[2];
-		L[2] = -L[1].y * L[2] + L[2].y * L[1];
-		L[1] = -L[1].y * L[0] + L[0].y * L[1];
-	} else if (config == 14) // V2 V3 V4 clip V1
-	{
-		vertex_count = 5;
-		L[4] = -L[0].y * L[3] + L[3].y * L[0];
-		L[0] = -L[0].y * L[1] + L[1].y * L[0];
-	} else if (config == 15) // V1 V2 V3 V4
-	{
-		vertex_count = 4;
-	}
-
-	if (vertex_count == 3) {
-		L[3] = L[0];
-	}
-	if (vertex_count == 4) {
-		L[4] = L[0];
-	}
-}
-
-hvec3 fetch_ltc_lod(vec2 uv, vec4 texture_rect, float lod, float max_mipmap) {
-	float low = min(max(floor(lod), 0.0), max_mipmap - 1.0);
-	float high = min(max(floor(lod + 1.0), 1.0), max_mipmap);
-	vec2 sample_pos = texture_rect.xy + clamp(uv, 0.0, 1.0) * texture_rect.zw; // take border into account
-	vec4 sample_col_low = textureLod(sampler2D(area_light_atlas, light_projector_sampler), sample_pos, low);
-	vec4 sample_col_high = textureLod(sampler2D(area_light_atlas, light_projector_sampler), sample_pos, high);
-
-	half blend = half(high - clamp(lod, high - 1.0, high));
-	hvec4 sample_col = mix(hvec4(sample_col_high), hvec4(sample_col_low), blend);
-	return sample_col.rgb * sample_col.a; // premultiply alpha channel
-}
-
-hvec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[4], float max_mipmap) {
-	vec3 L0 = normalize(L[0]);
-	vec3 L1 = normalize(L[1]);
-	vec3 L2 = normalize(L[2]);
-	vec3 L3 = normalize(L[3]);
-
-	vec3 I = vec3(0.0); // form factor
-	I += integrate_edge_hill(L0, L1);
-	I += integrate_edge_hill(L1, L2);
-	I += integrate_edge_hill(L2, L3);
-	I += integrate_edge_hill(L3, L0);
-	hvec3 F = hvec3(I);
-
-	hvec2 uv;
-	half lod = half(0.0);
-
-	if (dot(F, F) < 1e-16) {
-		uv = hvec2(0.5);
-		lod = half(max_mipmap);
-	} else {
-		hvec3 lx = hvec3(L[1] - L[0]);
-		hvec3 ly = hvec3(L[3] - L[0]);
-		hvec3 ln = cross(lx, ly);
-
-		half dist_x_area = dot(hvec3(L[0]), ln);
-		half d = dist_x_area / dot(F, ln);
-		hvec3 isec = d * F;
-		hvec3 li = isec - hvec3(L[0]); // light to intersection
-
-		half dot_lxy = dot(lx, ly);
-		half inv_dot_lxlx = half(1.0) / dot(lx, lx);
-		hvec3 ly_ = ly - lx * dot_lxy * inv_dot_lxlx;
-
-		uv.y = dot(li, ly_) / dot(ly_, ly_);
-		uv.x = dot(li, lx) * inv_dot_lxlx - dot_lxy * inv_dot_lxlx * uv.y;
-
-		lod = abs(dist_x_area) / pow(dot(ln, ln), half(0.75));
-		lod = log(half(2048.0) * lod) / log(half(3.0));
-	}
-	return fetch_ltc_lod(vec2(1.0) - vec2(uv), texture_rect, float(lod), max_mipmap);
-}
-
 void ltc_evaluate(vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4], vec4 texture_rect, float max_mipmap, out half integral, out hvec3 tex_color) {
 	// default is white
 	tex_color = hvec3(1.0);
@@ -1158,7 +973,7 @@ void ltc_evaluate(vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4], vec4 te
 	L[1] = M_inv * points[1];
 	L[2] = M_inv * points[2];
 	L[3] = M_inv * points[3];
-	vec3[4] L_unclipped = { L[0], L[1], L[2], L[3] };
+	vec3 L_unclipped[4] = { L[0], L[1], L[2], L[3] };
 
 	int n = 0;
 	clip_quad_to_horizon(L, n);
@@ -1168,7 +983,7 @@ void ltc_evaluate(vec3 normal, vec3 eye_vec, mat3 M_inv, vec3 points[4], vec4 te
 	}
 
 	if (texture_rect != vec4(0.0)) {
-		tex_color = fetch_ltc_filtered_texture_with_form_factor(texture_rect, L_unclipped, max_mipmap);
+		tex_color = hvec3(fetch_ltc_filtered_texture_with_form_factor(texture_rect, L_unclipped, max_mipmap, area_light_atlas, light_projector_sampler));
 	}
 
 	vec3 L_proj[5];
@@ -1486,7 +1301,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		lod = log(half(2048.0) * lod) / log(half(3.0));
 
 		hvec2 uv = (closest_point_local_to_light.xy + hvec2(a_half_len, b_half_len)) / hvec2(a_len, b_len);
-		isotropic_light_color = fetch_ltc_lod(vec2(hvec2(1.0) - uv), area_lights.data[idx].projector_rect, float(lod), max_mipmap);
+		isotropic_light_color = hvec3(fetch_ltc_lod(vec2(hvec2(1.0) - uv), area_lights.data[idx].projector_rect, float(lod), max_mipmap, area_light_atlas, light_projector_sampler));
 	}
 #endif
 #ifdef LIGHT_TRANSMITTANCE_USED

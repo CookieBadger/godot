@@ -999,6 +999,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half light_attenuation_raw = get_omni_attenuation(float(light_length), area_lights.data[idx].inv_radius, area_lights.data[idx].attenuation);
 	half light_attenuation_ltc = light_attenuation_raw * half(light_length * light_length); // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
 	half shadow = half(1.0);
+	half cc_attenuation = half(1.0);
 
 #ifndef SHADOWS_DISABLED
 	// Area light shadow.
@@ -1252,25 +1253,27 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #endif
 
 #if defined(DIFFUSE_TOON)
-	half diffuse = smoothstep(-roughness, max(roughness, half(0.01)), hvec3(ltc_diffuse));
+	half diffuse = smoothstep(-roughness, max(roughness, half(0.01)), half(ltc_diffuse));
 	diffuse_light += diffuse * isotropic_light_color * color * area * light_attenuation;
 #else
 	if (metallic < half(1.0)) {
-		diffuse_light += hvec3(ltc_diffuse) * hvec3(ltc_diffuse_tex_color) * color * light_attenuation_ltc;
+		diffuse_light += half(ltc_diffuse) * hvec3(ltc_diffuse_tex_color) * color * light_attenuation_ltc * cc_attenuation;
 	}
 #endif // DIFFUSE_TOON
 
 #if defined(LIGHT_BACKLIGHT_USED)
 	// backlight can't use ltc_diffuse_tex_color, because for backface pixels texture would have to sampled for opposite normal direction.
-	diffuse_light += max(half(1.0) - hvec3(ltc_diffuse), half(0.0)) * backlight * color * isotropic_light_color * area * light_attenuation;
+	diffuse_light += max(half(1.0) - half(ltc_diffuse), half(0.0)) * backlight * color * isotropic_light_color * area * light_attenuation;
 #endif
 
 #if defined(LIGHT_CLEARCOAT_USED)
 	vec3 cc_specular_tex_color = vec3(1.0);
 	float cc_specular_ltc = 0.0;
-	vec2 fresnel_discard;
-	ltc_evaluate_specular(vec3(vertex_normal), vec3(eye_vec), float(clearcoat_roughness), points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, light_projector_sampler, ltc_lut1, ltc_lut2, cc_specular_ltc, fresnel_discard, cc_specular_tex_color);
-	specular_light += half(cc_specular_ltc) * hvec3(cc_specular_tex_color) * clearcoat * color * light_attenuation_ltc * specular_amount;
+	vec2 cc_fresnel;
+	ltc_evaluate_specular(vec3(vertex_normal), vec3(eye_vec), float(clearcoat_roughness), points, area_lights.data[idx].projector_rect, max_mipmap, area_light_atlas, light_projector_sampler, ltc_lut1, ltc_lut2, cc_specular_ltc, cc_fresnel, cc_specular_tex_color);
+	half Fr = half(0.04) * max(half(cc_fresnel.x), half(0.0)) + (1.0 - 0.04) * max(half(cc_fresnel.y), half(0.0)) * clearcoat;
+	cc_attenuation = half(1.0) - Fr;
+	specular_light += half(cc_specular_ltc) * hvec3(cc_specular_tex_color) * Fr * color * light_attenuation_ltc * cc_attenuation * specular_amount;
 #endif // LIGHT_CLEARCOAT_USED
 
 #if defined(SPECULAR_TOON)

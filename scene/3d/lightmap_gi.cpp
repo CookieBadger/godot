@@ -947,14 +947,14 @@ void LightmapGI::_build_area_light_texture_atlas(const Vector<LightmapGI::Lights
 		si.size.height = b_size.height + 1;
 		si.pixel_size = b_size * border; // components are either small powers of 2 or N * border
 		if (tex_size.width < border) {
-			si.pixel_size.width = nearest_power_of_2_templated(tex_size.width);
+			si.pixel_size.width = Math::nearest_power_of_2_templated(tex_size.width);
 		}
 		if (tex_size.height < border) {
-			si.pixel_size.height = nearest_power_of_2_templated(tex_size.height);
+			si.pixel_size.height = Math::nearest_power_of_2_templated(tex_size.height);
 		}
 
 		if (base_size < (uint32_t)si.size.width) {
-			base_size = nearest_power_of_2_templated(si.size.width);
+			base_size = Math::nearest_power_of_2_templated(si.size.width);
 		}
 
 		si.texture = tex;
@@ -1024,7 +1024,7 @@ void LightmapGI::_build_area_light_texture_atlas(const Vector<LightmapGI::Lights
 	}
 
 	r_atlas_size.width = base_size * border;
-	r_atlas_size.height = nearest_power_of_2_templated(atlas_height * border);
+	r_atlas_size.height = Math::nearest_power_of_2_templated(atlas_height * border);
 
 	for (int i = 0; i < item_count; i++) {
 		Rect2 uv_rect;

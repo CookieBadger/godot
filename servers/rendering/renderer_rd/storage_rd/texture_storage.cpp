@@ -3343,14 +3343,14 @@ void TextureStorage::update_area_light_atlas() {
 
 			si.pixel_size = b_size * border; // components are either small powers of 2 or N * border
 			if (src_tex->width < border) {
-				si.pixel_size.width = nearest_power_of_2_templated(src_tex->width);
+				si.pixel_size.width = Math::nearest_power_of_2_templated(src_tex->width);
 			}
 			if (src_tex->height < border) {
-				si.pixel_size.height = nearest_power_of_2_templated(src_tex->height);
+				si.pixel_size.height = Math::nearest_power_of_2_templated(src_tex->height);
 			}
 
 			if (base_size < (uint32_t)si.size.width) {
-				base_size = nearest_power_of_2_templated(si.size.width);
+				base_size = Math::nearest_power_of_2_templated(si.size.width);
 			}
 
 			si.texture = E.key;
@@ -3420,7 +3420,7 @@ void TextureStorage::update_area_light_atlas() {
 		}
 
 		area_light_atlas.size.width = base_size * border;
-		area_light_atlas.size.height = nearest_power_of_2_templated(atlas_height * border);
+		area_light_atlas.size.height = Math::nearest_power_of_2_templated(atlas_height * border);
 
 		for (int i = 0; i < item_count; i++) {
 			AreaLightAtlas::Texture *t = area_light_atlas.textures.getptr(items[i].texture);

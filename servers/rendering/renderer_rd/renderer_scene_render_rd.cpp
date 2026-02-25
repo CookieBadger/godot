@@ -1666,7 +1666,7 @@ PackedByteArray RendererSceneRenderRD::bake_render_area_light_atlas(const TypedA
 	ERR_FAIL_COND_V_MSG(p_mipmaps <= 0, data, "Mipmaps must be greater than 0");
 	ERR_FAIL_COND_V_MSG(p_size.width < pow(2, p_mipmaps), data, "Image width must be greater than mipmaps to power of 2");
 	ERR_FAIL_COND_V_MSG(p_size.height < pow(2, p_mipmaps), data, "Image height must be greater than mipmaps to power of 2");
-	ERR_FAIL_COND_V_MSG(p_size.width != nearest_power_of_2_templated(p_size.width) || p_size.height != nearest_power_of_2_templated(p_size.height), data, "Image size must be a power of 2");
+	ERR_FAIL_COND_V_MSG(p_size.width != Math::nearest_power_of_2_templated(p_size.width) || p_size.height != Math::nearest_power_of_2_templated(p_size.height), data, "Image size must be a power of 2");
 	ERR_FAIL_COND_V_MSG(p_area_light_textures.size() != p_area_light_atlas_texture_rects.size(), data, "Number of Texture2Ds and number of Rect2s must match");
 
 	RD::TextureFormat tf;

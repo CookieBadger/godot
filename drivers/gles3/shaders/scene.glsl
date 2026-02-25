@@ -1836,10 +1836,11 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 
 	float light_length = max(0, dist);
 	float light_attenuation_raw = get_omni_spot_attenuation(light_length, area_lights[idx].inv_radius, area_lights[idx].attenuation);
-	float light_attenuation = light_attenuation_raw * light_length * light_length; // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
+	float light_attenuation_ltc = light_attenuation_raw * light_length * light_length; // solid angle already decreases by inverse square, so attenuation power is 2.0 by default -> subtract 2.0
 
 	vec3 light_color = area_lights[idx].color;
-	float attenuation = light_attenuation * shadow;
+	light_attenuation_ltc = light_attenuation_ltc * shadow;
+	float light_attenuation = light_attenuation_raw * shadow;
 
 #if defined(LIGHT_CODE_USED) && defined(AREA_LIGHT_CODE_USED)
 	// light is written by the light shader
@@ -1855,6 +1856,7 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	bool is_area = true;
 	vec3 area_diffuse = vec3(ltc_diffuse);
 	vec3 area_specular = ltc_specular * fresnel_color;
+	float attenuation = light_attenuation_ltc;
 
 	/* clang-format off */
 
@@ -1863,13 +1865,59 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	/* clang-format on */
 
 #else
+	float area = a_len * b_len;
+	float cc_attenuation = 1.0;
+
+#if defined(LIGHT_BACKLIGHT_USED) || defined(LIGHT_RIM_USED) || defined(DIFFUSE_TOON) || defined(SPECULAR_TOON)
+	float solid_angle = quad_solid_angle(points);
+#endif
+
+#if defined(LIGHT_CLEARCOAT_USED)
+	float cc_specular_ltc = 0.0;
+	vec2 cc_fresnel;
+	ltc_evaluate_specular(vertex_normal, eye_vec, sqrt(mix(0.001, 0.1, float(clearcoat_roughness))), points, ltc_lut1, ltc_lut2, cc_specular_ltc, cc_fresnel);
+	float Fr = 0.04 * max(cc_fresnel.x, 0.0) + (1.0 - 0.04) * max(cc_fresnel.y, 0.0) * clearcoat;
+	cc_attenuation = 1.0 - Fr;
+	specular_light += cc_specular_ltc * Fr * light_color * light_attenuation_ltc * area_lights[idx].specular_amount;
+#endif // LIGHT_CLEARCOAT_USED
 
 	if (metallic < 1.0) {
-		diffuse_light += ltc_diffuse * light_color * attenuation;
+#if defined(DIFFUSE_TOON)
+		float backface_ltc_diffuse = 0.0;
+		vec3 backface_ltc_tex_color_discard = vec3(1.0);
+		ltc_evaluate(vec3(-normal), vec3(eye_vec), mat3(1), points, vec4(0.0), max_mipmap, area_light_atlas, light_projector_sampler, backface_ltc_diffuse, backface_ltc_tex_color_discard);
+		float NdotL = (ltc_diffuse - backface_ltc_diffuse) / (solid_angle / M_PI);
+		float diffuse_brdf_NL = smoothstep(-roughness, max(roughness, 0.01), NdotL) * (1.0 / M_PI);
+		diffuse_light += diffuse_brdf_NL * light_color * area * light_attenuation * cc_attenuation;
+#else
+		diffuse_light += ltc_diffuse * light_color * light_attenuation_ltc * cc_attenuation;
+#endif // DIFFUSE_TOON
+
+#if defined(LIGHT_BACKLIGHT_USED)
+		diffuse_light += light_color * max((solid_angle / M_PI) - ltc_diffuse, 0.0) * backlight * light_attenuation_ltc;
+#endif
 	}
 
+#if defined(LIGHT_RIM_USED) // same as for point lights
+	float cNdotV = max(dot(normal, eye_vec), 1e-4);
+	float rim_light = pow(max(1e-4, 1.0 - cNdotV), max(0.0, (1.0 - roughness) * 16.0));
+	diffuse_light += rim_light * rim * mix(vec3(1.0), albedo, rim_tint) * light_color * solid_angle * light_attenuation_ltc;
+#endif
+
+#if defined(SPECULAR_TOON)
+	// If ltc_specular turns out to be not similar enough to RdotV, since its based on GGX, toon shading would need its own lookup-table.
+	float mid = 1.0 - roughness;
+	mid *= mid;
+
+	float RdotV = ltc_specular / (solid_angle / (M_PI));
+	float intensity = smoothstep(mid - roughness * 0.5, mid + roughness * 0.5, RdotV) * mid; // should we use specular tex color here?? or diffuse? or white?
+	diffuse_light += intensity * light_color * area * light_attenuation * specular_amount; // write to diffuse_light, as in toon shading you generally want no reflection
+#elif defined(SPECULAR_DISABLED)
+	// do nothing
+#else
 	vec3 spec = ltc_specular * light_color * fresnel_color;
-	specular_light += spec * area_lights[idx].specular_amount * attenuation;
+	specular_light += spec * area_lights[idx].specular_amount * light_attenuation_ltc * cc_attenuation;
+#endif // SPECULAR_TOON
 #endif // LIGHT_CODE_USED
 }
 #endif // !DISABLE_LIGHT_AREA

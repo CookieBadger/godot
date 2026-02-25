@@ -2,6 +2,8 @@
 // Partially modified
 // Functions related to area lights
 #define M_PI 3.14159265359
+#define M_TAU 6.28318530718
+
 float acos_approx(float p_x) {
 	float x = abs(p_x);
 	float res = -0.156583f * x + (M_PI / 2.0);
@@ -36,6 +38,28 @@ float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
 		return integrate_edge_hill(p_proj0, half_point).y + integrate_edge_hill(half_point, p_proj1).y;
 	}
 	return integrate_edge_hill(p_proj0, p_proj1).y;
+}
+
+// Form factor function for area light, taken from Ureña, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
+float quad_solid_angle(vec3 L[4]) {
+	// The solid angle of a spherical rectangle is the difference of the sum of its angles
+	// and the sum of the angles of a plane rectangle (2*PI)
+	vec3 c1 = cross(L[0], L[1]);
+	vec3 c2 = cross(L[1], L[2]);
+	vec3 c3 = cross(L[2], L[3]);
+	vec3 c4 = cross(L[3], L[0]);
+	vec3 n0 = normalize(c1);
+	vec3 n1 = normalize(c2);
+	vec3 n2 = normalize(c3);
+	vec3 n3 = normalize(c4);
+	float g0 = acos(clamp(dot(-n0, n1), -1.0, 1.0));
+	float g1 = acos(clamp(dot(-n1, n2), -1.0, 1.0));
+	float g2 = acos(clamp(dot(-n2, n3), -1.0, 1.0));
+	float g3 = acos(clamp(dot(-n3, n0), -1.0, 1.0));
+
+	float angle_sum = g0 + g1 + g2 + g3;
+
+	return clamp(angle_sum - M_TAU, 0.0, M_TAU);
 }
 
 void clip_quad_to_horizon(inout vec3 L[5], out int vertex_count) {

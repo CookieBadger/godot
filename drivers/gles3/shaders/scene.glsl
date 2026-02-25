@@ -1841,6 +1841,7 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	vec3 light_color = area_lights[idx].color;
 	light_attenuation_ltc = light_attenuation_ltc * shadow;
 	float light_attenuation = light_attenuation_raw * shadow;
+	float specular_amount = area_lights[idx].specular_amount;
 
 #if defined(LIGHT_CODE_USED) && defined(AREA_LIGHT_CODE_USED)
 	// light is written by the light shader
@@ -1851,7 +1852,6 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 
 	vec3 light = (light_center - vertex) / light_length;
 	vec3 view = eye_vec;
-	float specular_amount = area_lights[idx].specular_amount;
 
 	bool is_area = true;
 	vec3 area_diffuse = vec3(ltc_diffuse);
@@ -1874,19 +1874,18 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 
 #if defined(LIGHT_CLEARCOAT_USED)
 	float cc_specular_ltc = 0.0;
-	vec2 cc_fresnel;
+	vec2 cc_fresnel = vec2(0.0);
 	ltc_evaluate_specular(vertex_normal, eye_vec, sqrt(mix(0.001, 0.1, float(clearcoat_roughness))), points, ltc_lut1, ltc_lut2, cc_specular_ltc, cc_fresnel);
 	float Fr = 0.04 * max(cc_fresnel.x, 0.0) + (1.0 - 0.04) * max(cc_fresnel.y, 0.0) * clearcoat;
 	cc_attenuation = 1.0 - Fr;
-	specular_light += cc_specular_ltc * Fr * light_color * light_attenuation_ltc * area_lights[idx].specular_amount;
+	specular_light += cc_specular_ltc * Fr * light_color * light_attenuation_ltc * specular_amount;
 #endif // LIGHT_CLEARCOAT_USED
 
 	if (metallic < 1.0) {
 #if defined(DIFFUSE_TOON)
 		float backface_ltc_diffuse = 0.0;
-		vec3 backface_ltc_tex_color_discard = vec3(1.0);
-		ltc_evaluate(vec3(-normal), vec3(eye_vec), mat3(1), points, vec4(0.0), max_mipmap, area_light_atlas, light_projector_sampler, backface_ltc_diffuse, backface_ltc_tex_color_discard);
-		float NdotL = (ltc_diffuse - backface_ltc_diffuse) / (solid_angle / M_PI);
+		ltc_evaluate(vec3(-normal), vec3(eye_vec), mat3(1), points, backface_ltc_diffuse);
+		float NdotL = (ltc_diffuse - backface_ltc_diffuse) / (max(solid_angle, 0.001) / M_PI);
 		float diffuse_brdf_NL = smoothstep(-roughness, max(roughness, 0.01), NdotL) * (1.0 / M_PI);
 		diffuse_light += diffuse_brdf_NL * light_color * area * light_attenuation * cc_attenuation;
 #else
@@ -1909,14 +1908,14 @@ void light_process_area(uint idx, vec3 vertex, vec3 eye_vec, vec3 normal, vec3 f
 	float mid = 1.0 - roughness;
 	mid *= mid;
 
-	float RdotV = ltc_specular / (solid_angle / (M_PI));
+	float RdotV = ltc_specular / (max(solid_angle, 0.001) / (M_PI));
 	float intensity = smoothstep(mid - roughness * 0.5, mid + roughness * 0.5, RdotV) * mid; // should we use specular tex color here?? or diffuse? or white?
 	diffuse_light += intensity * light_color * area * light_attenuation * specular_amount; // write to diffuse_light, as in toon shading you generally want no reflection
 #elif defined(SPECULAR_DISABLED)
 	// do nothing
 #else
 	vec3 spec = ltc_specular * light_color * fresnel_color;
-	specular_light += spec * area_lights[idx].specular_amount * light_attenuation_ltc * cc_attenuation;
+	specular_light += spec * specular_amount * light_attenuation_ltc * cc_attenuation;
 #endif // SPECULAR_TOON
 #endif // LIGHT_CODE_USED
 }

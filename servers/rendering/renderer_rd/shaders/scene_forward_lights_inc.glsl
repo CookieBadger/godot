@@ -1269,7 +1269,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		float backface_ltc_diffuse = 0.0;
 		vec3 backface_ltc_tex_color_discard = vec3(1.0);
 		ltc_evaluate(vec3(-normal), vec3(eye_vec), mat3(1), points, vec4(0.0), max_mipmap, area_light_atlas, light_projector_sampler, backface_ltc_diffuse, backface_ltc_tex_color_discard);
-		half NdotL = half((ltc_diffuse - backface_ltc_diffuse) / (solid_angle / M_PI));
+		half NdotL = half((ltc_diffuse - backface_ltc_diffuse) / (max(solid_angle, 0.001) / M_PI));
 		half diffuse_brdf_NL = smoothstep(-roughness, max(roughness, half(0.01)), NdotL) * half(1.0 / M_PI);
 		diffuse_light += diffuse_brdf_NL * isotropic_light_color * color * area * light_attenuation * cc_attenuation;
 #else
@@ -1293,7 +1293,7 @@ void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half mid = half(1.0) - roughness;
 	mid *= mid;
 
-	half RdotV = half(ltc_specular / (solid_angle / (M_PI)));
+	half RdotV = half(ltc_specular / (max(solid_angle, 0.001) / (M_PI)));
 	half intensity = smoothstep(mid - roughness * half(0.5), mid + roughness * half(0.5), RdotV) * mid; // should we use specular tex color here?? or diffuse? or white?
 	diffuse_light += intensity * hvec3(ltc_specular_tex_color) * color * area * light_attenuation * specular_amount; // write to diffuse_light, as in toon shading you generally want no reflection
 #elif defined(SPECULAR_DISABLED)

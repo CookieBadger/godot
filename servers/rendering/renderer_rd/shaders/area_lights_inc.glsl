@@ -91,7 +91,7 @@ vec3 fetch_ltc_filtered_texture_with_form_factor(vec4 texture_rect, vec3 L[4], f
 	return fetch_ltc_lod(vec2(1.0) - uv, texture_rect, lod, max_mipmap, area_light_atlas, texture_sampler);
 }
 
-// Form factor function for area light, taken from Ureña, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
+// Form factor function for area light, taken from Urena, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
 float quad_solid_angle(vec3 L[4]) {
 	// The solid angle of a spherical rectangle is the difference of the sum of its angles
 	// and the sum of the angles of a plane rectangle (2*PI)

@@ -40,7 +40,7 @@ float integrate_edge(vec3 p_proj0, vec3 p_proj1, vec3 p0, vec3 p1) {
 	return integrate_edge_hill(p_proj0, p_proj1).y;
 }
 
-// Form factor function for area light, taken from Ureña, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
+// Form factor function for area light, taken from Urena, Fajardo, et.al. (2013): An Area-Preserving Parametrization for Spherical Rectangles
 float quad_solid_angle(vec3 L[4]) {
 	// The solid angle of a spherical rectangle is the difference of the sum of its angles
 	// and the sum of the angles of a plane rectangle (2*PI)

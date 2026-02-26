@@ -628,10 +628,12 @@ void main() {
 						vec3 light_center = area_lights.data[light_index].position + (area_width + area_height) / 2.0;
 						vec3 light_to_vert = view_pos - light_center;
 						vec3 pos_local_to_light = vec3(dot(light_to_vert, area_width_norm), dot(light_to_vert, area_height_norm), dot(light_to_vert, -area_direction)); // view_pos in LIGHT SPACE
-						vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0); // LIGHT SPACE
+						vec3 closest_point_local_to_light = vec3(clamp(pos_local_to_light.x, -a_half_len, a_half_len), clamp(pos_local_to_light.y, -b_half_len, b_half_len), 0.0); // LIGHT SPACE
 						float inv_center_range = area_lights.data[light_index].cone_attenuation;
 						vec3 closest_point_on_light = light_center + closest_point_local_to_light.x * area_width_norm + closest_point_local_to_light.y * area_height_norm; // VIEW SPACE
-						float d = length(closest_point_on_light - view_pos);
+
+						vec3 light_rel_vec = closest_point_on_light - view_pos;
+						float d = length(light_rel_vec);
 
 						// Due to jitter, we get extreme flickering at voxels intersecting the light.
 						// A quick fix is to set the distance to be at least 1.0. This has the side effect,
@@ -684,7 +686,6 @@ void main() {
 
 								shadow_attenuation = mix(1.0 - area_lights.data[light_index].shadow_opacity, 1.0, exp(min(0.0, (pos.z - depth)) / inv_center_range * INV_FOG_FADE));
 							}
-							vec3 light_rel_vec = closest_point_on_light - view_pos;
 							float cos_theta = 0.0;
 							if (dot(light_rel_vec, light_rel_vec) > EPSILON) {
 								cos_theta = dot(normalize(light_rel_vec), normalize(view_pos));

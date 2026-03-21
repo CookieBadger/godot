@@ -19,9 +19,17 @@ half D_GGX(half NoH, half roughness, hvec3 n, hvec3 h) {
 	half a = NoH * roughness;
 #ifdef EXPLICIT_FP16
 	hvec3 NxH = cross(n, h);
-	half k = roughness / (dot(NxH, NxH) + a * a);
+	half div = dot(NxH, NxH) + a * a;
+	if(div < half(0.00001)) {
+		return half(1.0);
+	}
+	half k = roughness / div;
 #else
-	float k = roughness / (1.0 - NoH * NoH + a * a);
+	float div = (1.0 - NoH * NoH + a * a);
+	if(div < 0.00001) {
+		return 1.0;
+	}
+	float k = roughness / div;
 #endif
 	half d = k * k * half(1.0 / M_PI);
 	return saturateHalf(d);
